@@ -11,6 +11,11 @@ export async function POST() {
         model: openrouter.chat('openrouter/free'),
         prompt: 'Write a short story about a cat.',
         system: "You are a helpful assistant. You are given a prompt for a story and you need to write the most compelling and captivating story you can.",
+        experimental_telemetry: {
+            isEnabled: true,
+            recordInputs: true,
+            recordOutputs: true,
+        },
     });
     return NextResponse.json({ response });
 }
