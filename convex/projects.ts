@@ -6,7 +6,8 @@ export const create = mutation({
     args: {
         name: v.string(),
     },
-    handler: async (ctx, args) => {
+    handler: async (ctx, args) =>
+    {
         const userId = await verifyAuth(ctx);
         const projectId = await ctx.db.insert("projects", {
             name: args.name,
@@ -21,7 +22,8 @@ export const getPartial = query({
     args: {
         limit: v.number(),
     },
-    handler: async (ctx, args) => {
+    handler: async (ctx, args) =>
+    {
         const userId = await verifyAuth(ctx);
 
         return await ctx.db
@@ -34,7 +36,8 @@ export const getPartial = query({
 
 export const get = query({
     args: {},
-    handler: async (ctx) => {
+    handler: async (ctx) =>
+    {
         const userId = await verifyAuth(ctx);
         return ctx.db
             .query("projects")
@@ -48,7 +51,8 @@ export const getById = query({
     args: {
         id: v.id("projects"),
     },
-    handler: async (ctx, args) => {
+    handler: async (ctx, args) =>
+    {
         const userId = await verifyAuth(ctx);
         const project = await ctx.db.get("projects", args.id);
         if (!project) {
@@ -69,7 +73,8 @@ export const rename = mutation({
         id: v.id("projects"),
         name: v.string(),
     },
-    handler: async (ctx, args) => {
+    handler: async (ctx, args) =>
+    {
         const userId = await verifyAuth(ctx);
         const project = await ctx.db.get("projects", args.id);
         if (!project) {

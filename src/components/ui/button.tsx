@@ -1,6 +1,6 @@
-import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { Slot } from "radix-ui"
+import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -19,6 +19,8 @@ const buttonVariants = cva(
         ghost:
           "hover:bg-accent hover:text-accent-foreground dark:hover:bg-accent/50",
         link: "text-primary underline-offset-4 hover:underline",
+        highlight:
+          "bg-transparent hover:bg-accent-foreground/10"
       },
       size: {
         default: "h-9 px-4 py-2 has-[>svg]:px-3",
@@ -38,7 +40,7 @@ const buttonVariants = cva(
   }
 )
 
-function Button({
+function Button ({
   className,
   variant = "default",
   size = "default",
@@ -53,10 +55,10 @@ function Button({
   return (
     <Comp
       data-slot="button"
-      data-variant={variant}
-      data-size={size}
-      className={cn(buttonVariants({ variant, size, className }))}
-      {...props}
+      data-variant={ variant }
+      data-size={ size }
+      className={ cn(buttonVariants({ variant, size, className })) }
+      { ...props }
     />
   )
 }
