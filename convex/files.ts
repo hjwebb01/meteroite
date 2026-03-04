@@ -108,6 +108,7 @@ export const createFile = mutation({
         if (existing) {
             throw new Error("File with this name already exists");
         }
+        const now = Date.now();
 
         await ctx.db.insert("files", {
             projectId: args.projectId,
@@ -115,8 +116,12 @@ export const createFile = mutation({
             content: args.content,
             type: "file",
             parentId: args.parentId,
-            updatedAt: Date.now(),
+            updatedAt: now,
 
+        });
+
+        await ctx.db.patch("projects", args.projectId, {
+            updatedAt: now,
         });
     },
 });
@@ -153,13 +158,18 @@ export const createFolder = mutation({
             throw new Error("Folder with this name already exists");
         }
 
+        const now = Date.now();
         await ctx.db.insert("files", {
             projectId: args.projectId,
             name: args.name,
             type: "folder",
             parentId: args.parentId,
-            updatedAt: Date.now(),
+            updatedAt: now,
 
+        });
+
+        await ctx.db.patch("projects", args.projectId, {
+            updatedAt: now,
         });
     },
 });
@@ -203,9 +213,14 @@ export const renameFile = mutation({
                 `A ${file.type} with this name already exists in this location`
             );
         }
+        const now = Date.now();
         await ctx.db.patch("files", args.id, {
             name: args.newName,
-            updatedAt: Date.now(),
+            updatedAt: now,
+        });
+
+        await ctx.db.patch("projects", file.projectId, {
+            updatedAt: now,
         });
     },
 });
@@ -252,6 +267,11 @@ export const deleteFile = mutation({
 
         };
         await deleteRecursive(args.id);
+
+        const now = Date.now();
+        await ctx.db.patch("projects", file.projectId, {
+            updatedAt: now,
+        });
     },
 });
 
@@ -276,6 +296,10 @@ export const updateFile = mutation({
         }
         await ctx.db.patch("files", args.id, {
             content: args.content,
+            updatedAt: Date.now(),
+        });
+
+        await ctx.db.patch("projects", file.projectId, {
             updatedAt: Date.now(),
         });
     },
