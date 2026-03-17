@@ -1,6 +1,5 @@
-
 import { v } from "convex/values";
-import { Id } from "./_generated/dataModel";
+import { Doc, Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
 
@@ -62,9 +61,7 @@ export const getFolderContents = query({
         const files = await ctx.db
             .query("files")
             .withIndex("by_project_parent", (q) =>
-                q
-                    .eq("projectId", args.projectId)
-                    .eq("parentId", args.parentId)
+                q.eq("projectId", args.projectId).eq("parentId", args.parentId),
             )
             .collect();
         // Sort: Folders -> Files, Alphabetical within each group
@@ -73,6 +70,39 @@ export const getFolderContents = query({
             if (a.type !== "folder" && b.type === "folder") return 1;
             return a.name.localeCompare(b.name);
         });
+    },
+});
+
+export const getFilePath = query({
+    args: {
+        id: v.id("files"),
+    },
+    handler: async (ctx, args) => {
+        const userId = await verifyAuth(ctx);
+        const file = await ctx.db.get("files", args.id);
+        if (!file) {
+            throw new Error("File not found");
+        }
+        const project = await ctx.db.get("projects", file.projectId);
+        if (!project) {
+            throw new Error("Project not found");
+        }
+
+        if (project.ownerId !== userId.subject) {
+            throw new Error("Unauthorized to access this project");
+        }
+        const path: { _id: string; name: string }[] = [];
+        let current: Id<"files"> | undefined = args.id;
+
+        while (current) {
+            const file = (await ctx.db.get("files", current)) as
+                | Doc<"files">
+                | undefined;
+            if (!file) break;
+            path.unshift({ _id: file._id, name: file.name });
+            current = file.parentId;
+        }
+        return path;
     },
 });
 
@@ -97,13 +127,11 @@ export const createFile = mutation({
         const files = await ctx.db
             .query("files")
             .withIndex("by_project_parent", (q) =>
-                q
-                    .eq("projectId", args.projectId)
-                    .eq("parentId", args.parentId)
+                q.eq("projectId", args.projectId).eq("parentId", args.parentId),
             )
             .collect();
         const existing = files.find(
-            (file) => file.name === args.name && file.type !== "folder"
+            (file) => file.name === args.name && file.type !== "folder",
         );
         if (existing) {
             throw new Error("File with this name already exists");
@@ -117,7 +145,6 @@ export const createFile = mutation({
             type: "file",
             parentId: args.parentId,
             updatedAt: now,
-
         });
 
         await ctx.db.patch("projects", args.projectId, {
@@ -146,13 +173,11 @@ export const createFolder = mutation({
         const files = await ctx.db
             .query("files")
             .withIndex("by_project_parent", (q) =>
-                q
-                    .eq("projectId", args.projectId)
-                    .eq("parentId", args.parentId)
+                q.eq("projectId", args.projectId).eq("parentId", args.parentId),
             )
             .collect();
         const existing = files.find(
-            (file) => file.name === args.name && file.type === "folder"
+            (file) => file.name === args.name && file.type === "folder",
         );
         if (existing) {
             throw new Error("Folder with this name already exists");
@@ -165,7 +190,6 @@ export const createFolder = mutation({
             type: "folder",
             parentId: args.parentId,
             updatedAt: now,
-
         });
 
         await ctx.db.patch("projects", args.projectId, {
@@ -197,20 +221,18 @@ export const renameFile = mutation({
         const siblings = await ctx.db
             .query("files")
             .withIndex("by_project_parent", (q) =>
-                q
-                    .eq("projectId", file.projectId)
-                    .eq("parentId", file.parentId)
+                q.eq("projectId", file.projectId).eq("parentId", file.parentId),
             )
             .collect();
         const existing = siblings.find(
             (siblings) =>
                 siblings.name === args.newName &&
                 siblings.type === file.type &&
-                siblings._id !== args.id
+                siblings._id !== args.id,
         );
         if (existing) {
             throw new Error(
-                `A ${file.type} with this name already exists in this location`
+                `A ${file.type} with this name already exists in this location`,
             );
         }
         const now = Date.now();
@@ -252,9 +274,11 @@ export const deleteFile = mutation({
             if (item.type === "folder") {
                 const children = await ctx.db
                     .query("files")
-                    .withIndex("by_project_parent", (q) => q
-                        .eq("projectId", item.projectId)
-                        .eq("parentId", fileId))
+                    .withIndex("by_project_parent", (q) =>
+                        q
+                            .eq("projectId", item.projectId)
+                            .eq("parentId", fileId),
+                    )
                     .collect();
                 for (const child of children) {
                     await deleteRecursive(child._id);
@@ -264,7 +288,6 @@ export const deleteFile = mutation({
                 await ctx.storage.delete(item.storageId);
             }
             await ctx.db.delete("files", fileId);
-
         };
         await deleteRecursive(args.id);
 
@@ -276,7 +299,6 @@ export const deleteFile = mutation({
 });
 
 export const updateFile = mutation({
-
     args: {
         id: v.id("files"),
         content: v.string(),
