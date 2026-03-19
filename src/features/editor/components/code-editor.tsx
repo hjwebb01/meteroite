@@ -8,26 +8,29 @@ import { indentWithTab } from "@codemirror/commands";
 import { minimap } from "../extensions/minimap";
 import { indentationMarkers } from "@replit/codemirror-indentation-markers";
 import { customSetup } from "../extensions/custom-setup";
+import { suggestion } from "../extensions/suggestion";
+import { quickEdit } from "../extensions/quick-edit";
+import { selectionTooltip } from "../extensions/selection-tooltip";
 
 interface Props {
-    filename: string;
+    fileName: string;
     initialValue?: string;
     onChange: (value: string) => void;
 }
 export const CodeEditor = ({
-    filename,
+    fileName,
     initialValue = "",
     onChange,
 }: Props) => {
     const editorRef = useRef<HTMLDivElement>(null);
     const viewRef = useRef<EditorView | null>(null);
 
-    const languageExtension = useMemo(
-        () => getLanguageExtension(filename),
-        [filename],
-    );
+    const languageExtension = useMemo(() => {
+        return getLanguageExtension(fileName);
+    }, [fileName]);
+
     useEffect(() => {
-        if (!editorRef.current) return undefined;
+        if (!editorRef.current) return;
         const view = new EditorView({
             doc: initialValue,
             parent: editorRef.current,
@@ -36,6 +39,9 @@ export const CodeEditor = ({
                 languageExtension,
                 oneDark,
                 customTheme,
+                suggestion(fileName),
+                quickEdit(fileName),
+                selectionTooltip(),
                 keymap.of([indentWithTab]),
                 minimap(),
                 indentationMarkers(),
