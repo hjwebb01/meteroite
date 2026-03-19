@@ -1,13 +1,9 @@
 import { generateText } from "ai";
 import { inngest } from "./client";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
+import { openRouter } from "@/lib/openrouter";
 import { firecrawl } from "@/lib/firecrawl";
 
 const URL_REGEX = /https?:\/\/[^\s]+/g;
-
-const openrouter = createOpenRouter({
-    apiKey: process.env.OPENROUTER_API_KEY,
-});
 
 export const demoGenerate = inngest.createFunction(
     { id: "demo-generate" },
@@ -37,7 +33,7 @@ export const demoGenerate = inngest.createFunction(
 
         await step.run("generate-text", async () => {
             return await generateText({
-                model: openrouter.chat("openrouter/free"),
+                model: openRouter.chat("openrouter/free"),
                 prompt: finalPrompt,
                 experimental_telemetry: {
                     isEnabled: true,
