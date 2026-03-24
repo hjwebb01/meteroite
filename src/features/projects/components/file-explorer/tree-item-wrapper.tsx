@@ -37,85 +37,57 @@ export const TreeItemWrapper = ({
     <ContextMenu>
       <ContextMenuTrigger asChild>
         <button
-          onClick={ onClick }
-          onDoubleClick={ onDoubleClick }
-          onKeyDown={ (e) => {
+          onClick={onClick}
+          onDoubleClick={onDoubleClick}
+          onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
               onRename?.();
             }
-          } }
-          className={ cn(
+          }}
+          className={cn(
             "group flex items-center gap-1 w-full h-5.5 hover:bg-accent/30 outline-none focus:ring-1 focus:ring-inset focus:ring-ring",
             isActive && "bg-accent/30",
-          ) }
-          style={ { paddingLeft: getItemPadding(level, item.type === "file") } }
+          )}
+          style={{ paddingLeft: getItemPadding(level, item.type === "file") }}
         >
-          { children }
+          {children}
         </button>
       </ContextMenuTrigger>
       <ContextMenuContent
-        onCloseAutoFocus={ (e) => e.preventDefault() }
+        onCloseAutoFocus={(e) => e.preventDefault()}
         className="w-64"
       >
-        { item.type === "folder" && (
+        {item.type === "folder" && (
           <>
-            <ContextMenuItem
-              onClick={ onCreateFile }
-              className="text-sm"
-            >
+            <ContextMenuItem onClick={onCreateFile} className="text-sm">
               New File
             </ContextMenuItem>
-            <ContextMenuItem
-              onClick={ onCreateFolder }
-              className="text-sm"
-            >
+            <ContextMenuItem onClick={onCreateFolder} className="text-sm">
               New Folder
             </ContextMenuItem>
             <ContextMenuSeparator />
-            <ContextMenuItem
-              onClick={ onRename }
-              className="text-sm"
-            >
+            <ContextMenuItem onClick={onRename} className="text-sm">
               Rename
-              <ContextMenuShortcut>
-                Enter
-              </ContextMenuShortcut>
+              <ContextMenuShortcut>Enter</ContextMenuShortcut>
             </ContextMenuItem>
-            <ContextMenuItem
-              onClick={ onDelete }
-              className="text-sm"
-            >
+            <ContextMenuItem onClick={onDelete} className="text-sm">
               Delete
-              <ContextMenuShortcut>
-                Delete
-              </ContextMenuShortcut>
+              <ContextMenuShortcut>Delete</ContextMenuShortcut>
             </ContextMenuItem>
           </>
-        ) }
+        )}
         <>
-          <ContextMenuItem
-            onClick={ onRename }
-            className="text-sm"
-          >
+          <ContextMenuItem onClick={onRename} className="text-sm">
             Rename
-            <ContextMenuShortcut>
-              Enter
-            </ContextMenuShortcut>
+            <ContextMenuShortcut>Enter</ContextMenuShortcut>
           </ContextMenuItem>
-          <ContextMenuItem
-            onClick={ onDelete }
-            className="text-sm"
-          >
+          <ContextMenuItem onClick={onDelete} className="text-sm">
             Delete
-            <ContextMenuShortcut>
-              Delete
-            </ContextMenuShortcut>
+            <ContextMenuShortcut>Delete</ContextMenuShortcut>
           </ContextMenuItem>
         </>
-
       </ContextMenuContent>
-
     </ContextMenu>
-  )
+  );
 };

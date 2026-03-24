@@ -1,4 +1,3 @@
-
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
@@ -37,7 +36,7 @@ export const useCreateProject = () => {
           ...existingProjects,
         ]);
       }
-    }
+    },
   );
 };
 
@@ -55,7 +54,7 @@ export const useRenameProject = () => {
             ...existingProject,
             name: args.name,
             updatedAt: Date.now(),
-          }
+          },
         );
       }
       const existingProjects = localStore.getQuery(api.projects.get);
@@ -67,9 +66,9 @@ export const useRenameProject = () => {
             return project._id === args.id
               ? { ...project, name: args.name, updatedAt: Date.now() }
               : project;
-          })
+          }),
         );
       }
-    }
+    },
   );
 };

@@ -1,4 +1,10 @@
-import { useCreateFile, useCreateFolder, useDeleteFile, useFolderContents, useRenameFile } from "@/features/projects/hooks/use-files";
+import {
+  useCreateFile,
+  useCreateFolder,
+  useDeleteFile,
+  useFolderContents,
+  useRenameFile,
+} from "@/features/projects/hooks/use-files";
 import { cn } from "@/lib/utils";
 import { FileIcon, FolderIcon } from "@react-symbols/icons/utils";
 import { ChevronRightIcon } from "lucide-react";
@@ -55,12 +61,12 @@ export const Tree = ({
         parentId: item._id,
       });
     }
-  }
+  };
 
   const startCreating = (type: "file" | "folder") => {
     setIsOpen(true);
     setCreating(type);
-  }
+  };
 
   if (item.type === "file") {
     const fileName = item.name;
@@ -69,34 +75,32 @@ export const Tree = ({
       return (
         <RenameInput
           type="file"
-          defaultValue={ fileName }
-          level={ level }
-          onSubmit={ handleRename }
-          onCancel={ () => setIsRenaming(false) } />
-
-      )
+          defaultValue={fileName}
+          level={level}
+          onSubmit={handleRename}
+          onCancel={() => setIsRenaming(false)}
+        />
+      );
     }
     return (
       <TreeItemWrapper
-        item={ item }
-        level={ level }
-        isActive={ isActive }
-        onClick={ () => openFile(item._id, { pinned: false })}
-        onDoubleClick={ () => openFile(item._id, { pinned: true })}
-        onRename={ () => setIsRenaming(true) }
-        onDelete={ () => {
+        item={item}
+        level={level}
+        isActive={isActive}
+        onClick={() => openFile(item._id, { pinned: false })}
+        onDoubleClick={() => openFile(item._id, { pinned: true })}
+        onRename={() => setIsRenaming(true)}
+        onDelete={() => {
           closeTab(item._id);
           deleteFile({
             id: item._id,
-          })
-        } }
+          });
+        }}
       >
-        <FileIcon fileName={ fileName }
-          autoAssign
-          className="size-4" />
-        <span className="text-sm truncate">{ fileName }</span>
+        <FileIcon fileName={fileName} autoAssign className="size-4" />
+        <span className="text-sm truncate">{fileName}</span>
       </TreeItemWrapper>
-    )
+    );
   }
 
   const folderName = item.name;
@@ -104,42 +108,40 @@ export const Tree = ({
     <>
       <div className="flex items-center gap-0.5">
         <ChevronRightIcon
-          className={ cn(
+          className={cn(
             "size-4 shrink-0 text-muted-foreground",
-            isOpen && "rotate-90"
-          ) }
+            isOpen && "rotate-90",
+          )}
         />
-        <FolderIcon folderName={ folderName } className="size-4" />
+        <FolderIcon folderName={folderName} className="size-4" />
       </div>
-      <span className="text-sm truncate">
-        { folderName }
-      </span>
+      <span className="text-sm truncate">{folderName}</span>
     </>
-  )
+  );
 
   if (creating) {
     return (
       <>
         <button
-          onClick={ () => setIsOpen(!isOpen) }
+          onClick={() => setIsOpen(!isOpen)}
           className="group flex items-center gap-1 h-5.5 hover:bg-accent/30 w-full"
-          style={ { paddingLeft: getItemPadding(level, false) } }
+          style={{ paddingLeft: getItemPadding(level, false) }}
         >
-          { folderRender }
+          {folderRender}
         </button>
-        { isOpen && (
+        {isOpen && (
           <>
-            { folderContents === undefined && <LoadingRow level={ level + 1 } /> }
+            {folderContents === undefined && <LoadingRow level={level + 1} />}
             <CreateInput
-              type={ creating }
-              level={ level + 1 }
-              onSubmit={ handleCreate }
-              onCancel={ () => setCreating(null) }
+              type={creating}
+              level={level + 1}
+              onSubmit={handleCreate}
+              onCancel={() => setCreating(null)}
             />
           </>
-        ) }
+        )}
       </>
-    )
+    );
   }
 
   if (isRenaming) {
@@ -147,49 +149,48 @@ export const Tree = ({
       <>
         <RenameInput
           type="folder"
-          defaultValue={ folderName }
-          level={ level }
-          isOpen={ isOpen }
-          onSubmit={ handleRename }
-          onCancel={ () => setIsRenaming(false) }
+          defaultValue={folderName}
+          level={level}
+          isOpen={isOpen}
+          onSubmit={handleRename}
+          onCancel={() => setIsRenaming(false)}
         />
-        { isOpen && (
+        {isOpen && (
           <>
-            { folderContents === undefined && <LoadingRow level={ level + 1 } /> }
-            
+            {folderContents === undefined && <LoadingRow level={level + 1} />}
           </>
-        ) }
+        )}
       </>
-    )
+    );
   }
   return (
     <>
       <TreeItemWrapper
-        item={ item }
-        level={ level }
-        onClick={ () => setIsOpen(!isOpen) }
-        onRename={ () => setIsRenaming(true) }
-        onDelete={ () => {
-          deleteFile({ id: item._id })
-        } }
-        onCreateFile={ () => startCreating("file") }
-        onCreateFolder={ () => startCreating("folder") }
+        item={item}
+        level={level}
+        onClick={() => setIsOpen(!isOpen)}
+        onRename={() => setIsRenaming(true)}
+        onDelete={() => {
+          deleteFile({ id: item._id });
+        }}
+        onCreateFile={() => startCreating("file")}
+        onCreateFolder={() => startCreating("folder")}
       >
-        { folderRender }
+        {folderRender}
       </TreeItemWrapper>
-      { isOpen && (
+      {isOpen && (
         <>
-          { folderContents === undefined && <LoadingRow level={ level + 1 } /> }
-          { folderContents?.map((subItem) => (
+          {folderContents === undefined && <LoadingRow level={level + 1} />}
+          {folderContents?.map((subItem) => (
             <Tree
-              key={ subItem._id }
-              item={ subItem }
-              level={ level + 1 }
-              projectId={ projectId }
+              key={subItem._id}
+              item={subItem}
+              level={level + 1}
+              projectId={projectId}
             />
-          )) }
+          ))}
         </>
-      ) }
+      )}
     </>
   );
 };

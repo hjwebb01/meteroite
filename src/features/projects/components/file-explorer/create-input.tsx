@@ -6,8 +6,8 @@ export const CreateInput = ({
   onSubmit,
   onCancel,
 }: {
-  type: "file" | "folder",
-  level: number,
+  type: "file" | "folder";
+  level: number;
   onSubmit: (name: string) => void;
   onCancel: () => void;
 }) => {
@@ -27,20 +27,19 @@ export const CreateInput = ({
       <input
         autoFocus
         type="text"
-        value={ value }
-        onChange={ (e) => setValue(e.target.value) }
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
         className="bg-transparent outline-none flex-1 text-sm focus:ring-1 focus:ring-inset focus:ring-ring"
-        onBlur={ handleSubmit }
-        onKeyDown={ (e) => {
+        onBlur={handleSubmit}
+        onKeyDown={(e) => {
           if (e.key === "Enter") {
             handleSubmit();
           }
           if (e.key === "Escape") {
             onCancel();
           }
-        } }
-        
+        }}
       />
     </div>
-  )
+  );
 };

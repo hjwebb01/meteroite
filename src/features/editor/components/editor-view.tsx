@@ -10,57 +10,57 @@ import { useEffect, useRef } from "react";
 const DEBOUNCE_MS = 1500;
 
 export const EditorView = ({ projectId }: { projectId: Id<"projects"> }) => {
-    const { activeTabId } = useEditor(projectId);
-    const activeFile = useFile(activeTabId);
-    const updateFile = useUpdateFile();
-    const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { activeTabId } = useEditor(projectId);
+  const activeFile = useFile(activeTabId);
+  const updateFile = useUpdateFile();
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    const isActiveFileBinary = activeFile && activeFile.storageId;
-    const isActiveFileText = activeFile && !activeFile.storageId;
+  const isActiveFileBinary = activeFile && activeFile.storageId;
+  const isActiveFileText = activeFile && !activeFile.storageId;
 
-    // cleanup pending debounced updates on unmount or file change
-    useEffect(() => {
-        return () => {
-            if (timeoutRef.current) {
+  // cleanup pending debounced updates on unmount or file change
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+    };
+  }, [activeTabId]);
+  return (
+    <div className="h-full flex flex-col">
+      <div className="flex items-center">
+        <TopNavigation projectId={projectId} />
+      </div>
+      {activeTabId && <FileBreadcrumbs projectId={projectId} />}
+      <div className="flex-1 min-h-0 bg-background">
+        {!activeFile && (
+          <div className="size-full flex items-center justify-center">
+            <Image
+              src="/alt-logo.svg"
+              alt="Meteroite"
+              width={50}
+              height={50}
+              className="opacity-25"
+            />
+          </div>
+        )}
+        {isActiveFileText && (
+          <CodeEditor
+            fileName={activeFile.name}
+            key={activeFile._id}
+            initialValue={activeFile.content}
+            onChange={(content: string) => {
+              if (timeoutRef.current) {
                 clearTimeout(timeoutRef.current);
-            }
-        };
-    }, [activeTabId]);
-    return (
-        <div className="h-full flex flex-col">
-            <div className="flex items-center">
-                <TopNavigation projectId={projectId} />
-            </div>
-            {activeTabId && <FileBreadcrumbs projectId={projectId} />}
-            <div className="flex-1 min-h-0 bg-background">
-                {!activeFile && (
-                    <div className="size-full flex items-center justify-center">
-                        <Image
-                            src="/alt-logo.svg"
-                            alt="Meteroite"
-                            width={50}
-                            height={50}
-                            className="opacity-25"
-                        />
-                    </div>
-                )}
-                {isActiveFileText && (
-                    <CodeEditor
-                        fileName={activeFile.name}
-                        key={activeFile._id}
-                        initialValue={activeFile.content}
-                        onChange={(content: string) => {
-                            if (timeoutRef.current) {
-                                clearTimeout(timeoutRef.current);
-                            }
-                            timeoutRef.current = setTimeout(() => {
-                                updateFile({ id: activeFile._id, content });
-                            }, DEBOUNCE_MS);
-                        }}
-                    />
-                )}
-                {isActiveFileBinary && <p> TODO: Implement binary preview </p>}
-            </div>
-        </div>
-    );
+              }
+              timeoutRef.current = setTimeout(() => {
+                updateFile({ id: activeFile._id, content });
+              }, DEBOUNCE_MS);
+            }}
+          />
+        )}
+        {isActiveFileBinary && <p> TODO: Implement binary preview </p>}
+      </div>
+    </div>
+  );
 };

@@ -24,34 +24,30 @@ const Tab = ({
 }) => {
   return (
     <div
-      onClick={ onClick }
-      className={ cn(
+      onClick={onClick}
+      className={cn(
         "flex items-center justify-center h-full px-3 cursor-pointer text-muted-foreground border-r hover:bg-accent/30",
-        isActive && "bg-background text-foreground"
-      ) }
+        isActive && "bg-background text-foreground",
+      )}
     >
-      <span className="text-sm">{ label }</span>
+      <span className="text-sm">{label}</span>
     </div>
-  )
-}
-export const ProjectIdView = ({
-  projectId
-}: {
-  projectId: Id<"projects">
-}) => {
+  );
+};
+export const ProjectIdView = ({ projectId }: { projectId: Id<"projects"> }) => {
   const [activeView, setActiveView] = useState<"editor" | "preview">("editor");
   return (
     <div className="h-full flex flex-col">
       <nav className="h-8.75 flex items-center bg-sidebar border-b">
         <Tab
           label="Code"
-          isActive={ activeView === "editor" }
-          onClick={ () => setActiveView("editor") }
+          isActive={activeView === "editor"}
+          onClick={() => setActiveView("editor")}
         />
         <Tab
           label="Preview"
-          isActive={ activeView === "preview" }
-          onClick={ () => setActiveView("preview") }
+          isActive={activeView === "preview"}
+          onClick={() => setActiveView("preview")}
         />
         <div className="flex-1 flex justify-end h-full">
           <div className="flex items-center gap-1.5 h-full px-3 cursor-pointer text-muted-foreground border-l hover:bg-accent/30">
@@ -61,37 +57,35 @@ export const ProjectIdView = ({
         </div>
       </nav>
       <div className="flex-1 relative">
-        <div className={ cn(
-          "absolute inset-0",
-          activeView === "editor" ? "visible" :
-            "invisible"
-        ) }>
-          <Allotment defaultSizes={ [
-            DEFAULT_MAIN_SIZE,
-            DEFAULT_SIDEBAR_WIDTH
-          ] }
-          >
+        <div
+          className={cn(
+            "absolute inset-0",
+            activeView === "editor" ? "visible" : "invisible",
+          )}
+        >
+          <Allotment defaultSizes={[DEFAULT_MAIN_SIZE, DEFAULT_SIDEBAR_WIDTH]}>
             <Allotment.Pane
               snap
-              minSize={ MIN_SIDEBAR_WIDTH }
-              maxSize={ MAX_SIDEBAR_WIDTH }
-              preferredSize={ DEFAULT_SIDEBAR_WIDTH }
+              minSize={MIN_SIDEBAR_WIDTH}
+              maxSize={MAX_SIDEBAR_WIDTH}
+              preferredSize={DEFAULT_SIDEBAR_WIDTH}
             >
-              <FileExplorer projectId={ projectId } />
+              <FileExplorer projectId={projectId} />
             </Allotment.Pane>
             <Allotment.Pane>
-              <EditorView projectId={ projectId } />
+              <EditorView projectId={projectId} />
             </Allotment.Pane>
           </Allotment>
         </div>
-        <div className={ cn(
-          "absolute inset-0",
-          activeView === "preview" ? "visible" :
-            "invisible"
-        ) }>
+        <div
+          className={cn(
+            "absolute inset-0",
+            activeView === "preview" ? "visible" : "invisible",
+          )}
+        >
           <div>Preview</div>
         </div>
       </div>
     </div>
-  )
+  );
 };

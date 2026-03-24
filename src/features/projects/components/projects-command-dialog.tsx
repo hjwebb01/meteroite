@@ -2,66 +2,70 @@ import { useRouter } from "next/navigation";
 import { FaGithub, FaCloud } from "react-icons/fa";
 import { TriangleAlertIcon, Loader2Icon } from "lucide-react";
 import {
-    CommandDialog,
-    CommandEmpty,
-    CommandGroup,
-    CommandInput,
-    CommandItem,
-    CommandList,
-
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
 } from "@/components/ui/command";
 import { useProjects } from "../hooks/use-projects";
 import { Doc } from "../../../../convex/_generated/dataModel";
 
 interface ProjectsCommandDialogProps {
-    open: boolean;
-    onOpenChange: (open: boolean) => void;
-};
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}
 
 const getProjectIcon = (project: Doc<"projects">) => {
-    if (project.importStatus === "completed") {
-        return <FaGithub className="size-5 text-muted-foreground" />
-    }
-    if (project.importStatus === "failed") {
-        return <TriangleAlertIcon className="size-5 text-muted-foreground" />
-    }
-    if (project.importStatus === "importing") {
-        return <Loader2Icon className="size-5 text-muted-foreground animate-spin" />
-    }
-    return <FaCloud className="size-5 text-muted-foreground" />
-}
-
-export const ProjectsCommandDialog = ({ open, onOpenChange }: ProjectsCommandDialogProps) => {
-    const router = useRouter();
-    const projects = useProjects();
-
-    const handleSelect = (projectId: string) => {
-        router.push(`/projects/${projectId}`);
-        onOpenChange(false);
-    };
+  if (project.importStatus === "completed") {
+    return <FaGithub className="size-5 text-muted-foreground" />;
+  }
+  if (project.importStatus === "failed") {
+    return <TriangleAlertIcon className="size-5 text-muted-foreground" />;
+  }
+  if (project.importStatus === "importing") {
     return (
-        <CommandDialog
-            open={open}
-            onOpenChange={onOpenChange}
-            title="Search Projects"
-            description="Search for a project to open"
-        >
-            <CommandInput placeholder="Search projects..." />
-            <CommandList>
-                <CommandEmpty>No projects found.</CommandEmpty>
-                <CommandGroup heading="Projects">
-                    {projects?.map((project) => (
-                        <CommandItem 
-                        key={project._id} 
-                        value={`${project.name} - ${project._id}`} 
-                        onSelect={() => handleSelect(project._id)}>
-                            {getProjectIcon(project)}
-                            <span className="truncate">{project.name}</span>
-                        </CommandItem>
-                    ))}
-                </CommandGroup>
-            </CommandList>
-        </CommandDialog>
-    )
+      <Loader2Icon className="size-5 text-muted-foreground animate-spin" />
+    );
+  }
+  return <FaCloud className="size-5 text-muted-foreground" />;
+};
 
-}
+export const ProjectsCommandDialog = ({
+  open,
+  onOpenChange,
+}: ProjectsCommandDialogProps) => {
+  const router = useRouter();
+  const projects = useProjects();
+
+  const handleSelect = (projectId: string) => {
+    router.push(`/projects/${projectId}`);
+    onOpenChange(false);
+  };
+  return (
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Search Projects"
+      description="Search for a project to open"
+    >
+      <CommandInput placeholder="Search projects..." />
+      <CommandList>
+        <CommandEmpty>No projects found.</CommandEmpty>
+        <CommandGroup heading="Projects">
+          {projects?.map((project) => (
+            <CommandItem
+              key={project._id}
+              value={`${project.name} - ${project._id}`}
+              onSelect={() => handleSelect(project._id)}
+            >
+              {getProjectIcon(project)}
+              <span className="truncate">{project.name}</span>
+            </CommandItem>
+          ))}
+        </CommandGroup>
+      </CommandList>
+    </CommandDialog>
+  );
+};

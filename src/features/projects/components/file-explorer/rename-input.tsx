@@ -11,10 +11,10 @@ export const RenameInput = ({
   onSubmit,
   onCancel,
 }: {
-  type: "file" | "folder",
-  defaultValue: string,
-  level: number,
-  isOpen?: boolean,
+  type: "file" | "folder";
+  defaultValue: string;
+  level: number;
+  isOpen?: boolean;
   onSubmit: (name: string) => void;
   onCancel: () => void;
 }) => {
@@ -23,40 +23,45 @@ export const RenameInput = ({
   const handleSubmit = () => {
     const trimmedValue = value.trim() || defaultValue;
     onSubmit(trimmedValue);
-  }
+  };
 
   return (
-    <div className="w-full flex items-center gap-1 h-5.5 bg-accent/30"
-      style={ { paddingLeft: getItemPadding(level, type === "file") } }
+    <div
+      className="w-full flex items-center gap-1 h-5.5 bg-accent/30"
+      style={{ paddingLeft: getItemPadding(level, type === "file") }}
     >
       <div className="flex items-center gap-0.5">
-        { type === "folder" && (
-          <ChevronRightIcon className={ cn("size-4 shrink-0 text-muted-foreground",
-            isOpen && "rotate-90") } />
-        ) }
-        { type === "file" && (
-          <FileIcon fileName={ value } autoAssign className="size-4" />
-        ) }
-        { type === "folder" && (
-          <FolderIcon folderName={ value } className="size-4" />
-        ) }
+        {type === "folder" && (
+          <ChevronRightIcon
+            className={cn(
+              "size-4 shrink-0 text-muted-foreground",
+              isOpen && "rotate-90",
+            )}
+          />
+        )}
+        {type === "file" && (
+          <FileIcon fileName={value} autoAssign className="size-4" />
+        )}
+        {type === "folder" && (
+          <FolderIcon folderName={value} className="size-4" />
+        )}
       </div>
       <input
         autoFocus
         type="text"
-        value={ value }
-        onChange={ (e) => setValue(e.target.value) }
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
         className="bg-transparent outline-none flex-1 text-sm focus:ring-1 focus:ring-inset focus:ring-ring"
-        onBlur={ handleSubmit }
-        onKeyDown={ (e) => {
+        onBlur={handleSubmit}
+        onKeyDown={(e) => {
           if (e.key === "Enter") {
             handleSubmit();
           }
           if (e.key === "Escape") {
             onCancel();
           }
-        } }
-        onFocus={ (e) => {
+        }}
+        onFocus={(e) => {
           if (type === "folder") {
             e.currentTarget.select();
           } else {
@@ -68,8 +73,8 @@ export const RenameInput = ({
               e.currentTarget.select();
             }
           }
-        } }
+        }}
       />
     </div>
-  )
+  );
 };

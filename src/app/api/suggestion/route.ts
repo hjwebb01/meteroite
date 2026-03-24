@@ -5,11 +5,11 @@ import { openRouter } from "@/lib/openrouter";
 import { auth } from "@clerk/nextjs/server";
 
 const suggestionSchema = z.object({
-    suggestion: z
-        .string()
-        .describe(
-            "The code to be inserted at the cursor position, or null if no suggestion is available.",
-        ),
+  suggestion: z
+    .string()
+    .describe(
+      "The code to be inserted at the cursor position, or null if no suggestion is available.",
+    ),
 });
 
 const SUGGESTION_PROMPT = `You are a code suggestion assistant.
@@ -43,50 +43,44 @@ Your suggestion is inserted immediately after the cursor, so never suggest code 
 </instructions>`;
 
 export async function POST(request: Request) {
-    try {
-        const { userId } = await auth();
-        if (!userId) {
-            return NextResponse.json(
-                { error: "Unauthorized" },
-                { status: 403 },
-            );
-        }
-        const {
-            fileName,
-            code,
-            currentLine,
-            previousLines,
-            textBeforeCursor,
-            textAfterCursor,
-            nextLines,
-            lineNumber,
-        } = await request.json();
-        if (!code) {
-            return NextResponse.json(
-                { error: "Code is required" },
-                { status: 400 },
-            );
-        }
-        const prompt = SUGGESTION_PROMPT.replace("{fileName}", fileName)
-            .replace("{code}", code)
-            .replace("{previousLines}", previousLines || "")
-            .replace("{currentLine}", currentLine)
-            .replace("{textBeforeCursor}", textBeforeCursor)
-            .replace("{textAfterCursor}", textAfterCursor)
-            .replace("{nextLines}", nextLines || "")
-            .replace("{lineNumber}", lineNumber.toString());
-
-        const { output } = await generateText({
-            model: openRouter.chat("qwen/qwen3-coder-next"),
-            output: Output.object({ schema: suggestionSchema }),
-            prompt,
-        });
-        return NextResponse.json({ suggestion: output.suggestion });
-    } catch (error) {
-        console.error("Error generating suggestion:", error);
-        return NextResponse.json(
-            { error: "Failed to generate suggestion" },
-            { status: 500 },
-        );
+  try {
+    const { userId } = await auth();
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
+    const {
+      fileName,
+      code,
+      currentLine,
+      previousLines,
+      textBeforeCursor,
+      textAfterCursor,
+      nextLines,
+      lineNumber,
+    } = await request.json();
+    if (!code) {
+      return NextResponse.json({ error: "Code is required" }, { status: 400 });
+    }
+    const prompt = SUGGESTION_PROMPT.replace("{fileName}", fileName)
+      .replace("{code}", code)
+      .replace("{previousLines}", previousLines || "")
+      .replace("{currentLine}", currentLine)
+      .replace("{textBeforeCursor}", textBeforeCursor)
+      .replace("{textAfterCursor}", textAfterCursor)
+      .replace("{nextLines}", nextLines || "")
+      .replace("{lineNumber}", lineNumber.toString());
+
+    const { output } = await generateText({
+      model: openRouter.chat("qwen/qwen3-coder-next"),
+      output: Output.object({ schema: suggestionSchema }),
+      prompt,
+    });
+    return NextResponse.json({ suggestion: output.suggestion });
+  } catch (error) {
+    console.error("Error generating suggestion:", error);
+    return NextResponse.json(
+      { error: "Failed to generate suggestion" },
+      { status: 500 },
+    );
+  }
 }
