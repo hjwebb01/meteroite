@@ -31,7 +31,7 @@ const font = Poppins({
 
 export const Navbar = ({ projectId }: { projectId: Id<"projects"> }) => {
   const project = useProject(projectId);
-  const renameProject = useRenameProject(projectId);
+  const renameProject = useRenameProject();
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [name, setName] = useState("");
@@ -64,10 +64,22 @@ export const Navbar = ({ projectId }: { projectId: Id<"projects"> }) => {
         <Breadcrumb>
           <BreadcrumbList className="gap-0!">
             <BreadcrumbItem>
-              <BreadcrumbLink className="flex items-center gap-1.5" asChild>
-                <Button variant="ghost" className="w-fit! p-1.5! h-7!" asChild>
+              <BreadcrumbLink
+                className="flex items-center gap-1.5"
+                asChild
+              >
+                <Button
+                  variant="ghost"
+                  className="w-fit! p-1.5! h-7!"
+                  asChild
+                >
                   <Link href="/">
-                    <Image src="/logo.svg" alt="Logo" width={20} height={20} />
+                    <Image
+                      src="/logo.svg"
+                      alt="Logo"
+                      width={20}
+                      height={20}
+                    />
                     <span className={cn("text-sm font-medium", font.className)}>
                       Meteroite
                     </span>

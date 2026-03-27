@@ -28,8 +28,8 @@ export const Tree = ({
   const [isOpen, setIsOpen] = useState(false);
   const [isRenaming, setIsRenaming] = useState(false);
   const [creating, setCreating] = useState<"file" | "folder" | null>(null);
-  const renameFile = useRenameFile();
-  const deleteFile = useDeleteFile();
+  const renameFile = useRenameFile({ projectId, parentId: item.parentId });
+  const deleteFile = useDeleteFile({ projectId, parentId: item.parentId });
   const createFile = useCreateFile();
   const createFolder = useCreateFolder();
   const { openFile, closeTab, activeTabId } = useEditor(projectId);
@@ -97,7 +97,11 @@ export const Tree = ({
           });
         }}
       >
-        <FileIcon fileName={fileName} autoAssign className="size-4" />
+        <FileIcon
+          fileName={fileName}
+          autoAssign
+          className="size-4"
+        />
         <span className="text-sm truncate">{fileName}</span>
       </TreeItemWrapper>
     );
@@ -113,7 +117,10 @@ export const Tree = ({
             isOpen && "rotate-90",
           )}
         />
-        <FolderIcon folderName={folderName} className="size-4" />
+        <FolderIcon
+          folderName={folderName}
+          className="size-4"
+        />
       </div>
       <span className="text-sm truncate">{folderName}</span>
     </>

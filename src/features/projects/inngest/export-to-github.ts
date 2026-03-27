@@ -14,7 +14,7 @@ interface ExportToGithubEvent {
   visibility: "public" | "private";
   description?: string;
   githubToken: string;
-};
+}
 
 type FileWithUrl = Doc<"files"> & {
   storageUrl: string | null;
@@ -26,11 +26,11 @@ export const exportToGithub = inngest.createFunction(
     cancelOn: [
       {
         event: "github/export.cancel",
-        if: "event.data.projectId == async.data.projectId"
+        if: "event.data.projectId == async.data.projectId",
       },
     ],
     onFailure: async ({ event, step }) => {
-      const internalKey = process.env.POLARIS_CONVEX_INTERNAL_KEY;
+      const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
       if (!internalKey) return;
 
       const { projectId } = event.data.event.data as ExportToGithubEvent;
@@ -42,24 +42,21 @@ export const exportToGithub = inngest.createFunction(
           status: "failed",
         });
       });
-    }
+    },
   },
   {
-    event: "github/export.repo"
+    event: "github/export.repo",
   },
   async ({ event, step }) => {
-    const {
-      projectId,
-      repoName,
-      visibility,
-      description,
-      githubToken,
-    } = event.data as ExportToGithubEvent;
+    const { projectId, repoName, visibility, description, githubToken } =
+      event.data as ExportToGithubEvent;
 
-    const internalKey = process.env.POLARIS_CONVEX_INTERNAL_KEY;
+    const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
     if (!internalKey) {
-      throw new NonRetriableError("POLARIS_CONVEX_INTERNAL_KEY is not configured");
-    };
+      throw new NonRetriableError(
+        "METEROITE_CONVEX_INTERNAL_KEY is not configured",
+      );
+    }
 
     // Set status to exporting
     await step.run("set-exporting-status", async () => {
@@ -81,7 +78,7 @@ export const exportToGithub = inngest.createFunction(
     const { data: repo } = await step.run("create-repo", async () => {
       return await octokit.rest.repos.createForAuthenticatedUser({
         name: repoName,
-        description: description || `Exported from Polaris`,
+        description: description || `Exported from Meteroite`,
         private: visibility === "private",
         auto_init: true,
       });
@@ -139,7 +136,7 @@ export const exportToGithub = inngest.createFunction(
 
     // Filter to only actual files (not folders)
     const fileEntries = Object.entries(filePaths).filter(
-      ([, file]) => file.type === "file"
+      ([, file]) => file.type === "file",
     );
 
     if (fileEntries.length === 0) {
@@ -209,7 +206,7 @@ export const exportToGithub = inngest.createFunction(
       return await octokit.rest.git.createCommit({
         owner: user.login,
         repo: repoName,
-        message: "Initial commit from Polaris",
+        message: "Initial commit from Meteroite",
         tree: tree.sha,
         parents: [initialCommitSha],
       });
@@ -241,5 +238,5 @@ export const exportToGithub = inngest.createFunction(
       repoUrl: repo.html_url,
       filesExported: treeItems.length,
     };
-  }
+  },
 );
