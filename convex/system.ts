@@ -1,5 +1,28 @@
+import { MAX_AGENT_CREATE_FILES_PER_MUTATION } from "./agentLimits";
+import type { Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import { v } from "convex/values";
+
+const projectFileWithPathRow = v.object({
+  id: v.id("files"),
+  name: v.string(),
+  type: v.union(v.literal("file"), v.literal("folder")),
+  parentId: v.union(v.id("files"), v.null()),
+  path: v.string(),
+});
+
+const agentEnsureFolderPathResult = v.object({
+  folderId: v.id("files"),
+  path: v.string(),
+  createdNewFolders: v.boolean(),
+});
+
+const agentCreateFileResultRow = v.object({
+  path: v.string(),
+  fileId: v.optional(v.id("files")),
+  error: v.optional(v.string()),
+});
 
 const validateInternalKey = (key: string) => {
   const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
@@ -10,6 +33,80 @@ const validateInternalKey = (key: string) => {
     throw new Error("Invalid internal key");
   }
 };
+
+/** Workspace-relative path: forward slashes, no leading slash, no `.` / `..` segments. */
+function normalizeWorkspacePathToSegments(raw: string): string[] {
+  const trimmed = raw.trim().replace(/\\/g, "/");
+  if (!trimmed) {
+    throw new Error("Path cannot be empty");
+  }
+  if (trimmed.startsWith("/")) {
+    throw new Error("Path must be workspace-relative (no leading slash)");
+  }
+  const segments = trimmed.split("/").filter((s) => s.length > 0);
+  for (const seg of segments) {
+    if (seg === "." || seg === "..") {
+      throw new Error(`Invalid path segment: ${seg}`);
+    }
+    if (seg.includes("/") || seg.includes("\\")) {
+      throw new Error("Invalid path segment");
+    }
+  }
+  return segments;
+}
+
+function splitFilePathForCreate(raw: string): {
+  dirSegments: string[];
+  fileName: string;
+} {
+  const segments = normalizeWorkspacePathToSegments(raw);
+  if (segments.length === 0) {
+    throw new Error("File path cannot be empty");
+  }
+  const fileName = segments[segments.length - 1]!;
+  const dirSegments = segments.slice(0, -1);
+  return { dirSegments, fileName };
+}
+
+async function getOrCreateFolder(
+  ctx: MutationCtx,
+  projectId: Id<"projects">,
+  parentId: Id<"files"> | undefined,
+  segmentName: string,
+): Promise<{ id: Id<"files">; created: boolean }> {
+  const siblings = await ctx.db
+    .query("files")
+    .withIndex("by_project_parent", (q) =>
+      q.eq("projectId", projectId).eq("parentId", parentId),
+    )
+    .collect();
+
+  const existingFolder = siblings.find(
+    (f) => f.name === segmentName && f.type === "folder",
+  );
+  if (existingFolder) {
+    return { id: existingFolder._id, created: false };
+  }
+
+  const blockingFile = siblings.find(
+    (f) => f.name === segmentName && f.type === "file",
+  );
+  if (blockingFile) {
+    throw new Error(
+      `Cannot create folder "${segmentName}": a file exists at that path`,
+    );
+  }
+
+  const id = await ctx.db.insert("files", {
+    projectId,
+    name: segmentName,
+    type: "folder",
+    parentId,
+    updatedAt: Date.now(),
+  });
+  return { id, created: true };
+}
+
 export const getConversationById = query({
   args: {
     conversationId: v.id("conversations"),
@@ -150,6 +247,72 @@ export const getProjectFiles = query({
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
+  },
+});
+
+/** Same as getProjectFiles but each item includes a resolved workspace-relative `path`. */
+export const getProjectFilesWithPaths = query({
+  args: {
+    internalKey: v.string(),
+    projectId: v.id("projects"),
+  },
+  returns: v.array(projectFileWithPathRow),
+  handler: async (ctx, args) => {
+    validateInternalKey(args.internalKey);
+    const files = await ctx.db
+      .query("files")
+      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
+      .collect();
+    const byId = new Map(files.map((f) => [f._id, f]));
+
+    const pathCache = new Map<Id<"files">, string>();
+    const maxDepth = files.length + 1;
+
+    const pathFor = (
+      id: Id<"files">,
+      chain: Set<Id<"files">>,
+      depth: number,
+    ): string => {
+      const cached = pathCache.get(id);
+      if (cached !== undefined) {
+        return cached;
+      }
+      if (depth > maxDepth) {
+        throw new Error("Invalid file tree: path depth exceeds project file count");
+      }
+      if (chain.has(id)) {
+        throw new Error("Invalid file tree: cycle in parent chain");
+      }
+      const node = byId.get(id);
+      if (!node) {
+        throw new Error("Invalid file tree: missing file record");
+      }
+      chain.add(id);
+      try {
+        if (!node.parentId) {
+          const result = node.name;
+          pathCache.set(id, result);
+          return result;
+        }
+        if (!byId.get(node.parentId)) {
+          throw new Error("Invalid file tree: parent record not found");
+        }
+        const parentPath = pathFor(node.parentId, chain, depth + 1);
+        const result = parentPath ? `${parentPath}/${node.name}` : node.name;
+        pathCache.set(id, result);
+        return result;
+      } finally {
+        chain.delete(id);
+      }
+    };
+
+    return files.map((f) => ({
+      id: f._id,
+      name: f.name,
+      type: f.type,
+      parentId: f.parentId ?? null,
+      path: pathFor(f._id, new Set(), 0),
+    }));
   },
 });
 // "ReadFile" tool used by the coding agent
@@ -304,6 +467,138 @@ export const createFolder = mutation({
       updatedAt: Date.now(),
     });
     return fileId;
+  },
+});
+
+/**
+ * Coding agent: ensure a folder exists at a workspace-relative path (creates missing segments).
+ * Prefer this over createFolder + parent IDs.
+ */
+export const agentEnsureFolderPath = mutation({
+  args: {
+    internalKey: v.string(),
+    projectId: v.id("projects"),
+    path: v.string(),
+  },
+  returns: agentEnsureFolderPathResult,
+  handler: async (ctx, args) => {
+    validateInternalKey(args.internalKey);
+    const segments = normalizeWorkspacePathToSegments(args.path);
+    if (segments.length === 0) {
+      throw new Error("Folder path cannot be empty");
+    }
+    let parentId: Id<"files"> | undefined = undefined;
+    let createdNewFolders = false;
+    for (const seg of segments) {
+      const { id, created } = await getOrCreateFolder(
+        ctx,
+        args.projectId,
+        parentId,
+        seg,
+      );
+      if (created) {
+        createdNewFolders = true;
+      }
+      parentId = id;
+    }
+    return {
+      folderId: parentId!,
+      path: segments.join("/"),
+      createdNewFolders,
+    };
+  },
+});
+
+/**
+ * Coding agent: create files at workspace-relative paths; auto-creates parent folders.
+ * Each entry is `{ path, content }` (e.g. `package.json` and `src/app.tsx` in one call).
+ */
+export const agentCreateFilesByPaths = mutation({
+  args: {
+    internalKey: v.string(),
+    projectId: v.id("projects"),
+    files: v.array(
+      v.object({
+        path: v.string(),
+        content: v.string(),
+      }),
+    ),
+  },
+  returns: v.array(agentCreateFileResultRow),
+  handler: async (ctx, args) => {
+    validateInternalKey(args.internalKey);
+    if (args.files.length > MAX_AGENT_CREATE_FILES_PER_MUTATION) {
+      throw new Error(
+        `Too many files in one request (max ${MAX_AGENT_CREATE_FILES_PER_MUTATION})`,
+      );
+    }
+    const results: {
+      path: string;
+      fileId?: Id<"files">;
+      error?: string;
+    }[] = [];
+
+    for (const file of args.files) {
+      try {
+        const { dirSegments, fileName } = splitFilePathForCreate(file.path);
+        let parentId: Id<"files"> | undefined = undefined;
+        for (const seg of dirSegments) {
+          const { id } = await getOrCreateFolder(
+            ctx,
+            args.projectId,
+            parentId,
+            seg,
+          );
+          parentId = id;
+        }
+
+        const siblings = await ctx.db
+          .query("files")
+          .withIndex("by_project_parent", (q) =>
+            q.eq("projectId", args.projectId).eq("parentId", parentId),
+          )
+          .collect();
+
+        const existingFile = siblings.find(
+          (f) => f.name === fileName && f.type === "file",
+        );
+        if (existingFile) {
+          results.push({
+            path: file.path,
+            error: `File already exists: ${fileName}`,
+          });
+          continue;
+        }
+
+        const folderConflict = siblings.find(
+          (f) => f.name === fileName && f.type === "folder",
+        );
+        if (folderConflict) {
+          results.push({
+            path: file.path,
+            error: `A folder exists at that path: ${fileName}`,
+          });
+          continue;
+        }
+
+        const fileId = await ctx.db.insert("files", {
+          projectId: args.projectId,
+          name: fileName,
+          content: file.content,
+          type: "file",
+          parentId,
+          updatedAt: Date.now(),
+        });
+        results.push({ path: file.path, fileId });
+      } catch (e) {
+        results.push({
+          path: file.path,
+          error: e instanceof Error ? e.message : String(e),
+        });
+      }
+    }
+
+    return results;
   },
 });
 
