@@ -6,7 +6,7 @@ import { convex } from "@/lib/convex-client";
 import { api } from "../../../../convex/_generated/api";
 import {
   CODING_AGENT_SYSTEM_PROMPT,
-  OPENROUTER_MINIMAX_M27_MODEL,
+  OPENROUTER_GPT_5_4_MINI,
   OPENROUTER_OPENAI_BASE_URL,
   TITLE_GENERATOR_SYSTEM_PROMPT,
 } from "./constants";
@@ -21,7 +21,7 @@ import { createRenameFileTool } from "./tools/rename-file";
 import { createScrapeUrlsTool } from "./tools/scrape-urls";
 
 const titleModel = openai({
-  model: OPENROUTER_MINIMAX_M27_MODEL,
+  model: OPENROUTER_GPT_5_4_MINI,
   baseUrl: OPENROUTER_OPENAI_BASE_URL,
   apiKey: process.env.OPENROUTER_API_KEY,
   defaultParameters: {
@@ -31,7 +31,7 @@ const titleModel = openai({
 });
 
 const baseModel = openai({
-  model: OPENROUTER_MINIMAX_M27_MODEL,
+  model: OPENROUTER_GPT_5_4_MINI,
   baseUrl: OPENROUTER_OPENAI_BASE_URL,
   apiKey: process.env.OPENROUTER_API_KEY,
   defaultParameters: {
