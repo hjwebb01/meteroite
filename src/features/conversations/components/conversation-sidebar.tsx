@@ -157,11 +157,17 @@ export const ConversationSideBar = ({
         <Conversation className="flex-1">
           <ConversationContent>
             {conversationMessages?.map((message, messageIndex) => (
-              <Message key={message._id} from={message.role}>
+              <Message
+                key={message._id}
+                from={message.role}
+              >
                 <MessageContent>
                   {message.status === "processing" ? (
                     <div className="space-y-3 text-muted-foreground">
-                      <Shimmer as="p" className="text-sm">
+                      <Shimmer
+                        as="p"
+                        className="text-sm"
+                      >
                         {message.progressLabel ??
                           message.progressSteps?.at(-1)?.label ??
                           "Working on your response..."}
@@ -173,18 +179,20 @@ export const ConversationSideBar = ({
                               Progress
                             </ChainOfThoughtHeader>
                             <ChainOfThoughtContent>
-                              {message.progressSteps.map((step, stepIndex, arr) => (
-                                <ChainOfThoughtStep
-                                  key={`${step.label}-${stepIndex}`}
-                                  label={step.label}
-                                  description={step.description}
-                                  status={
-                                    stepIndex === arr.length - 1
-                                      ? "active"
-                                      : "complete"
-                                  }
-                                />
-                              ))}
+                              {message.progressSteps.map(
+                                (step, stepIndex, arr) => (
+                                  <ChainOfThoughtStep
+                                    key={`${step.label}-${stepIndex}`}
+                                    label={step.label}
+                                    description={step.description}
+                                    status={
+                                      stepIndex === arr.length - 1
+                                        ? "active"
+                                        : "complete"
+                                    }
+                                  />
+                                ),
+                              )}
                             </ChainOfThoughtContent>
                           </ChainOfThought>
                         )}
@@ -217,7 +225,10 @@ export const ConversationSideBar = ({
           <ConversationScrollButton />
         </Conversation>
         <div className="p-3">
-          <PromptInput onSubmit={handleSubmit} className="mt-2">
+          <PromptInput
+            onSubmit={handleSubmit}
+            className="mt-2"
+          >
             <PromptInputBody>
               <PromptInputTextarea
                 placeholder="Ask me anything..."

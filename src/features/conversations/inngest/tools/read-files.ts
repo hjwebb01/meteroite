@@ -2,53 +2,208 @@ import { z } from "zod";
 import { createTool } from "@inngest/agent-kit";
 import { convex } from "@/lib/convex-client";
 import { api } from "../../../../../convex/_generated/api";
-import { Id } from "../../../../../convex/_generated/dataModel";
+import type { Id } from "../../../../../convex/_generated/dataModel";
 
 interface ReadFilesToolArgs {
+  projectId: Id<"projects">;
   internalKey: string;
 }
 
-const paramsSchema = z.object({
-  fileIds: z
-    .array(z.string().min(1, "File ID is required"))
-    .min(1, "At least one file ID is required"),
-});
+const paramsSchema = z
+  .object({
+    paths: z.array(z.string().min(1, "Path cannot be empty")),
+    fileIds: z.array(z.string().min(1, "File ID cannot be empty")),
+    format: z.enum(["full", "compact"]).default("compact"),
+    maxChars: z.number().int().min(1).max(500_000).default(100_000),
+    lineStart: z.number().int().min(1).optional(),
+    lineEnd: z.number().int().min(1).optional(),
+  })
+  .refine(
+    (data) =>
+      data.paths.length > 0 || data.fileIds.length > 0,
+    {
+      message: "Provide at least one workspace-relative path or file id from listFiles",
+    },
+  );
 
-export const createReadFilesTool = ({ internalKey }: ReadFilesToolArgs) => {
+type AgentReadRow = {
+  status: "ok";
+  path: string;
+  id: Id<"files">;
+  name: string;
+  content: string;
+  truncated?: boolean;
+  totalChars?: number;
+} | {
+  status: "missing";
+  path: string;
+} | {
+  status: "folder";
+  path: string;
+  id: Id<"files">;
+  name: string;
+} | {
+  status: "binary";
+  path: string;
+  id: Id<"files">;
+  name: string;
+} | {
+  status: "invalid_id";
+  requestedId: string;
+} | {
+  status: "invalid_path";
+  input: string;
+  message: string;
+};
+
+function toCompactRow(row: AgentReadRow): unknown[] {
+  switch (row.status) {
+    case "ok":
+      return [
+        "o",
+        row.path,
+        row.id,
+        row.name,
+        row.content,
+        row.truncated ?? false,
+        row.totalChars ?? 0,
+      ];
+    case "missing":
+      return ["m", row.path];
+    case "folder":
+      return ["f", row.path, row.id, row.name];
+    case "binary":
+      return ["b", row.path, row.id, row.name];
+    case "invalid_id":
+      return ["ii", row.requestedId];
+    case "invalid_path":
+      return ["ip", row.input, row.message];
+  }
+}
+
+export const createReadFilesTool = ({
+  projectId,
+  internalKey,
+}: ReadFilesToolArgs) => {
   return createTool({
     name: "readFiles",
     description:
-      "Read one or more files from the current project by file ID and return their contents.",
+      "Read text files by path (preferred) or file id. Default: compact output + maxChars cap. Use lineStart/lineEnd for partial reads.",
     parameters: z.object({
-      fileIds: z.array(z.string()).describe("The IDs of the files to read"),
+      paths: z
+        .array(z.string())
+        .describe("Workspace-relative paths from listFiles."),
+      fileIds: z
+        .array(z.string())
+        .describe("Optional ids from listFiles if not using paths."),
+      format: z
+        .enum(["full", "compact"])
+        .describe("compact: v=2 row table. full: one JSON object per line."),
+      maxChars: z
+        .number()
+        .describe("Max characters returned per file after line slicing (default 100000)."),
+      lineStart: z
+        .number()
+        .describe("1-based start line (optional)."),
+      lineEnd: z
+        .number()
+        .describe("1-based end line inclusive (optional)."),
     }),
     handler: async (params, { step: toolStep }) => {
       const parsed = paramsSchema.safeParse(params);
       if (!parsed.success) {
-        return `Error: ${parsed.error.issues[0].message}`;
+        return `Error: ${parsed.error.issues[0]?.message ?? "Invalid parameters"}`;
       }
-      const { fileIds } = parsed.data;
+      const { paths, fileIds, format, maxChars, lineStart, lineEnd } =
+        parsed.data;
 
       try {
         return await toolStep?.run("read-files", async () => {
-          const results: { id: string; name: string; content: string }[] = [];
-          for (const fileId of fileIds) {
-            const file = await convex.query(api.system.getFileById, {
-              internalKey,
-              fileId: fileId as Id<"files">,
+          const rows = (await convex.query(api.system.agentReadFiles, {
+            internalKey,
+            projectId,
+            paths,
+            fileIds,
+            maxChars,
+            lineStart,
+            lineEnd,
+          })) as AgentReadRow[];
+
+          if (format === "compact") {
+            return JSON.stringify({
+              v: 2,
+              legend:
+                "o=ok(path,id,name,content,truncated,totalChars), m=missing, f=folder, b=binary, ii=invalid_id, ip=invalid_path",
+              rows: rows.map(toCompactRow),
             });
-            if (file && file.content) {
-              results.push({
-                id: file._id,
-                name: file.name,
-                content: file.content,
-              });
+          }
+
+          const lines: string[] = [];
+          for (const row of rows) {
+            switch (row.status) {
+              case "ok":
+                lines.push(
+                  JSON.stringify({
+                    status: "ok",
+                    path: row.path,
+                    id: row.id,
+                    name: row.name,
+                    content: row.content,
+                    ...(row.truncated
+                      ? { truncated: true, totalChars: row.totalChars }
+                      : {}),
+                  }),
+                );
+                break;
+              case "missing":
+                lines.push(
+                  JSON.stringify({
+                    status: "missing",
+                    path: row.path,
+                  }),
+                );
+                break;
+              case "folder":
+                lines.push(
+                  JSON.stringify({
+                    status: "folder",
+                    path: row.path,
+                    id: row.id,
+                    name: row.name,
+                  }),
+                );
+                break;
+              case "binary":
+                lines.push(
+                  JSON.stringify({
+                    status: "binary",
+                    path: row.path,
+                    id: row.id,
+                    name: row.name,
+                  }),
+                );
+                break;
+              case "invalid_id":
+                lines.push(
+                  JSON.stringify({
+                    status: "invalid_id",
+                    requestedId: row.requestedId,
+                  }),
+                );
+                break;
+              case "invalid_path":
+                lines.push(
+                  JSON.stringify({
+                    status: "invalid_path",
+                    input: row.input,
+                    message: row.message,
+                  }),
+                );
+                break;
             }
           }
-          if (results.length === 0) {
-            return "Error: No files found with the given IDs. Use listFiles to get valid file IDs.";
-          }
-          return JSON.stringify(results);
+
+          return lines.join("\n");
         });
       } catch (error) {
         return `Error: ${error instanceof Error ? error.message : "Unknown error"}`;

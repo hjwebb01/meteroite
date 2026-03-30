@@ -108,18 +108,21 @@ export const processMessage = inngest.createFunction(
       });
     });
 
+    /** Keep recent history small to limit prompt tokens (last N non-empty turns only). */
+    const MAX_HISTORY_MESSAGES = 4;
+
     // Build system prompt with conversation history (excluding the current message)
     let systemPrompt = CODING_AGENT_SYSTEM_PROMPT;
 
     // Filter out the current message from the recent messages
-    const contextMessages = recentMessages.filter(
-      (msg) => msg._id !== messageId && msg.content.trim() !== "",
-    );
+    const contextMessages = recentMessages
+      .filter((msg) => msg._id !== messageId && msg.content.trim() !== "")
+      .slice(-MAX_HISTORY_MESSAGES);
     if (contextMessages.length > 0) {
       const historyText = contextMessages
         .map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`)
         .join("\n\n");
-      systemPrompt += `\n\n## Previous Conversation (for context only - do NOT repeat these responses): \n${historyText}\n\n## Current Request: \nRespond ONLY to the user's new message below. Do NOT repeat or reference your previous responses.`;
+      systemPrompt += `\n\n## Previous (do not repeat verbatim): \n${historyText}\n\n## Current message: answer the user's latest request only.`;
     }
 
     await step.run("progress-loaded-context", async () => {
@@ -177,20 +180,26 @@ export const processMessage = inngest.createFunction(
       model: baseModel,
       tools: [
         createListFilesTool({ projectId, internalKey }),
-        createReadFilesTool({ internalKey }),
-        createUpdateFileTool({ internalKey }),
+        createReadFilesTool({ projectId, internalKey }),
+        createUpdateFileTool({ projectId, internalKey }),
         createCreateFilesTool({ projectId, internalKey }),
         createCreateFolderTool({ projectId, internalKey }),
-        createDeleteFilesTool({ internalKey }),
-        createRenameFileTool({ internalKey }),
+        createDeleteFilesTool({ projectId, internalKey }),
+        createRenameFileTool({ projectId, internalKey }),
         createScrapeUrlsTool(),
       ],
     });
 
+    /** Cap agent loop iterations to reduce token accumulation and latency. */
+    const CODING_AGENT_MAX_ITER = 9;
+
+    let lastToolCallFingerprint: string | undefined;
+    let duplicateToolCallStreak = 0;
+
     const network = createNetwork({
       name: "meteroite-network",
       agents: [codingAgent],
-      maxIter: 20,
+      maxIter: CODING_AGENT_MAX_ITER,
       router: ({ network }) => {
         const lastResult = network.state.results.at(-1);
         const hasTextResponse = lastResult?.output.some(
@@ -199,6 +208,26 @@ export const processMessage = inngest.createFunction(
         const hasToolCall = lastResult?.output.some(
           (msg) => msg.type === "tool_call",
         );
+
+        const toolCallMsg = lastResult?.output.find(
+          (msg) => msg.type === "tool_call",
+        );
+        if (toolCallMsg) {
+          const fp = JSON.stringify(toolCallMsg);
+          if (fp === lastToolCallFingerprint) {
+            duplicateToolCallStreak += 1;
+          } else {
+            lastToolCallFingerprint = fp;
+            duplicateToolCallStreak = 0;
+          }
+          if (duplicateToolCallStreak >= 2) {
+            return undefined;
+          }
+        } else {
+          lastToolCallFingerprint = undefined;
+          duplicateToolCallStreak = 0;
+        }
+
         if (hasTextResponse && !hasToolCall) {
           return undefined;
         }

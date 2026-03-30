@@ -7,6 +7,7 @@ import type { Id } from "../../../../../convex/_generated/dataModel";
 import { normalizeGeneratedFileContent } from "../normalize-generated-file-content";
 
 interface UpdateFileToolArgs {
+  projectId: Id<"projects">;
   internalKey: string;
 }
 
@@ -15,13 +16,16 @@ const paramsSchema = z.object({
   content: z.string(),
 });
 
-export const createUpdateFileTool = ({ internalKey }: UpdateFileToolArgs) => {
+export const createUpdateFileTool = ({
+  projectId,
+  internalKey,
+}: UpdateFileToolArgs) => {
   return createTool({
     name: "updateFile",
     description:
-      "Update the content of a file in the current project by file ID.",
+      "Update the content of a file in the current project. Prefer identifying the file by workspace-relative path from listFiles; fileId must match listFiles exactly.",
     parameters: z.object({
-      fileId: z.string().describe("The ID of the file to update"),
+      fileId: z.string().describe("The ID of the file to update (from listFiles)"),
       content: z
         .string()
         .describe(
@@ -35,9 +39,20 @@ export const createUpdateFileTool = ({ internalKey }: UpdateFileToolArgs) => {
       }
       const { fileId } = parsed.data;
       const content = normalizeGeneratedFileContent(parsed.data.content);
+
+      const resolved = await convex.query(api.system.agentResolveFileIdsInProject, {
+        internalKey,
+        projectId,
+        rawIds: [fileId],
+      });
+      const first = resolved[0];
+      if (!first || first.status !== "ok") {
+        return `Error: No file found with ID "${fileId}" in this project. Use listFiles to get valid file IDs.`;
+      }
+
       const file = await convex.query(api.system.getFileById, {
         internalKey,
-        fileId: fileId as Id<"files">,
+        fileId: first.fileId,
       });
 
       if (!file) {
@@ -52,7 +67,8 @@ export const createUpdateFileTool = ({ internalKey }: UpdateFileToolArgs) => {
         return await toolStep?.run("update-file", async () => {
           await convex.mutation(api.system.updateFile, {
             internalKey,
-            fileId: fileId as Id<"files">,
+            projectId,
+            fileId: first.fileId,
             content,
           });
           return `File "${file.name}" updated successfully.`;
