@@ -121,10 +121,31 @@ export const processMessage = inngest.createFunction(
         .join("\n\n");
       systemPrompt += `\n\n## Previous Conversation (for context only - do NOT repeat these responses): \n${historyText}\n\n## Current Request: \nRespond ONLY to the user's new message below. Do NOT repeat or reference your previous responses.`;
     }
+
+    await step.run("progress-loaded-context", async () => {
+      await convex.mutation(api.system.updateMessageProgress, {
+        internalKey,
+        messageId,
+        progressLabel: "Loaded context",
+        progressSteps: [{ label: "Loaded context" }],
+      });
+    });
+
     // Generate conversation title if it's still default
     const shouldGenerateTitle =
       conversation.title === DEFAULT_CONVERSATION_TITLE;
     if (shouldGenerateTitle) {
+      await step.run("progress-generating-title", async () => {
+        await convex.mutation(api.system.updateMessageProgress, {
+          internalKey,
+          messageId,
+          progressLabel: "Generating title",
+          progressSteps: [
+            { label: "Loaded context" },
+            { label: "Generating title" },
+          ],
+        });
+      });
       const { output } = await titleAgent.run(message, { step });
       const textMessage = output.find(
         (msg) => msg.type === "text" && msg.role === "assistant",
@@ -184,6 +205,21 @@ export const processMessage = inngest.createFunction(
         return codingAgent;
       },
     });
+
+    await step.run("progress-running-assistant", async () => {
+      const progressSteps = [
+        { label: "Loaded context" },
+        ...(shouldGenerateTitle ? [{ label: "Generating title" }] : []),
+        { label: "Running assistant" },
+      ];
+      await convex.mutation(api.system.updateMessageProgress, {
+        internalKey,
+        messageId,
+        progressLabel: "Running assistant",
+        progressSteps,
+      });
+    });
+
     const result = await network.run(message);
     const lastResult = result.state.results.at(-1);
     const textMessage = lastResult?.output.find(

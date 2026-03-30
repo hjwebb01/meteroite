@@ -61,6 +61,15 @@ export default defineSchema({
         v.literal("cancelled"),
       ),
     ),
+    progressLabel: v.optional(v.string()),
+    progressSteps: v.optional(
+      v.array(
+        v.object({
+          label: v.string(),
+          description: v.optional(v.string()),
+        }),
+      ),
+    ),
   })
     .index("by_conversation", ["conversationId"])
     .index("by_project_status", ["projectId", "status"]),

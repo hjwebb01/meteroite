@@ -119,6 +119,11 @@ export const getConversationById = query({
   },
 });
 
+const progressStepValidator = v.object({
+  label: v.string(),
+  description: v.optional(v.string()),
+});
+
 export const createMessage = mutation({
   args: {
     internalKey: v.string(),
@@ -150,6 +155,29 @@ export const createMessage = mutation({
   },
 });
 
+export const updateMessageProgress = mutation({
+  args: {
+    internalKey: v.string(),
+    messageId: v.id("messages"),
+    progressLabel: v.optional(v.string()),
+    progressSteps: v.optional(v.array(progressStepValidator)),
+  },
+  handler: async (ctx, args) => {
+    validateInternalKey(args.internalKey);
+    const patch: {
+      progressLabel?: string;
+      progressSteps?: Array<{ label: string; description?: string }>;
+    } = {};
+    if (args.progressLabel !== undefined) {
+      patch.progressLabel = args.progressLabel;
+    }
+    if (args.progressSteps !== undefined) {
+      patch.progressSteps = args.progressSteps;
+    }
+    await ctx.db.patch(args.messageId, patch);
+  },
+});
+
 export const updateMessageContent = mutation({
   args: {
     internalKey: v.string(),
@@ -161,6 +189,8 @@ export const updateMessageContent = mutation({
     await ctx.db.patch(args.messageId, {
       content: args.content,
       status: "completed" as const,
+      progressLabel: undefined,
+      progressSteps: undefined,
     });
   },
 });
@@ -193,9 +223,17 @@ export const updateMessageStatus = mutation({
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
-    await ctx.db.patch(args.messageId, {
-      status: args.status,
-    });
+    if (args.status === "cancelled") {
+      await ctx.db.patch(args.messageId, {
+        status: args.status,
+        progressLabel: undefined,
+        progressSteps: undefined,
+      });
+    } else {
+      await ctx.db.patch(args.messageId, {
+        status: args.status,
+      });
+    }
   },
 });
 

@@ -1,13 +1,7 @@
 import ky from "ky";
 import { toast } from "sonner";
 import { useState } from "react";
-import {
-  CopyIcon,
-  HistoryIcon,
-  LoaderIcon,
-  PlusIcon,
-  XIcon,
-} from "lucide-react";
+import { CopyIcon, HistoryIcon, PlusIcon } from "lucide-react";
 
 import {
   Conversation,
@@ -32,6 +26,14 @@ import {
   PromptInputTools,
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
+
+import { Shimmer } from "@/components/ai-elements/shimmer";
+import {
+  ChainOfThought,
+  ChainOfThoughtContent,
+  ChainOfThoughtHeader,
+  ChainOfThoughtStep,
+} from "@/components/ai-elements/chain-of-thought";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -158,9 +160,34 @@ export const ConversationSideBar = ({
               <Message key={message._id} from={message.role}>
                 <MessageContent>
                   {message.status === "processing" ? (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <LoaderIcon className="size-3.5 animate-spin" />
-                      <span>Thinking...</span>
+                    <div className="space-y-3 text-muted-foreground">
+                      <Shimmer as="p" className="text-sm">
+                        {message.progressLabel ??
+                          message.progressSteps?.at(-1)?.label ??
+                          "Working on your response..."}
+                      </Shimmer>
+                      {message.progressSteps &&
+                        message.progressSteps.length > 0 && (
+                          <ChainOfThought defaultOpen={true}>
+                            <ChainOfThoughtHeader>
+                              Progress
+                            </ChainOfThoughtHeader>
+                            <ChainOfThoughtContent>
+                              {message.progressSteps.map((step, stepIndex, arr) => (
+                                <ChainOfThoughtStep
+                                  key={`${step.label}-${stepIndex}`}
+                                  label={step.label}
+                                  description={step.description}
+                                  status={
+                                    stepIndex === arr.length - 1
+                                      ? "active"
+                                      : "complete"
+                                  }
+                                />
+                              ))}
+                            </ChainOfThoughtContent>
+                          </ChainOfThought>
+                        )}
                     </div>
                   ) : message.status === "cancelled" ? (
                     <div className="text-muted-foreground italic">
