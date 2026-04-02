@@ -5,10 +5,12 @@ import { convex } from "@/lib/convex-client";
 
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
+import type { MessageProgressReporter } from "../message-progress";
 
 interface DeleteFilesToolOptions {
   projectId: Id<"projects">;
   internalKey: string;
+  reporter: MessageProgressReporter;
 }
 
 const paramsSchema = z.object({
@@ -20,6 +22,7 @@ const paramsSchema = z.object({
 export const createDeleteFilesTool = ({
   projectId,
   internalKey,
+  reporter,
 }: DeleteFilesToolOptions) => {
   return createTool({
     name: "deleteFiles",
@@ -73,8 +76,13 @@ export const createDeleteFilesTool = ({
         });
       }
 
+      const progressId = await reporter.toolStart(
+        "deleteFiles",
+        `${filesToDelete.length} item(s)`,
+      );
+
       try {
-        return await toolStep?.run("delete-files", async () => {
+        const out = await toolStep?.run("delete-files", async () => {
           const results: string[] = [];
 
           for (const file of filesToDelete) {
@@ -89,7 +97,14 @@ export const createDeleteFilesTool = ({
 
           return results.join("\n");
         });
+        await reporter.toolEnd(progressId, true);
+        return out ?? "";
       } catch (error) {
+        await reporter.toolEnd(
+          progressId,
+          false,
+          error instanceof Error ? error.message : "Unknown error",
+        );
         return `Error deleting files: ${error instanceof Error ? error.message : "Unknown error"}`;
       }
     },

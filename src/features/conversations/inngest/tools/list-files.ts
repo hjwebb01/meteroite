@@ -3,10 +3,12 @@ import { createTool } from "@inngest/agent-kit";
 import { convex } from "@/lib/convex-client";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
+import type { MessageProgressReporter } from "../message-progress";
 
 interface ListFilesToolArgs {
   projectId: Id<"projects">;
   internalKey: string;
+  reporter: MessageProgressReporter;
 }
 
 const paramsSchema = z.object({
@@ -19,6 +21,7 @@ const paramsSchema = z.object({
 export const createListFilesTool = ({
   projectId,
   internalKey,
+  reporter,
 }: ListFilesToolArgs) => {
   return createTool({
     name: "listFiles",
@@ -49,9 +52,16 @@ export const createListFilesTool = ({
       }
       const { format, pathPrefix, limit, cursor } = parsed.data;
 
+      const prefix = pathPrefix.trim();
+      const detail =
+        prefix.length > 0
+          ? `Under “${prefix.length > 80 ? `${prefix.slice(0, 40)}…` : prefix}”`
+          : undefined;
+      const progressId = await reporter.toolStart("listFiles", detail);
+
       try {
-        return await toolStep?.run("list-files", async () => {
-          const result = await convex.query(api.system.agentListProjectFiles, {
+        const result = await toolStep?.run("list-files", async () => {
+          const queryResult = await convex.query(api.system.agentListProjectFiles, {
             internalKey,
             projectId,
             format,
@@ -59,9 +69,16 @@ export const createListFilesTool = ({
             limit,
             cursor,
           });
-          return JSON.stringify(result);
+          return JSON.stringify(queryResult);
         });
+        await reporter.toolEnd(progressId, true);
+        return result ?? "";
       } catch (error) {
+        await reporter.toolEnd(
+          progressId,
+          false,
+          error instanceof Error ? error.message : "Unknown error",
+        );
         return `Error: ${error instanceof Error ? error.message : "Unknown error"}`;
       }
     },

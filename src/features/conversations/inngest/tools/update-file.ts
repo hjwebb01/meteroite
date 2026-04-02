@@ -5,10 +5,12 @@ import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 
 import { normalizeGeneratedFileContent } from "../normalize-generated-file-content";
+import type { MessageProgressReporter } from "../message-progress";
 
 interface UpdateFileToolArgs {
   projectId: Id<"projects">;
   internalKey: string;
+  reporter: MessageProgressReporter;
 }
 
 const paramsSchema = z.object({
@@ -19,6 +21,7 @@ const paramsSchema = z.object({
 export const createUpdateFileTool = ({
   projectId,
   internalKey,
+  reporter,
 }: UpdateFileToolArgs) => {
   return createTool({
     name: "updateFile",
@@ -63,8 +66,10 @@ export const createUpdateFileTool = ({
         return `Error:"${fileId}" is a folder. Use listFiles to get valid file IDs. You can only update file contents`;
       }
 
+      const progressId = await reporter.toolStart("updateFile", file.name);
+
       try {
-        return await toolStep?.run("update-file", async () => {
+        const out = await toolStep?.run("update-file", async () => {
           await convex.mutation(api.system.updateFile, {
             internalKey,
             projectId,
@@ -73,7 +78,14 @@ export const createUpdateFileTool = ({
           });
           return `File "${file.name}" updated successfully.`;
         });
+        await reporter.toolEnd(progressId, true);
+        return out ?? "";
       } catch (error) {
+        await reporter.toolEnd(
+          progressId,
+          false,
+          error instanceof Error ? error.message : "Unknown error",
+        );
         return `Error: ${error instanceof Error ? error.message : "Unknown error"} while updating file "${file.name}".`;
       }
     },

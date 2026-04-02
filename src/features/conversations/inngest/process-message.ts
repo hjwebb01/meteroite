@@ -19,6 +19,7 @@ import { createCreateFolderTool } from "./tools/create-folder";
 import { createDeleteFilesTool } from "./tools/delete-files";
 import { createRenameFileTool } from "./tools/rename-file";
 import { createScrapeUrlsTool } from "./tools/scrape-urls";
+import { createMessageProgressReporter } from "./message-progress";
 
 const titleModel = openai({
   model: OPENROUTER_GPT_5_4_MINI,
@@ -27,6 +28,8 @@ const titleModel = openai({
   defaultParameters: {
     temperature: 0,
     reasoning: { effort: "low" },
+    // OpenRouter extended params (not in default typings)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any,
 });
 
@@ -37,6 +40,7 @@ const baseModel = openai({
   defaultParameters: {
     temperature: 0.3,
     reasoning: { effort: "medium" },
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- OpenRouter extended params
   } as any,
 });
 
@@ -125,68 +129,70 @@ export const processMessage = inngest.createFunction(
       systemPrompt += `\n\n## Previous (do not repeat verbatim): \n${historyText}\n\n## Current message: answer the user's latest request only.`;
     }
 
-    await step.run("progress-loaded-context", async () => {
-      await convex.mutation(api.system.updateMessageProgress, {
-        internalKey,
-        messageId,
-        progressLabel: "Loaded context",
-        progressSteps: [{ label: "Loaded context" }],
-      });
+    const reporter = createMessageProgressReporter({
+      internalKey,
+      messageId,
     });
 
-    // Generate conversation title if it's still default
+    await step.run("progress-loaded-context", () => reporter.loadedContext());
+
+    // Generate conversation title if it's still default.
+    // Do not call titleAgent.run inside step.run: agent-kit uses step.ai.infer, which
+    // nests step tooling and is unsupported (hangs / undefined completion).
     const shouldGenerateTitle =
       conversation.title === DEFAULT_CONVERSATION_TITLE;
     if (shouldGenerateTitle) {
-      await step.run("progress-generating-title", async () => {
-        await convex.mutation(api.system.updateMessageProgress, {
-          internalKey,
-          messageId,
-          progressLabel: "Generating title",
-          progressSteps: [
-            { label: "Loaded context" },
-            { label: "Generating title" },
-          ],
-        });
-      });
-      const { output } = await titleAgent.run(message, { step });
-      const textMessage = output.find(
-        (msg) => msg.type === "text" && msg.role === "assistant",
+      await step.run("progress-begin-title", () =>
+        reporter.beginGeneratingTitle(),
       );
-      if (textMessage?.type === "text") {
-        const title =
-          typeof textMessage.content === "string"
-            ? textMessage.content.trim()
-            : textMessage.content
-                .map((c) => c.text)
-                .join("")
-                .trim();
-        if (title) {
-          await step.run("update-conversation-title", async () => {
-            await convex.mutation(api.system.updateConversationTitle, {
-              internalKey,
-              conversationId,
-              title,
+      try {
+        const { output } = await titleAgent.run(message);
+        const textMessage = output.find(
+          (msg) => msg.type === "text" && msg.role === "assistant",
+        );
+        if (textMessage?.type === "text") {
+          const title =
+            typeof textMessage.content === "string"
+              ? textMessage.content.trim()
+              : textMessage.content
+                  .map((c) => c.text)
+                  .join("")
+                  .trim();
+          if (title) {
+            await step.run("update-conversation-title", async () => {
+              await convex.mutation(api.system.updateConversationTitle, {
+                internalKey,
+                conversationId,
+                title,
+              });
             });
-          });
+          }
         }
+      } finally {
+        await step.run("progress-end-title", () =>
+          reporter.endGeneratingTitle(),
+        );
       }
     }
     // Passing internal key directly, probably not best practice, works because its validated by previous checks
+    await step.run("progress-agent-loop", () =>
+      reporter.startAgentLoop({ shouldGenerateTitle }),
+    );
+
     const codingAgent = createAgent({
       name: "meteroite",
       description: "Default Meteroite assistant using OpenRouter MiniMax M2.7",
       system: systemPrompt,
       model: baseModel,
       tools: [
-        createListFilesTool({ projectId, internalKey }),
-        createReadFilesTool({ projectId, internalKey }),
-        createUpdateFileTool({ projectId, internalKey }),
-        createCreateFilesTool({ projectId, internalKey }),
-        createCreateFolderTool({ projectId, internalKey }),
-        createDeleteFilesTool({ projectId, internalKey }),
-        createRenameFileTool({ projectId, internalKey }),
-        createScrapeUrlsTool(),
+        createListFilesTool({ projectId, internalKey, reporter }),
+        createReadFilesTool({ projectId, internalKey, reporter }),
+        createUpdateFileTool({ projectId, internalKey, reporter }),
+        createCreateFilesTool({ projectId, internalKey, reporter }),
+        createCreateFolderTool({ projectId, internalKey, reporter }),
+        createDeleteFilesTool({ projectId, internalKey, reporter }),
+        createRenameFileTool({ projectId, internalKey, reporter }),
+        createScrapeUrlsTool({ reporter }),
       ],
     });
 
@@ -235,20 +241,6 @@ export const processMessage = inngest.createFunction(
       },
     });
 
-    await step.run("progress-running-assistant", async () => {
-      const progressSteps = [
-        { label: "Loaded context" },
-        ...(shouldGenerateTitle ? [{ label: "Generating title" }] : []),
-        { label: "Running assistant" },
-      ];
-      await convex.mutation(api.system.updateMessageProgress, {
-        internalKey,
-        messageId,
-        progressLabel: "Running assistant",
-        progressSteps,
-      });
-    });
-
     const result = await network.run(message);
     const lastResult = result.state.results.at(-1);
     const textMessage = lastResult?.output.find(
@@ -262,6 +254,8 @@ export const processMessage = inngest.createFunction(
           ? textMessage.content
           : textMessage.content.map((c) => c.text).join("");
     }
+    await step.run("progress-finalizing", () => reporter.finalizeResponse());
+
     await step.run("update-assistant-message", async () => {
       await convex.mutation(api.system.updateMessageContent, {
         internalKey,

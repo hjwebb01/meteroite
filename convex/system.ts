@@ -320,8 +320,19 @@ export const getConversationById = query({
 });
 
 const progressStepValidator = v.object({
+  id: v.optional(v.string()),
   label: v.string(),
   description: v.optional(v.string()),
+  status: v.optional(
+    v.union(
+      v.literal("pending"),
+      v.literal("active"),
+      v.literal("complete"),
+      v.literal("error"),
+    ),
+  ),
+  kind: v.optional(v.union(v.literal("phase"), v.literal("tool"))),
+  toolName: v.optional(v.string()),
 });
 
 export const createMessage = mutation({
@@ -366,7 +377,14 @@ export const updateMessageProgress = mutation({
     validateInternalKey(args.internalKey);
     const patch: {
       progressLabel?: string;
-      progressSteps?: Array<{ label: string; description?: string }>;
+      progressSteps?: Array<{
+        id?: string;
+        label: string;
+        description?: string;
+        status?: "pending" | "active" | "complete" | "error";
+        kind?: "phase" | "tool";
+        toolName?: string;
+      }>;
     } = {};
     if (args.progressLabel !== undefined) {
       patch.progressLabel = args.progressLabel;
@@ -547,7 +565,7 @@ export const agentListProjectFiles = query({
       path: pathById.get(f._id)!,
     }));
 
-    let filtered = prefix
+    const filtered = prefix
       ? rows.filter((r) => matchesWorkspacePathPrefix(r.path, prefix))
       : rows;
     filtered.sort((a, b) => {

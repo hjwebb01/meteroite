@@ -5,10 +5,12 @@ import { convex } from "@/lib/convex-client";
 
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
+import type { MessageProgressReporter } from "../message-progress";
 
 interface CreateFolderToolOptions {
   projectId: Id<"projects">;
   internalKey: string;
+  reporter: MessageProgressReporter;
 }
 
 const paramsSchema = z.object({
@@ -23,6 +25,7 @@ const paramsSchema = z.object({
 export const createCreateFolderTool = ({
   projectId,
   internalKey,
+  reporter,
 }: CreateFolderToolOptions) => {
   return createTool({
     name: "createFolder",
@@ -37,8 +40,10 @@ export const createCreateFolderTool = ({
 
       const { path } = parsed.data;
 
+      const progressId = await reporter.toolStart("createFolder", path);
+
       try {
-        return await toolStep?.run("create-folder", async () => {
+        const out = await toolStep?.run("create-folder", async () => {
           const result = await convex.mutation(api.system.agentEnsureFolderPath, {
             internalKey,
             projectId,
@@ -46,7 +51,14 @@ export const createCreateFolderTool = ({
           });
           return JSON.stringify(result);
         });
+        await reporter.toolEnd(progressId, true);
+        return out ?? "";
       } catch (error) {
+        await reporter.toolEnd(
+          progressId,
+          false,
+          error instanceof Error ? error.message : "Unknown error",
+        );
         return `Error creating folder: ${error instanceof Error ? error.message : "Unknown error"}`;
       }
     },

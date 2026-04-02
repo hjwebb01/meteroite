@@ -65,8 +65,21 @@ export default defineSchema({
     progressSteps: v.optional(
       v.array(
         v.object({
+          id: v.optional(v.string()),
           label: v.string(),
           description: v.optional(v.string()),
+          status: v.optional(
+            v.union(
+              v.literal("pending"),
+              v.literal("active"),
+              v.literal("complete"),
+              v.literal("error"),
+            ),
+          ),
+          kind: v.optional(
+            v.union(v.literal("phase"), v.literal("tool")),
+          ),
+          toolName: v.optional(v.string()),
         }),
       ),
     ),

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createTool } from "@inngest/agent-kit";
 import { firecrawl } from "@/lib/firecrawl";
+import type { MessageProgressReporter } from "../message-progress";
 
 const paramsSchema = z.object({
   urls: z
@@ -8,7 +9,11 @@ const paramsSchema = z.object({
     .min(1, "Provide at least one URL to scrape"),
 });
 
-export const createScrapeUrlsTool = () => {
+interface ScrapeUrlsToolOptions {
+  reporter: MessageProgressReporter;
+}
+
+export const createScrapeUrlsTool = ({ reporter }: ScrapeUrlsToolOptions) => {
   return createTool({
     name: "scrapeUrls",
     description:
@@ -24,8 +29,14 @@ export const createScrapeUrlsTool = () => {
 
       const { urls } = parsed.data;
 
+      const detail =
+        urls.length === 1
+          ? urls[0]
+          : `${urls.length} URLs (${urls[0] ?? ""}${urls.length > 1 ? ", …" : ""})`;
+      const progressId = await reporter.toolStart("scrapeUrls", detail);
+
       try {
-        return await toolStep?.run("scrape-urls", async () => {
+        const out = await toolStep?.run("scrape-urls", async () => {
           const results: { url: string; content: string }[] = [];
 
           for (const url of urls) {
@@ -54,7 +65,14 @@ export const createScrapeUrlsTool = () => {
 
           return JSON.stringify(results);
         });
+        await reporter.toolEnd(progressId, true);
+        return out ?? "";
       } catch (error) {
+        await reporter.toolEnd(
+          progressId,
+          false,
+          error instanceof Error ? error.message : "Unknown error",
+        );
         return `Error scraping URLs: ${error instanceof Error ? error.message : "Unknown error"}`;
       }
     },

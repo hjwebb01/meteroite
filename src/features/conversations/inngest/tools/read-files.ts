@@ -3,10 +3,12 @@ import { createTool } from "@inngest/agent-kit";
 import { convex } from "@/lib/convex-client";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
+import type { MessageProgressReporter } from "../message-progress";
 
 interface ReadFilesToolArgs {
   projectId: Id<"projects">;
   internalKey: string;
+  reporter: MessageProgressReporter;
 }
 
 const paramsSchema = z
@@ -84,6 +86,7 @@ function toCompactRow(row: AgentReadRow): unknown[] {
 export const createReadFilesTool = ({
   projectId,
   internalKey,
+  reporter,
 }: ReadFilesToolArgs) => {
   return createTool({
     name: "readFiles",
@@ -117,8 +120,22 @@ export const createReadFilesTool = ({
       const { paths, fileIds, format, maxChars, lineStart, lineEnd } =
         parsed.data;
 
+      const hintParts: string[] = [];
+      if (paths.length > 0) {
+        hintParts.push(
+          paths.length <= 2
+            ? paths.join(", ")
+            : `${paths.slice(0, 2).join(", ")} +${paths.length - 2} more`,
+        );
+      }
+      if (fileIds.length > 0 && paths.length === 0) {
+        hintParts.push(`${fileIds.length} id(s)`);
+      }
+      const detail = hintParts.length > 0 ? hintParts.join(" · ") : undefined;
+      const progressId = await reporter.toolStart("readFiles", detail);
+
       try {
-        return await toolStep?.run("read-files", async () => {
+        const out = await toolStep?.run("read-files", async () => {
           const rows = (await convex.query(api.system.agentReadFiles, {
             internalKey,
             projectId,
@@ -205,7 +222,14 @@ export const createReadFilesTool = ({
 
           return lines.join("\n");
         });
+        await reporter.toolEnd(progressId, true);
+        return out ?? "";
       } catch (error) {
+        await reporter.toolEnd(
+          progressId,
+          false,
+          error instanceof Error ? error.message : "Unknown error",
+        );
         return `Error: ${error instanceof Error ? error.message : "Unknown error"}`;
       }
     },

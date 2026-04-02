@@ -1,6 +1,6 @@
 import ky from "ky";
 import { toast } from "sonner";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { CopyIcon, HistoryIcon, PlusIcon } from "lucide-react";
 
 import {
@@ -43,9 +43,153 @@ import {
   useMessages,
 } from "../hooks/use-conversations";
 
-import { Id } from "../../../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../../../convex/_generated/dataModel";
 import { DEFAULT_CONVERSATION_TITLE } from "../../../../convex/constants";
 import { PastConversationsDialog } from "./past-conversations-dialog";
+
+/** Mirrors Convex `messages.progressSteps` items (client-safe, no worker imports). */
+type ProgressStepRow = {
+  id?: string;
+  label: string;
+  description?: string;
+  status?: "pending" | "active" | "complete" | "error";
+};
+
+function toChainStepStatus(
+  step: ProgressStepRow,
+  index: number,
+  total: number,
+): "complete" | "active" | "pending" | "error" {
+  if (step.status === "error") {
+    return "error";
+  }
+  if (step.status === "active") {
+    return "active";
+  }
+  if (step.status === "pending") {
+    return "pending";
+  }
+  if (step.status === "complete") {
+    return "complete";
+  }
+  return index === total - 1 ? "active" : "complete";
+}
+
+function progressStepsEqual(
+  a: Doc<"messages">["progressSteps"],
+  b: Doc<"messages">["progressSteps"],
+): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b) {
+    return a === b;
+  }
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]!;
+    const y = b[i]!;
+    if (
+      x.id !== y.id ||
+      x.label !== y.label ||
+      x.description !== y.description ||
+      x.status !== y.status
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function messagePropsEqualForSidebar(
+  a: Doc<"messages">,
+  b: Doc<"messages">,
+): boolean {
+  return (
+    a._id === b._id &&
+    a.role === b.role &&
+    a.status === b.status &&
+    a.content === b.content &&
+    a.progressLabel === b.progressLabel &&
+    progressStepsEqual(a.progressSteps, b.progressSteps)
+  );
+}
+
+type SidebarMessageRowProps = {
+  message: Doc<"messages">;
+  messageIndex: number;
+  totalMessages: number;
+};
+
+const ConversationSidebarMessage = memo(function ConversationSidebarMessage({
+  message,
+  messageIndex,
+  totalMessages,
+}: SidebarMessageRowProps) {
+  return (
+    <Message from={message.role}>
+      <MessageContent>
+        {message.status === "processing" ? (
+          <div className="space-y-3 text-muted-foreground">
+            <Shimmer
+              as="p"
+              className="text-sm"
+            >
+              {message.progressLabel ??
+                message.progressSteps?.at(-1)?.label ??
+                "Working on your response..."}
+            </Shimmer>
+            {message.progressSteps && message.progressSteps.length > 0 && (
+              <ChainOfThought defaultOpen={true}>
+                <ChainOfThoughtHeader>Progress</ChainOfThoughtHeader>
+                <ChainOfThoughtContent>
+                  {message.progressSteps.map((step, stepIndex, arr) => (
+                    <ChainOfThoughtStep
+                      key={step.id ?? `${step.label}-${stepIndex}`}
+                      label={step.label}
+                      description={step.description}
+                      status={toChainStepStatus(step, stepIndex, arr.length)}
+                    />
+                  ))}
+                </ChainOfThoughtContent>
+              </ChainOfThought>
+            )}
+          </div>
+        ) : message.status === "cancelled" ? (
+          <div className="text-muted-foreground italic">
+            <span>Message cancelled</span>
+          </div>
+        ) : (
+          <MessageResponse>{message.content}</MessageResponse>
+        )}
+      </MessageContent>
+      {message.role === "assistant" &&
+        message.status === "completed" &&
+        messageIndex === totalMessages - 1 && (
+          <MessageActions>
+            <MessageAction
+              onClick={() => {
+                navigator.clipboard.writeText(message.content);
+              }}
+              label="Copy"
+            >
+              <CopyIcon className="size-3" />
+            </MessageAction>
+          </MessageActions>
+        )}
+    </Message>
+  );
+}, (prev, next) => {
+  return (
+    messagePropsEqualForSidebar(prev.message, next.message) &&
+    prev.messageIndex === next.messageIndex &&
+    prev.totalMessages === next.totalMessages
+  );
+});
+
+ConversationSidebarMessage.displayName = "ConversationSidebarMessage";
 
 interface ConversationSidebarProps {
   projectId: Id<"projects">;
@@ -157,69 +301,12 @@ export const ConversationSideBar = ({
         <Conversation className="flex-1">
           <ConversationContent>
             {conversationMessages?.map((message, messageIndex) => (
-              <Message
+              <ConversationSidebarMessage
                 key={message._id}
-                from={message.role}
-              >
-                <MessageContent>
-                  {message.status === "processing" ? (
-                    <div className="space-y-3 text-muted-foreground">
-                      <Shimmer
-                        as="p"
-                        className="text-sm"
-                      >
-                        {message.progressLabel ??
-                          message.progressSteps?.at(-1)?.label ??
-                          "Working on your response..."}
-                      </Shimmer>
-                      {message.progressSteps &&
-                        message.progressSteps.length > 0 && (
-                          <ChainOfThought defaultOpen={true}>
-                            <ChainOfThoughtHeader>
-                              Progress
-                            </ChainOfThoughtHeader>
-                            <ChainOfThoughtContent>
-                              {message.progressSteps.map(
-                                (step, stepIndex, arr) => (
-                                  <ChainOfThoughtStep
-                                    key={`${step.label}-${stepIndex}`}
-                                    label={step.label}
-                                    description={step.description}
-                                    status={
-                                      stepIndex === arr.length - 1
-                                        ? "active"
-                                        : "complete"
-                                    }
-                                  />
-                                ),
-                              )}
-                            </ChainOfThoughtContent>
-                          </ChainOfThought>
-                        )}
-                    </div>
-                  ) : message.status === "cancelled" ? (
-                    <div className="text-muted-foreground italic">
-                      <span>Message cancelled</span>
-                    </div>
-                  ) : (
-                    <MessageResponse>{message.content}</MessageResponse>
-                  )}
-                </MessageContent>
-                {message.role === "assistant" &&
-                  message.status === "completed" &&
-                  messageIndex === (conversationMessages?.length ?? 0) - 1 && (
-                    <MessageActions>
-                      <MessageAction
-                        onClick={() => {
-                          navigator.clipboard.writeText(message.content);
-                        }}
-                        label="Copy"
-                      >
-                        <CopyIcon className="size-3" />
-                      </MessageAction>
-                    </MessageActions>
-                  )}
-              </Message>
+                message={message}
+                messageIndex={messageIndex}
+                totalMessages={conversationMessages.length}
+              />
             ))}
           </ConversationContent>
           <ConversationScrollButton />
