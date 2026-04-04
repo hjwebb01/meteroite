@@ -255,7 +255,9 @@ export const deleteFile = mutation({
     const userId = await verifyAuth(ctx);
     const file = await ctx.db.get("files", args.id);
     if (!file) {
-      throw new Error("File not Found");
+      // Delete is intentionally idempotent because recursive batch deletes can
+      // invalidate later file ids in the same run.
+      return;
     }
     const project = await ctx.db.get("projects", file.projectId);
     if (!project) {

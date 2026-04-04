@@ -407,8 +407,6 @@ export const updateMessageContent = mutation({
     await ctx.db.patch(args.messageId, {
       content: args.content,
       status: "completed" as const,
-      progressLabel: undefined,
-      progressSteps: undefined,
     });
   },
 });
@@ -1087,7 +1085,9 @@ export const deleteFile = mutation({
     validateInternalKey(args.internalKey);
     const file = await ctx.db.get(args.fileId);
     if (!file) {
-      throw new Error("File not found");
+      // Delete is intentionally idempotent because recursive batch deletes can
+      // invalidate later file ids in the same run.
+      return args.fileId;
     }
     if (file.projectId !== args.projectId) {
       throw new Error("File does not belong to this project");

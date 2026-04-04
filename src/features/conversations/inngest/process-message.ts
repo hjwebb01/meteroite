@@ -39,7 +39,7 @@ const baseModel = openai({
   apiKey: process.env.OPENROUTER_API_KEY,
   defaultParameters: {
     temperature: 0.3,
-    reasoning: { effort: "medium" },
+    reasoning: { effort: "low" },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- OpenRouter extended params
   } as any,
 });
@@ -51,7 +51,10 @@ const titleAgent = createAgent({
 });
 
 interface MessageEvent {
+  /** Assistant placeholder message (processing → completed). */
   messageId: Id<"messages">;
+  /** User message for this turn; excluded from system history (same text as `network.run(message)`). */
+  userMessageId?: Id<"messages">;
   conversationId: Id<"conversations">;
   projectId: Id<"projects">;
   message: string;
@@ -85,14 +88,12 @@ export const processMessage = inngest.createFunction(
     event: "message/sent",
   },
   async ({ event, step }) => {
-    const { messageId, conversationId, projectId, message } =
+    const { messageId, userMessageId, conversationId, projectId, message } =
       event.data as MessageEvent;
     const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
     if (!internalKey) {
       throw new NonRetriableError("METEROITE_CONVEX_INTERNAL_KEY is not set");
     }
-    // TODO: Check if needed
-    await step.sleep("wait-for-db-sync", "1s");
     const conversation = await step.run("get-conversation", async () => {
       return await convex.query(api.system.getConversationById, {
         internalKey,
@@ -103,24 +104,49 @@ export const processMessage = inngest.createFunction(
       throw new NonRetriableError("Conversation not found");
     }
 
-    // Fetch recent messages for conversation context
-    const recentMessages = await step.run("get-recent-messages", async () => {
-      return await convex.query(api.system.getRecentMessages, {
+    // Load messages + first progress update in one step (single Convex round-trip;
+    // a separate step here was prone to stalling between query and progress mutation).
+    const recentMessages = await step.run("load-conversation-context", async () => {
+      const messages = await convex.query(api.system.getRecentMessages, {
         internalKey,
         conversationId,
-        limit: 10,
+        /** Slightly above MAX_HISTORY_MESSAGES to allow filtering placeholders / current user. */
+        limit: 8,
       });
+      await convex.mutation(api.system.updateMessageProgress, {
+        internalKey,
+        messageId,
+        progressLabel: "Loaded context",
+        progressSteps: [
+          {
+            id: "phase-loaded",
+            label: "Loaded context",
+            status: "complete",
+            kind: "phase",
+          },
+        ],
+      });
+      return messages;
     });
 
     /** Keep recent history small to limit prompt tokens (last N non-empty turns only). */
     const MAX_HISTORY_MESSAGES = 4;
 
-    // Build system prompt with conversation history (excluding the current message)
     let systemPrompt = CODING_AGENT_SYSTEM_PROMPT;
 
-    // Filter out the current message from the recent messages
+    const userMessageIdToExclude =
+      userMessageId ??
+      recentMessages
+        .filter((m) => m.role === "user" && m.content === message)
+        .at(-1)?._id;
+
     const contextMessages = recentMessages
-      .filter((msg) => msg._id !== messageId && msg.content.trim() !== "")
+      .filter(
+        (msg) =>
+          msg._id !== messageId &&
+          msg._id !== userMessageIdToExclude &&
+          msg.content.trim() !== "",
+      )
       .slice(-MAX_HISTORY_MESSAGES);
     if (contextMessages.length > 0) {
       const historyText = contextMessages
@@ -133,8 +159,7 @@ export const processMessage = inngest.createFunction(
       internalKey,
       messageId,
     });
-
-    await step.run("progress-loaded-context", () => reporter.loadedContext());
+    reporter.seedLoadedContextState();
 
     // Generate conversation title if it's still default.
     // Do not call titleAgent.run inside step.run: agent-kit uses step.ai.infer, which
@@ -142,9 +167,9 @@ export const processMessage = inngest.createFunction(
     const shouldGenerateTitle =
       conversation.title === DEFAULT_CONVERSATION_TITLE;
     if (shouldGenerateTitle) {
-      await step.run("progress-begin-title", () =>
-        reporter.beginGeneratingTitle(),
-      );
+      await step.run("progress-begin-title", async () => {
+        await reporter.beginGeneratingTitle();
+      });
       try {
         const { output } = await titleAgent.run(message);
         const textMessage = output.find(
@@ -169,19 +194,19 @@ export const processMessage = inngest.createFunction(
           }
         }
       } finally {
-        await step.run("progress-end-title", () =>
-          reporter.endGeneratingTitle(),
-        );
+        await step.run("progress-end-title", async () => {
+          await reporter.endGeneratingTitle();
+        });
       }
     }
     // Passing internal key directly, probably not best practice, works because its validated by previous checks
-    await step.run("progress-agent-loop", () =>
-      reporter.startAgentLoop({ shouldGenerateTitle }),
-    );
+    await step.run("progress-agent-loop", async () => {
+      await reporter.startAgentLoop({ shouldGenerateTitle });
+    });
 
     const codingAgent = createAgent({
       name: "meteroite",
-      description: "Default Meteroite assistant using OpenRouter MiniMax M2.7",
+      description: "Default Meteroite coding assistant (OpenRouter)",
       system: systemPrompt,
       model: baseModel,
       tools: [
@@ -197,7 +222,7 @@ export const processMessage = inngest.createFunction(
     });
 
     /** Cap agent loop iterations to reduce token accumulation and latency. */
-    const CODING_AGENT_MAX_ITER = 9;
+    const CODING_AGENT_MAX_ITER = 7;
 
     let lastToolCallFingerprint: string | undefined;
     let duplicateToolCallStreak = 0;
@@ -254,7 +279,9 @@ export const processMessage = inngest.createFunction(
           ? textMessage.content
           : textMessage.content.map((c) => c.text).join("");
     }
-    await step.run("progress-finalizing", () => reporter.finalizeResponse());
+    await step.run("progress-finalizing", async () => {
+      await reporter.finalizeResponse();
+    });
 
     await step.run("update-assistant-message", async () => {
       await convex.mutation(api.system.updateMessageContent, {

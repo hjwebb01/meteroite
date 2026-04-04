@@ -16,7 +16,7 @@ const paramsSchema = z
     paths: z.array(z.string().min(1, "Path cannot be empty")),
     fileIds: z.array(z.string().min(1, "File ID cannot be empty")),
     format: z.enum(["full", "compact"]).default("compact"),
-    maxChars: z.number().int().min(1).max(500_000).default(100_000),
+    maxChars: z.number().int().min(1).max(500_000).default(80_000),
     lineStart: z.number().int().min(1).optional(),
     lineEnd: z.number().int().min(1).optional(),
   })
@@ -27,6 +27,31 @@ const paramsSchema = z
       message: "Provide at least one workspace-relative path or file id from listFiles",
     },
   );
+
+/** Cap total `content` across all successful file reads in one tool call (limits prompt growth). */
+const MAX_AGGREGATE_CONTENT_CHARS = 200_000;
+
+function applyAggregateContentCap(rows: AgentReadRow[]): AgentReadRow[] {
+  let budget = MAX_AGGREGATE_CONTENT_CHARS;
+  return rows.map((row) => {
+    if (row.status !== "ok") {
+      return row;
+    }
+    const totalChars = row.totalChars ?? row.content.length;
+    if (row.content.length <= budget) {
+      budget -= row.content.length;
+      return row;
+    }
+    const take = Math.max(0, budget);
+    budget = 0;
+    return {
+      ...row,
+      content: row.content.slice(0, take),
+      truncated: true,
+      totalChars,
+    };
+  });
+}
 
 type AgentReadRow = {
   status: "ok";
@@ -91,7 +116,7 @@ export const createReadFilesTool = ({
   return createTool({
     name: "readFiles",
     description:
-      "Read text files by path (preferred) or file id. Default: compact output + maxChars cap. Use lineStart/lineEnd for partial reads.",
+      "Read text files by path (preferred) or file id. Default: compact output + per-file maxChars; total content per call is also capped. Use lineStart/lineEnd for partial reads.",
     parameters: z.object({
       paths: z
         .array(z.string())
@@ -104,7 +129,7 @@ export const createReadFilesTool = ({
         .describe("compact: v=2 row table. full: one JSON object per line."),
       maxChars: z
         .number()
-        .describe("Max characters returned per file after line slicing (default 100000)."),
+        .describe("Max characters returned per file after line slicing (default 80000)."),
       lineStart: z
         .number()
         .describe("1-based start line (optional)."),
@@ -146,17 +171,19 @@ export const createReadFilesTool = ({
             lineEnd,
           })) as AgentReadRow[];
 
+          const cappedRows = applyAggregateContentCap(rows);
+
           if (format === "compact") {
             return JSON.stringify({
               v: 2,
               legend:
                 "o=ok(path,id,name,content,truncated,totalChars), m=missing, f=folder, b=binary, ii=invalid_id, ip=invalid_path",
-              rows: rows.map(toCompactRow),
+              rows: cappedRows.map(toCompactRow),
             });
           }
 
           const lines: string[] = [];
-          for (const row of rows) {
+          for (const row of cappedRows) {
             switch (row.status) {
               case "ok":
                 lines.push(

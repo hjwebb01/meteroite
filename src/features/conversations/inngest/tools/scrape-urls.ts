@@ -13,6 +13,16 @@ interface ScrapeUrlsToolOptions {
   reporter: MessageProgressReporter;
 }
 
+const MAX_MARKDOWN_PER_URL = 24_000;
+const MAX_SCRAPED_TOTAL = 80_000;
+
+function truncateMarkdownChunk(text: string, maxLen: number): string {
+  if (text.length <= maxLen) {
+    return text;
+  }
+  return `${text.slice(0, maxLen)}\n\n[… truncated ${text.length - maxLen} characters …]`;
+}
+
 export const createScrapeUrlsTool = ({ reporter }: ScrapeUrlsToolOptions) => {
   return createTool({
     name: "scrapeUrls",
@@ -38,6 +48,7 @@ export const createScrapeUrlsTool = ({ reporter }: ScrapeUrlsToolOptions) => {
       try {
         const out = await toolStep?.run("scrape-urls", async () => {
           const results: { url: string; content: string }[] = [];
+          let totalChars = 0;
 
           for (const url of urls) {
             try {
@@ -46,9 +57,26 @@ export const createScrapeUrlsTool = ({ reporter }: ScrapeUrlsToolOptions) => {
               });
 
               if (result.markdown) {
+                let md = truncateMarkdownChunk(
+                  result.markdown,
+                  MAX_MARKDOWN_PER_URL,
+                );
+                const remaining = MAX_SCRAPED_TOTAL - totalChars;
+                if (remaining <= 0) {
+                  results.push({
+                    url,
+                    content:
+                      "[… omitted: per-response scrape budget already used by earlier URLs …]",
+                  });
+                  continue;
+                }
+                if (md.length > remaining) {
+                  md = `${md.slice(0, remaining)}\n\n[… truncated to fit scrape budget …]`;
+                }
+                totalChars += md.length;
                 results.push({
                   url,
-                  content: result.markdown,
+                  content: md,
                 });
               }
             } catch {

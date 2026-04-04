@@ -46,9 +46,13 @@ const DEBOUNCE_DELAY = 300;
 
 let currentAbortController: AbortController | null = null;
 
+/** Full-file prompts are expensive; send a cursor-centered excerpt for large buffers. */
+const MAX_CODE_SNIPPET_CHARS = 14_000;
+const CURSOR_RADIUS_CHARS = 6_000;
+
 const generatePayload = (view: EditorView, fileName: string) => {
-  const code = view.state.doc.toString();
-  if (!code || code.trim().length === 0) return null;
+  const fullCode = view.state.doc.toString();
+  if (!fullCode || fullCode.trim().length === 0) return null;
 
   const cursorPosition = view.state.selection.main.head;
   const currentLine = view.state.doc.lineAt(cursorPosition);
@@ -64,6 +68,16 @@ const generatePayload = (view: EditorView, fileName: string) => {
   for (let i = 1; i <= nextLinesToFetch; i++) {
     nextLines.push(view.state.doc.line(currentLine.number + i).text);
   }
+
+  let code = fullCode;
+  if (fullCode.length > MAX_CODE_SNIPPET_CHARS) {
+    const lo = Math.max(0, cursorPosition - CURSOR_RADIUS_CHARS);
+    const hi = Math.min(fullCode.length, cursorPosition + CURSOR_RADIUS_CHARS);
+    const head = lo > 0 ? "[…]\n" : "";
+    const tail = hi < fullCode.length ? "\n[…]" : "";
+    code = `${head}${fullCode.slice(lo, hi)}${tail}`;
+  }
+
   return {
     fileName,
     code,

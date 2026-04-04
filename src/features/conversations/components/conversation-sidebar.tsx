@@ -1,7 +1,9 @@
 import ky from "ky";
 import { toast } from "sonner";
 import { memo, useState } from "react";
+
 import { CopyIcon, HistoryIcon, PlusIcon } from "lucide-react";
+import { useMonotonicProgressSteps } from "../hooks/use-monotonic-progress-steps";
 
 import {
   Conversation,
@@ -27,7 +29,6 @@ import {
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
 
-import { Shimmer } from "@/components/ai-elements/shimmer";
 import {
   ChainOfThought,
   ChainOfThoughtContent,
@@ -42,23 +43,21 @@ import {
   useCreateConversation,
   useMessages,
 } from "../hooks/use-conversations";
+import { getProgressViewModel } from "../lib/progress-view-model";
 
 import type { Doc, Id } from "../../../../convex/_generated/dataModel";
 import { DEFAULT_CONVERSATION_TITLE } from "../../../../convex/constants";
+import type { MonotonicProgressStep } from "../hooks/use-monotonic-progress-steps";
 import { PastConversationsDialog } from "./past-conversations-dialog";
 
 /** Mirrors Convex `messages.progressSteps` items (client-safe, no worker imports). */
-type ProgressStepRow = {
-  id?: string;
-  label: string;
-  description?: string;
-  status?: "pending" | "active" | "complete" | "error";
-};
+type ProgressStepRow = MonotonicProgressStep;
 
 function toChainStepStatus(
   step: ProgressStepRow,
   index: number,
   total: number,
+  messageStatus: Doc<"messages">["status"],
 ): "complete" | "active" | "pending" | "error" {
   if (step.status === "error") {
     return "error";
@@ -72,7 +71,9 @@ function toChainStepStatus(
   if (step.status === "complete") {
     return "complete";
   }
-  return index === total - 1 ? "active" : "complete";
+  return messageStatus === "processing" && index === total - 1
+    ? "active"
+    : "complete";
 }
 
 function progressStepsEqual(
@@ -95,12 +96,74 @@ function progressStepsEqual(
       x.id !== y.id ||
       x.label !== y.label ||
       x.description !== y.description ||
-      x.status !== y.status
+      x.status !== y.status ||
+      x.kind !== y.kind ||
+      x.toolName !== y.toolName
     ) {
       return false;
     }
   }
   return true;
+}
+
+function ProcessingProgressCard({
+  activeLabel,
+  activeDescription,
+  activeIndex,
+  totalSteps,
+}: {
+  activeLabel: string;
+  activeDescription?: string;
+  activeIndex: number;
+  totalSteps: number;
+}) {
+  return (
+    <div
+      aria-atomic="true"
+      aria-live="polite"
+      className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-3 text-sm"
+    >
+      <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-primary/90">
+        Current step
+      </div>
+      <div className="mt-1 text-sm font-medium text-foreground">
+        {totalSteps > 0 ? `Step ${activeIndex} of ${totalSteps}` : "Preparing execution"}
+      </div>
+      <div className="mt-1 text-sm text-foreground">
+        {activeLabel}
+      </div>
+      {activeDescription && (
+        <div className="mt-1 break-words text-xs leading-relaxed text-muted-foreground">
+          {activeDescription}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProgressTimeline({
+  steps,
+  messageStatus,
+}: {
+  steps: ProgressStepRow[];
+  messageStatus: Doc<"messages">["status"];
+}) {
+  return (
+    <>
+      {steps.map((step, stepIndex, arr) => (
+        <ChainOfThoughtStep
+          key={step.id ?? `${step.label}-${stepIndex}`}
+          description={step.description}
+          isLast={stepIndex === arr.length - 1}
+          kind={step.kind}
+          label={step.label}
+          ordinal={stepIndex + 1}
+          status={toChainStepStatus(step, stepIndex, arr.length, messageStatus)}
+          toolName={step.toolName}
+        />
+      ))}
+    </>
+  );
 }
 
 function messagePropsEqualForSidebar(
@@ -128,31 +191,44 @@ const ConversationSidebarMessage = memo(function ConversationSidebarMessage({
   messageIndex,
   totalMessages,
 }: SidebarMessageRowProps) {
+  const mergedProgressSteps = useMonotonicProgressSteps(
+    message._id,
+    message.status,
+    message.progressSteps,
+  );
+  const progressViewModel = getProgressViewModel(
+    mergedProgressSteps,
+    message.status,
+  );
+  const activeLabel =
+    progressViewModel.activeStep?.label ??
+    message.progressLabel ??
+    "Working on your response...";
+  const activeDescription = progressViewModel.activeStep?.description;
+  const showCompletedSummary =
+    message.role === "assistant" &&
+    message.status === "completed" &&
+    mergedProgressSteps.length > 0;
+
   return (
     <Message from={message.role}>
       <MessageContent>
         {message.status === "processing" ? (
-          <div className="space-y-3 text-muted-foreground">
-            <Shimmer
-              as="p"
-              className="text-sm"
-            >
-              {message.progressLabel ??
-                message.progressSteps?.at(-1)?.label ??
-                "Working on your response..."}
-            </Shimmer>
-            {message.progressSteps && message.progressSteps.length > 0 && (
+          <div className="space-y-3">
+            <ProcessingProgressCard
+              activeDescription={activeDescription}
+              activeIndex={progressViewModel.activeIndex}
+              activeLabel={activeLabel}
+              totalSteps={progressViewModel.totalSteps}
+            />
+            {mergedProgressSteps.length > 0 && (
               <ChainOfThought defaultOpen={true}>
-                <ChainOfThoughtHeader>Progress</ChainOfThoughtHeader>
-                <ChainOfThoughtContent>
-                  {message.progressSteps.map((step, stepIndex, arr) => (
-                    <ChainOfThoughtStep
-                      key={step.id ?? `${step.label}-${stepIndex}`}
-                      label={step.label}
-                      description={step.description}
-                      status={toChainStepStatus(step, stepIndex, arr.length)}
-                    />
-                  ))}
+                <ChainOfThoughtHeader>Execution trace</ChainOfThoughtHeader>
+                <ChainOfThoughtContent animateContent={false}>
+                  <ProgressTimeline
+                    messageStatus={message.status}
+                    steps={mergedProgressSteps}
+                  />
                 </ChainOfThoughtContent>
               </ChainOfThought>
             )}
@@ -162,7 +238,29 @@ const ConversationSidebarMessage = memo(function ConversationSidebarMessage({
             <span>Message cancelled</span>
           </div>
         ) : (
-          <MessageResponse>{message.content}</MessageResponse>
+          <div className="space-y-3">
+            <MessageResponse>{message.content}</MessageResponse>
+            {showCompletedSummary && (
+              <ChainOfThought defaultOpen={false}>
+                <ChainOfThoughtHeader>
+                  <>
+                    <span className="font-medium text-foreground">
+                      {progressViewModel.summaryTitle}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {progressViewModel.summarySubtitle}
+                    </span>
+                  </>
+                </ChainOfThoughtHeader>
+                <ChainOfThoughtContent animateContent={false}>
+                  <ProgressTimeline
+                    messageStatus={message.status}
+                    steps={mergedProgressSteps}
+                  />
+                </ChainOfThoughtContent>
+              </ChainOfThought>
+            )}
+          </div>
         )}
       </MessageContent>
       {message.role === "assistant" &&

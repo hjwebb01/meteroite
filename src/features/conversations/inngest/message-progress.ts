@@ -62,7 +62,11 @@ function clampSteps(steps: ProgressStep[]): ProgressStep[] {
 }
 
 export interface MessageProgressReporter {
-  loadedContext: () => Promise<void>;
+  /**
+   * Sync in-memory steps after `updateMessageProgress` was applied in the same
+   * Inngest step as loading messages (avoids a separate `step.run` + Convex round-trip).
+   */
+  seedLoadedContextState: () => void;
   beginGeneratingTitle: () => Promise<void>;
   endGeneratingTitle: () => Promise<void>;
   startAgentLoop: (opts: { shouldGenerateTitle: boolean }) => Promise<void>;
@@ -84,7 +88,7 @@ export function createMessageProgressReporter(options: {
   let steps: ProgressStep[] = [];
   let lastFingerprint = "";
   let toolSeq = 0;
-  let planSeq = 0;
+  let phaseSeq = 0;
 
   function fingerprint(): string {
     return JSON.stringify({
@@ -93,23 +97,30 @@ export function createMessageProgressReporter(options: {
     });
   }
 
+  /** Serialize patches so concurrent flush() calls cannot apply out of order. */
+  let flushChain: Promise<void> = Promise.resolve();
+
   async function flush(): Promise<void> {
-    const fp = fingerprint();
-    if (fp === lastFingerprint) {
-      return;
-    }
-    lastFingerprint = fp;
-    steps = clampSteps(steps);
-    const progressLabel = computeProgressLabel(steps);
-    await convex.mutation(api.system.updateMessageProgress, {
-      internalKey,
-      messageId,
-      progressLabel,
-      progressSteps: steps,
+    const next = flushChain.then(async () => {
+      const fp = fingerprint();
+      if (fp === lastFingerprint) {
+        return;
+      }
+      lastFingerprint = fp;
+      steps = clampSteps(steps);
+      const progressLabel = computeProgressLabel(steps);
+      await convex.mutation(api.system.updateMessageProgress, {
+        internalKey,
+        messageId,
+        progressLabel,
+        progressSteps: steps,
+      });
     });
+    flushChain = next.catch(() => {});
+    return next;
   }
 
-  function completeActivePlanningPhases(): void {
+  function completeActivePhases(): void {
     for (const s of steps) {
       if (s.status === "active" && s.kind === "phase") {
         s.status = "complete";
@@ -117,10 +128,20 @@ export function createMessageProgressReporter(options: {
     }
   }
 
+  function pushPhase(label: string, status: ProgressStepStatus = "active"): void {
+    phaseSeq += 1;
+    steps.push({
+      id: `phase-${phaseSeq}`,
+      label,
+      status,
+      kind: "phase",
+    });
+  }
+
   return {
-    async loadedContext() {
+    seedLoadedContextState() {
       toolSeq = 0;
-      planSeq = 0;
+      phaseSeq = 0;
       steps = [
         {
           id: "phase-loaded",
@@ -129,7 +150,7 @@ export function createMessageProgressReporter(options: {
           kind: "phase",
         },
       ];
-      await flush();
+      lastFingerprint = fingerprint();
     },
 
     async beginGeneratingTitle() {
@@ -160,7 +181,7 @@ export function createMessageProgressReporter(options: {
 
     async startAgentLoop(opts: { shouldGenerateTitle: boolean }) {
       toolSeq = 0;
-      planSeq = 1;
+      phaseSeq = 0;
       steps = [
         {
           id: "phase-loaded",
@@ -178,18 +199,13 @@ export function createMessageProgressReporter(options: {
               },
             ]
           : []),
-        {
-          id: `plan-${planSeq}`,
-          label: "Planning next step",
-          status: "active" as const,
-          kind: "phase" as const,
-        },
       ];
+      pushPhase("Analyzing request");
       await flush();
     },
 
     async toolStart(toolName: string, description?: string) {
-      completeActivePlanningPhases();
+      completeActivePhases();
       toolSeq += 1;
       const id = `tool-${toolSeq}`;
       steps.push({
@@ -214,13 +230,8 @@ export function createMessageProgressReporter(options: {
           step.description = truncate(errorMessage, MAX_DESC_LEN);
         }
       }
-      planSeq += 1;
-      steps.push({
-        id: `plan-${planSeq}`,
-        label: "Planning next step",
-        status: "active",
-        kind: "phase",
-      });
+      completeActivePhases();
+      pushPhase(success ? "Reviewing tool results" : "Recovering from tool error");
       await flush();
     },
 
@@ -230,13 +241,7 @@ export function createMessageProgressReporter(options: {
           s.status = "complete";
         }
       }
-      planSeq += 1;
-      steps.push({
-        id: `plan-${planSeq}`,
-        label: "Finalizing response",
-        status: "active",
-        kind: "phase",
-      });
+      pushPhase("Writing response", "complete");
       await flush();
     },
   };

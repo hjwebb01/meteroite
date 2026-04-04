@@ -17,7 +17,7 @@ import {
   PlusIcon,
 } from "lucide-react";
 import type { ComponentProps, HTMLAttributes } from "react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 export type CommitProps = ComponentProps<typeof Collapsible>;
 
@@ -163,15 +163,7 @@ export const CommitTimestamp = ({
   children,
   ...props
 }: CommitTimestampProps) => {
-  const [formatted, setFormatted] = useState("");
-
-  const updateFormatted = useCallback(() => {
-    setFormatted(formatRelativeDate(date));
-  }, [date]);
-
-  useEffect(() => {
-    updateFormatted();
-  }, [updateFormatted]);
+  const formatted = useMemo(() => formatRelativeDate(date), [date]);
 
   return (
     <time

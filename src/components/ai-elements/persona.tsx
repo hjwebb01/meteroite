@@ -143,6 +143,13 @@ const useTheme = (enabled: boolean) => {
   return theme;
 };
 
+const setStateMachineBoolean = (input: unknown, value: boolean) => {
+  const stateMachineInput = input as { value: boolean } | null;
+  if (stateMachineInput) {
+    stateMachineInput.value = value;
+  }
+};
+
 interface PersonaWithModelProps {
   rive: ReturnType<typeof useRive>["rive"];
   source: (typeof sources)[keyof typeof sources];
@@ -279,18 +286,10 @@ export const Persona: FC<PersonaProps> = memo(
     // Rive state machine inputs are mutable objects that must be set via direct
     // property assignment — this is the intended Rive API, not a React anti-pattern.
     useEffect(() => {
-      if (listeningInput) {
-        listeningInput.value = state === "listening";
-      }
-      if (thinkingInput) {
-        thinkingInput.value = state === "thinking";
-      }
-      if (speakingInput) {
-        speakingInput.value = state === "speaking";
-      }
-      if (asleepInput) {
-        asleepInput.value = state === "asleep";
-      }
+      setStateMachineBoolean(listeningInput, state === "listening");
+      setStateMachineBoolean(thinkingInput, state === "thinking");
+      setStateMachineBoolean(speakingInput, state === "speaking");
+      setStateMachineBoolean(asleepInput, state === "asleep");
     }, [state, listeningInput, thinkingInput, speakingInput, asleepInput]);
 
     const Component = source.hasModel ? PersonaWithModel : PersonaWithoutModel;
