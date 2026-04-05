@@ -44,7 +44,9 @@ function buildFullCodeContext(fullCode: string, selectedCode: string): string {
   if (selLen >= budget) {
     return truncateForPrompt(selectedCode, budget);
   }
-  const slack = budget - selLen - 40;
+  // Reserve ~40 chars for omission markers; clamp so slack is never negative (that would
+  // shrink the window inside the selection when selLen is just under budget).
+  const slack = Math.max(0, budget - selLen - 40);
   const before = Math.floor(slack / 2);
   const after = slack - before;
   const start = Math.max(0, idx - before);
