@@ -20,6 +20,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useReducer,
   useState,
 } from "react";
 
@@ -155,30 +156,28 @@ export const InlineCitationCarouselIndex = ({
   ...props
 }: InlineCitationCarouselIndexProps) => {
   const api = useCarouselApi();
-  const [current, setCurrent] = useState(0);
-  const [count, setCount] = useState(0);
-
-  const syncState = useCallback(() => {
-    if (!api) {
-      return;
-    }
-    setCount(api.scrollSnapList().length);
-    setCurrent(api.selectedScrollSnap() + 1);
-  }, [api]);
+  const [, forceRender] = useReducer((value: number) => value + 1, 0);
 
   useEffect(() => {
     if (!api) {
       return;
     }
 
-    syncState();
+    const syncState = () => {
+      forceRender();
+    };
 
+    api.on("reInit", syncState);
     api.on("select", syncState);
 
     return () => {
+      api.off("reInit", syncState);
       api.off("select", syncState);
     };
-  }, [api, syncState]);
+  }, [api]);
+
+  const count = api?.scrollSnapList().length ?? 0;
+  const current = count === 0 || !api ? 0 : api.selectedScrollSnap() + 1;
 
   return (
     <div

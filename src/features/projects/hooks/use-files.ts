@@ -37,6 +37,8 @@ export const useCreateFile = () => {
       });
 
       if (existingFiles !== undefined) {
+        // Temporary UUID until the mutation returns; do not use as a Convex id
+        // (see `isTemporaryOptimisticFileId` in the file explorer).
         // eslint-disable-next-line react-hooks/purity -- optimistic update callback runs on mutation, not render
         const now = Date.now();
         const newFile = {
@@ -69,6 +71,7 @@ export const useCreateFolder = () => {
       });
 
       if (existingFiles !== undefined) {
+        // Temporary UUID until the mutation returns; not a real Convex document id.
         // eslint-disable-next-line react-hooks/purity -- optimistic update callback runs on mutation, not render
         const now = Date.now();
         const newFolder = {

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { createTool } from "@inngest/agent-kit";
 import { firecrawl } from "@/lib/firecrawl";
+import type { MessageProgressReporter } from "../message-progress";
 
 const paramsSchema = z.object({
   urls: z
@@ -8,7 +9,21 @@ const paramsSchema = z.object({
     .min(1, "Provide at least one URL to scrape"),
 });
 
-export const createScrapeUrlsTool = () => {
+interface ScrapeUrlsToolOptions {
+  reporter: MessageProgressReporter;
+}
+
+const MAX_MARKDOWN_PER_URL = 24_000;
+const MAX_SCRAPED_TOTAL = 80_000;
+
+function truncateMarkdownChunk(text: string, maxLen: number): string {
+  if (text.length <= maxLen) {
+    return text;
+  }
+  return `${text.slice(0, maxLen)}\n\n[… truncated ${text.length - maxLen} characters …]`;
+}
+
+export const createScrapeUrlsTool = ({ reporter }: ScrapeUrlsToolOptions) => {
   return createTool({
     name: "scrapeUrls",
     description:
@@ -24,9 +39,16 @@ export const createScrapeUrlsTool = () => {
 
       const { urls } = parsed.data;
 
+      const detail =
+        urls.length === 1
+          ? urls[0]
+          : `${urls.length} URLs (${urls[0] ?? ""}${urls.length > 1 ? ", …" : ""})`;
+      const progressId = await reporter.toolStart("scrapeUrls", detail);
+
       try {
-        return await toolStep?.run("scrape-urls", async () => {
+        const out = await toolStep?.run("scrape-urls", async () => {
           const results: { url: string; content: string }[] = [];
+          let totalChars = 0;
 
           for (const url of urls) {
             try {
@@ -35,9 +57,26 @@ export const createScrapeUrlsTool = () => {
               });
 
               if (result.markdown) {
+                let md = truncateMarkdownChunk(
+                  result.markdown,
+                  MAX_MARKDOWN_PER_URL,
+                );
+                const remaining = MAX_SCRAPED_TOTAL - totalChars;
+                if (remaining <= 0) {
+                  results.push({
+                    url,
+                    content:
+                      "[… omitted: per-response scrape budget already used by earlier URLs …]",
+                  });
+                  continue;
+                }
+                if (md.length > remaining) {
+                  md = `${md.slice(0, remaining)}\n\n[… truncated to fit scrape budget …]`;
+                }
+                totalChars += md.length;
                 results.push({
                   url,
-                  content: result.markdown,
+                  content: md,
                 });
               }
             } catch {
@@ -54,7 +93,14 @@ export const createScrapeUrlsTool = () => {
 
           return JSON.stringify(results);
         });
+        await reporter.toolEnd(progressId, true);
+        return out ?? "";
       } catch (error) {
+        await reporter.toolEnd(
+          progressId,
+          false,
+          error instanceof Error ? error.message : "Unknown error",
+        );
         return `Error scraping URLs: ${error instanceof Error ? error.message : "Unknown error"}`;
       }
     },

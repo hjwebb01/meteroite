@@ -8,10 +8,12 @@ import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 
 import { normalizeGeneratedFileContent } from "../normalize-generated-file-content";
+import type { MessageProgressReporter } from "../message-progress";
 
 interface CreateFilesToolOptions {
   projectId: Id<"projects">;
   internalKey: string;
+  reporter: MessageProgressReporter;
 }
 
 const fileEntrySchema = z.object({
@@ -41,6 +43,7 @@ const paramsSchema = z.object({
 export const createCreateFilesTool = ({
   projectId,
   internalKey,
+  reporter,
 }: CreateFilesToolOptions) => {
   return createTool({
     name: "createFiles",
@@ -62,8 +65,14 @@ export const createCreateFilesTool = ({
         content: normalizeGeneratedFileContent(file.content),
       }));
 
+      const detail =
+        files.length === 1
+          ? files[0]!.path
+          : `${files.length} files (${files[0]!.path}${files.length > 1 ? ", …" : ""})`;
+      const progressId = await reporter.toolStart("createFiles", detail);
+
       try {
-        return await toolStep?.run("create-files", async () => {
+        const out = await toolStep?.run("create-files", async () => {
           const results = await convex.mutation(
             api.system.agentCreateFilesByPaths,
             {
@@ -74,7 +83,14 @@ export const createCreateFilesTool = ({
           );
           return JSON.stringify(results);
         });
+        await reporter.toolEnd(progressId, true);
+        return out ?? "";
       } catch (error) {
+        await reporter.toolEnd(
+          progressId,
+          false,
+          error instanceof Error ? error.message : "Unknown error",
+        );
         return `Error creating files: ${error instanceof Error ? error.message : "Unknown error"}`;
       }
     },

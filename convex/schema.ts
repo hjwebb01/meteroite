@@ -61,6 +61,28 @@ export default defineSchema({
         v.literal("cancelled"),
       ),
     ),
+    progressLabel: v.optional(v.string()),
+    progressSteps: v.optional(
+      v.array(
+        v.object({
+          id: v.optional(v.string()),
+          label: v.string(),
+          description: v.optional(v.string()),
+          status: v.optional(
+            v.union(
+              v.literal("pending"),
+              v.literal("active"),
+              v.literal("complete"),
+              v.literal("error"),
+            ),
+          ),
+          kind: v.optional(
+            v.union(v.literal("phase"), v.literal("tool")),
+          ),
+          toolName: v.optional(v.string()),
+        }),
+      ),
+    ),
   })
     .index("by_conversation", ["conversationId"])
     .index("by_project_status", ["projectId", "status"]),

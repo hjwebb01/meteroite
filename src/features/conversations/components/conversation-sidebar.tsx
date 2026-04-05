@@ -1,13 +1,9 @@
 import ky from "ky";
 import { toast } from "sonner";
-import { useState } from "react";
-import {
-  CopyIcon,
-  HistoryIcon,
-  LoaderIcon,
-  PlusIcon,
-  XIcon,
-} from "lucide-react";
+import { memo, useState } from "react";
+
+import { CopyIcon, HistoryIcon, PlusIcon } from "lucide-react";
+import { useMonotonicProgressSteps } from "../hooks/use-monotonic-progress-steps";
 
 import {
   Conversation,
@@ -33,6 +29,13 @@ import {
   type PromptInputMessage,
 } from "@/components/ai-elements/prompt-input";
 
+import {
+  ChainOfThought,
+  ChainOfThoughtContent,
+  ChainOfThoughtHeader,
+  ChainOfThoughtStep,
+} from "@/components/ai-elements/chain-of-thought";
+
 import { Button } from "@/components/ui/button";
 import {
   useConversation,
@@ -40,10 +43,251 @@ import {
   useCreateConversation,
   useMessages,
 } from "../hooks/use-conversations";
+import { getProgressViewModel } from "../lib/progress-view-model";
 
-import { Id } from "../../../../convex/_generated/dataModel";
+import type { Doc, Id } from "../../../../convex/_generated/dataModel";
 import { DEFAULT_CONVERSATION_TITLE } from "../../../../convex/constants";
+import type { MonotonicProgressStep } from "../hooks/use-monotonic-progress-steps";
 import { PastConversationsDialog } from "./past-conversations-dialog";
+
+/** Mirrors Convex `messages.progressSteps` items (client-safe, no worker imports). */
+type ProgressStepRow = MonotonicProgressStep;
+
+function toChainStepStatus(
+  step: ProgressStepRow,
+  index: number,
+  total: number,
+  messageStatus: Doc<"messages">["status"],
+): "complete" | "active" | "pending" | "error" {
+  if (step.status === "error") {
+    return "error";
+  }
+  if (step.status === "active") {
+    return "active";
+  }
+  if (step.status === "pending") {
+    return "pending";
+  }
+  if (step.status === "complete") {
+    return "complete";
+  }
+  return messageStatus === "processing" && index === total - 1
+    ? "active"
+    : "complete";
+}
+
+function progressStepsEqual(
+  a: Doc<"messages">["progressSteps"],
+  b: Doc<"messages">["progressSteps"],
+): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (!a || !b) {
+    return a === b;
+  }
+  if (a.length !== b.length) {
+    return false;
+  }
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]!;
+    const y = b[i]!;
+    if (
+      x.id !== y.id ||
+      x.label !== y.label ||
+      x.description !== y.description ||
+      x.status !== y.status ||
+      x.kind !== y.kind ||
+      x.toolName !== y.toolName
+    ) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function ProcessingProgressCard({
+  activeLabel,
+  activeDescription,
+  activeIndex,
+  totalSteps,
+}: {
+  activeLabel: string;
+  activeDescription?: string;
+  activeIndex: number;
+  totalSteps: number;
+}) {
+  return (
+    <div
+      aria-atomic="true"
+      aria-live="polite"
+      className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-3 text-sm"
+    >
+      <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-primary/90">
+        Current step
+      </div>
+      <div className="mt-1 text-sm font-medium text-foreground">
+        {totalSteps > 0 ? `Step ${activeIndex} of ${totalSteps}` : "Preparing execution"}
+      </div>
+      <div className="mt-1 text-sm text-foreground">
+        {activeLabel}
+      </div>
+      {activeDescription && (
+        <div className="mt-1 break-words text-xs leading-relaxed text-muted-foreground">
+          {activeDescription}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProgressTimeline({
+  steps,
+  messageStatus,
+}: {
+  steps: ProgressStepRow[];
+  messageStatus: Doc<"messages">["status"];
+}) {
+  return (
+    <>
+      {steps.map((step, stepIndex, arr) => (
+        <ChainOfThoughtStep
+          key={step.id ?? `${step.label}-${stepIndex}`}
+          description={step.description}
+          isLast={stepIndex === arr.length - 1}
+          kind={step.kind}
+          label={step.label}
+          ordinal={stepIndex + 1}
+          status={toChainStepStatus(step, stepIndex, arr.length, messageStatus)}
+          toolName={step.toolName}
+        />
+      ))}
+    </>
+  );
+}
+
+function messagePropsEqualForSidebar(
+  a: Doc<"messages">,
+  b: Doc<"messages">,
+): boolean {
+  return (
+    a._id === b._id &&
+    a.role === b.role &&
+    a.status === b.status &&
+    a.content === b.content &&
+    a.progressLabel === b.progressLabel &&
+    progressStepsEqual(a.progressSteps, b.progressSteps)
+  );
+}
+
+type SidebarMessageRowProps = {
+  message: Doc<"messages">;
+  messageIndex: number;
+  totalMessages: number;
+};
+
+const ConversationSidebarMessage = memo(function ConversationSidebarMessage({
+  message,
+  messageIndex,
+  totalMessages,
+}: SidebarMessageRowProps) {
+  const mergedProgressSteps = useMonotonicProgressSteps(
+    message._id,
+    message.status,
+    message.progressSteps,
+  );
+  const progressViewModel = getProgressViewModel(
+    mergedProgressSteps,
+    message.status,
+  );
+  const activeLabel =
+    progressViewModel.activeStep?.label ??
+    message.progressLabel ??
+    "Working on your response...";
+  const activeDescription = progressViewModel.activeStep?.description;
+  const showCompletedSummary =
+    message.role === "assistant" &&
+    message.status === "completed" &&
+    mergedProgressSteps.length > 0;
+
+  return (
+    <Message from={message.role}>
+      <MessageContent>
+        {message.status === "processing" ? (
+          <div className="space-y-3">
+            <ProcessingProgressCard
+              activeDescription={activeDescription}
+              activeIndex={progressViewModel.activeIndex}
+              activeLabel={activeLabel}
+              totalSteps={progressViewModel.totalSteps}
+            />
+            {mergedProgressSteps.length > 0 && (
+              <ChainOfThought defaultOpen={true}>
+                <ChainOfThoughtHeader>Execution trace</ChainOfThoughtHeader>
+                <ChainOfThoughtContent animateContent={false}>
+                  <ProgressTimeline
+                    messageStatus={message.status}
+                    steps={mergedProgressSteps}
+                  />
+                </ChainOfThoughtContent>
+              </ChainOfThought>
+            )}
+          </div>
+        ) : message.status === "cancelled" ? (
+          <div className="text-muted-foreground italic">
+            <span>Message cancelled</span>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <MessageResponse>{message.content}</MessageResponse>
+            {showCompletedSummary && (
+              <ChainOfThought defaultOpen={false}>
+                <ChainOfThoughtHeader>
+                  <>
+                    <span className="font-medium text-foreground">
+                      {progressViewModel.summaryTitle}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      {progressViewModel.summarySubtitle}
+                    </span>
+                  </>
+                </ChainOfThoughtHeader>
+                <ChainOfThoughtContent animateContent={false}>
+                  <ProgressTimeline
+                    messageStatus={message.status}
+                    steps={mergedProgressSteps}
+                  />
+                </ChainOfThoughtContent>
+              </ChainOfThought>
+            )}
+          </div>
+        )}
+      </MessageContent>
+      {message.role === "assistant" &&
+        message.status === "completed" &&
+        messageIndex === totalMessages - 1 && (
+          <MessageActions>
+            <MessageAction
+              onClick={() => {
+                navigator.clipboard.writeText(message.content);
+              }}
+              label="Copy"
+            >
+              <CopyIcon className="size-3" />
+            </MessageAction>
+          </MessageActions>
+        )}
+    </Message>
+  );
+}, (prev, next) => {
+  return (
+    messagePropsEqualForSidebar(prev.message, next.message) &&
+    prev.messageIndex === next.messageIndex &&
+    prev.totalMessages === next.totalMessages
+  );
+});
+
+ConversationSidebarMessage.displayName = "ConversationSidebarMessage";
 
 interface ConversationSidebarProps {
   projectId: Id<"projects">;
@@ -155,42 +399,21 @@ export const ConversationSideBar = ({
         <Conversation className="flex-1">
           <ConversationContent>
             {conversationMessages?.map((message, messageIndex) => (
-              <Message key={message._id} from={message.role}>
-                <MessageContent>
-                  {message.status === "processing" ? (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <LoaderIcon className="size-3.5 animate-spin" />
-                      <span>Thinking...</span>
-                    </div>
-                  ) : message.status === "cancelled" ? (
-                    <div className="text-muted-foreground italic">
-                      <span>Message cancelled</span>
-                    </div>
-                  ) : (
-                    <MessageResponse>{message.content}</MessageResponse>
-                  )}
-                </MessageContent>
-                {message.role === "assistant" &&
-                  message.status === "completed" &&
-                  messageIndex === (conversationMessages?.length ?? 0) - 1 && (
-                    <MessageActions>
-                      <MessageAction
-                        onClick={() => {
-                          navigator.clipboard.writeText(message.content);
-                        }}
-                        label="Copy"
-                      >
-                        <CopyIcon className="size-3" />
-                      </MessageAction>
-                    </MessageActions>
-                  )}
-              </Message>
+              <ConversationSidebarMessage
+                key={message._id}
+                message={message}
+                messageIndex={messageIndex}
+                totalMessages={conversationMessages.length}
+              />
             ))}
           </ConversationContent>
           <ConversationScrollButton />
         </Conversation>
         <div className="p-3">
-          <PromptInput onSubmit={handleSubmit} className="mt-2">
+          <PromptInput
+            onSubmit={handleSubmit}
+            className="mt-2"
+          >
             <PromptInputBody>
               <PromptInputTextarea
                 placeholder="Ask me anything..."

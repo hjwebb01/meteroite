@@ -4,10 +4,13 @@ import { createTool } from "@inngest/agent-kit";
 import { convex } from "@/lib/convex-client";
 
 import { api } from "../../../../../convex/_generated/api";
-import { Id } from "../../../../../convex/_generated/dataModel";
+import type { Id } from "../../../../../convex/_generated/dataModel";
+import type { MessageProgressReporter } from "../message-progress";
 
 interface DeleteFilesToolOptions {
+  projectId: Id<"projects">;
   internalKey: string;
+  reporter: MessageProgressReporter;
 }
 
 const paramsSchema = z.object({
@@ -17,12 +20,14 @@ const paramsSchema = z.object({
 });
 
 export const createDeleteFilesTool = ({
+  projectId,
   internalKey,
+  reporter,
 }: DeleteFilesToolOptions) => {
   return createTool({
     name: "deleteFiles",
     description:
-      "Delete files or folders from the project. If deleting a folder, all contents will be deleted recursively.",
+      "Delete files or folders from the project. If deleting a folder, all contents will be deleted recursively. Use ids from listFiles exactly.",
     parameters: z.object({
       fileIds: z
         .array(z.string())
@@ -36,23 +41,34 @@ export const createDeleteFilesTool = ({
 
       const { fileIds } = parsed.data;
 
-      // Validate all files exist before running the step
+      const resolved = await convex.query(api.system.agentResolveFileIdsInProject, {
+        internalKey,
+        projectId,
+        rawIds: fileIds,
+      });
+
+      const invalid = resolved.filter((r) => r.status === "invalid");
+      if (invalid.length > 0) {
+        return `Error: Invalid file id(s) for this project: ${invalid.map((r) => `"${r.raw}"`).join(", ")}. Use listFiles to get valid file IDs.`;
+      }
+
       const filesToDelete: {
-        id: string;
+        id: Id<"files">;
         name: string;
         type: string;
       }[] = [];
 
-      for (const fileId of fileIds) {
+      for (const r of resolved) {
+        if (r.status !== "ok") {
+          continue;
+        }
         const file = await convex.query(api.system.getFileById, {
           internalKey,
-          fileId: fileId as Id<"files">,
+          fileId: r.fileId,
         });
-
         if (!file) {
-          return `Error: File with ID "${fileId}" not found. Use listFiles to get valid file IDs.`;
+          return `Error: File with ID "${r.raw}" not found. Use listFiles to get valid file IDs.`;
         }
-
         filesToDelete.push({
           id: file._id,
           name: file.name,
@@ -60,14 +76,20 @@ export const createDeleteFilesTool = ({
         });
       }
 
+      const progressId = await reporter.toolStart(
+        "deleteFiles",
+        `${filesToDelete.length} item(s)`,
+      );
+
       try {
-        return await toolStep?.run("delete-files", async () => {
+        const out = await toolStep?.run("delete-files", async () => {
           const results: string[] = [];
 
           for (const file of filesToDelete) {
             await convex.mutation(api.system.deleteFile, {
               internalKey,
-              fileId: file.id as Id<"files">,
+              projectId,
+              fileId: file.id,
             });
 
             results.push(`Deleted ${file.type} "${file.name}" successfully`);
@@ -75,7 +97,14 @@ export const createDeleteFilesTool = ({
 
           return results.join("\n");
         });
+        await reporter.toolEnd(progressId, true);
+        return out ?? "";
       } catch (error) {
+        await reporter.toolEnd(
+          progressId,
+          false,
+          error instanceof Error ? error.message : "Unknown error",
+        );
         return `Error deleting files: ${error instanceof Error ? error.message : "Unknown error"}`;
       }
     },

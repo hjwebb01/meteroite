@@ -31,6 +31,8 @@ const SUGGESTION_PROMPT = `You are a code suggestion assistant.
 </context>
 
 <instructions>
+If full_code begins with "[…]" or ends with "[…]", it is a cursor-centered excerpt of a larger file (not the whole file). Still use previous_lines, current_line, and next_lines as the primary local context.
+
 Follow these steps IN ORDER:
 
 1. First, look at next_lines. If next_lines contains ANY code, check if it continues from where the cursor is. If it does, return empty string immediately - the code is already written.

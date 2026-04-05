@@ -16,6 +16,8 @@ import { LoadingRow } from "./loading-row";
 import { RenameInput } from "./rename-input";
 import { TreeItemWrapper } from "./tree-item-wrapper";
 import { useEditor } from "@/features/editor/hooks/use-editor";
+import { isTemporaryOptimisticFileId } from "@/lib/is-temporary-file-id";
+import { toast } from "sonner";
 export const Tree = ({
   item,
   level,
@@ -87,8 +89,21 @@ export const Tree = ({
         item={item}
         level={level}
         isActive={isActive}
-        onClick={() => openFile(item._id, { pinned: false })}
-        onDoubleClick={() => openFile(item._id, { pinned: true })}
+        onClick={() => {
+          if (isTemporaryOptimisticFileId(item._id)) {
+            toast.message("Creating file…", {
+              description: "Open again after the file is saved.",
+            });
+            return;
+          }
+          openFile(item._id, { pinned: false });
+        }}
+        onDoubleClick={() => {
+          if (isTemporaryOptimisticFileId(item._id)) {
+            return;
+          }
+          openFile(item._id, { pinned: true });
+        }}
         onRename={() => setIsRenaming(true)}
         onDelete={() => {
           closeTab(item._id);
