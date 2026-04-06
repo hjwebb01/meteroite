@@ -100,10 +100,10 @@ export function createMessageProgressReporter(options: {
   /** Serialize patches so concurrent flush() calls cannot apply out of order. */
   let flushChain: Promise<void> = Promise.resolve();
 
-  async function flush(): Promise<void> {
+  async function flush(opts?: { force?: boolean }): Promise<void> {
     const next = flushChain.then(async () => {
       const fp = fingerprint();
-      if (fp === lastFingerprint) {
+      if (!opts?.force && fp === lastFingerprint) {
         return;
       }
       lastFingerprint = fp;
@@ -237,12 +237,12 @@ export function createMessageProgressReporter(options: {
 
     async finalizeResponse() {
       for (const s of steps) {
-        if (s.status === "active") {
+        if (s.status === "active" || s.status === "pending") {
           s.status = "complete";
         }
       }
       pushPhase("Writing response", "complete");
-      await flush();
+      await flush({ force: true });
     },
   };
 }

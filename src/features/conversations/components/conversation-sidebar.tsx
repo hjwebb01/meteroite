@@ -62,6 +62,13 @@ function toChainStepStatus(
   if (step.status === "error") {
     return "error";
   }
+  // Completed turns: Convex may still carry a terminal "active" phase if the last progress
+  // flush was skipped or raced; never show those as still running.
+  if (messageStatus === "completed") {
+    if (step.status === "pending" || step.status === "active") {
+      return "complete";
+    }
+  }
   if (step.status === "active") {
     return "active";
   }
@@ -239,7 +246,6 @@ const ConversationSidebarMessage = memo(function ConversationSidebarMessage({
           </div>
         ) : (
           <div className="space-y-3">
-            <MessageResponse>{message.content}</MessageResponse>
             {showCompletedSummary && (
               <ChainOfThought defaultOpen={false}>
                 <ChainOfThoughtHeader>
@@ -260,6 +266,7 @@ const ConversationSidebarMessage = memo(function ConversationSidebarMessage({
                 </ChainOfThoughtContent>
               </ChainOfThought>
             )}
+            <MessageResponse>{message.content}</MessageResponse>
           </div>
         )}
       </MessageContent>
