@@ -155,6 +155,8 @@ export const useWebContainer = ({
   useEffect(() => {
     if (!enabled) {
       hasStartedRef.current = false;
+      // Disabling the external container resets its displayed lifecycle state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setStatus("idle");
       setPreviewUrl(null);
       setError(null);

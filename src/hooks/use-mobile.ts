@@ -13,6 +13,8 @@ export function useIsMobile() {
       setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
     };
     mql.addEventListener("change", onChange);
+    // Initialize from the browser viewport after hydration, before later media changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
     return () => mql.removeEventListener("change", onChange);
   }, []);

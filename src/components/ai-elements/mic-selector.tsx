@@ -117,6 +117,8 @@ export const useAudioDevices = () => {
   }, [loading]);
 
   useEffect(() => {
+    // Initial device enumeration synchronizes state with the media device API.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadDevicesWithoutPermission();
   }, [loadDevicesWithoutPermission]);
 
