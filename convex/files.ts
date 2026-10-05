@@ -96,12 +96,11 @@ export const getFilePath = query({
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", file.projectId))
       .collect();
-    const { pathById, fileByPath } = projectPaths(files);
-    const parts = pathById.get(file._id)!.split("/");
-    return parts.map((_, index) => {
-      const ancestor = fileByPath.get(parts.slice(0, index + 1).join("/"))!;
-      return { _id: ancestor._id, name: ancestor.name };
-    });
+    const { ancestorsById } = projectPaths(files);
+    return ancestorsById.get(file._id)!.map((ancestor) => ({
+      _id: ancestor._id,
+      name: ancestor.name,
+    }));
   },
 });
 

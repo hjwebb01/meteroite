@@ -583,7 +583,7 @@ describe("deletion and import cleanup", () => {
 });
 
 describe("project path consumers", () => {
-  test("keeps agent paths, preview paths, and breadcrumbs consistent for orphans", async () => {
+  test("rejects orphans for agents while preview paths and breadcrumbs tolerate them", async () => {
     const w = await setup();
     const { rootId, folderId, fileId } = await w.t.run(async (ctx) => {
       const rootId = await ctx.db.insert("files", {
@@ -608,12 +608,34 @@ describe("project path consumers", () => {
       { _id: folderId, name: "src" },
       { _id: fileId, name: "app.ts" },
     ]);
-    const paths = await w.t.query(internal.agentFiles.getProjectFilesWithPaths, {
+    await expect(w.t.query(internal.agentFiles.getProjectFilesWithPaths, {
       projectId: w.projectId,
-    });
-    expect(paths.find((file) => file.id === fileId)?.path).toBe("src/app.ts");
+    })).rejects.toThrow("Invalid file tree: parent record not found");
+    await expect(w.t.query(internal.agentFiles.agentListProjectFiles, {
+      projectId: w.projectId,
+    })).rejects.toThrow("Invalid file tree: parent record not found");
+    await expect(w.t.query(internal.agentFiles.agentReadFiles, {
+      projectId: w.projectId, paths: ["src/app.ts"],
+    })).rejects.toThrow("Invalid file tree: parent record not found");
     expect(buildFileTree(await files(w))).toEqual({
       src: { directory: { "app.ts": { file: { contents: "source" } } } },
     });
+
+    await w.t.run(async (ctx) => {
+      const duplicateRootId = await ctx.db.insert("files", {
+        projectId: w.projectId, updatedAt: 1, name: "src", type: "folder",
+      });
+      await ctx.db.insert("files", {
+        projectId: w.projectId, updatedAt: 1, name: "app.ts", type: "file",
+        parentId: duplicateRootId, content: "other source",
+      });
+    });
+    expect(await w.owner.query(api.files.getFilePath, { id: fileId })).toEqual([
+      { _id: folderId, name: "src" },
+      { _id: fileId, name: "app.ts" },
+    ]);
+    await expect(w.t.query(internal.agentFiles.agentReadFiles, {
+      projectId: w.projectId, paths: ["src/app.ts"],
+    })).rejects.toThrow("Invalid file tree: parent record not found");
   });
 });

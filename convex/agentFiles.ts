@@ -190,7 +190,7 @@ export const getProjectFilesWithPaths = internalQuery({
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
-    const { pathById } = projectPaths(files);
+    const { pathById } = projectPaths(files, { onOrphan: "throw" });
 
     return files.map((f) => ({
       id: f._id,
@@ -224,7 +224,7 @@ export const agentListProjectFiles = internalQuery({
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
-    const { pathById } = projectPaths(files);
+    const { pathById } = projectPaths(files, { onOrphan: "throw" });
 
     const rows = files.map((f) => ({
       id: f._id,
@@ -298,7 +298,7 @@ export const agentReadFiles = internalQuery({
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
-    const { pathById, fileByPath } = projectPaths(files);
+    const { pathById, fileByPath } = projectPaths(files, { onOrphan: "throw" });
 
     const results: Array<
       | {

@@ -29,6 +29,26 @@ describe("projectPaths", () => {
     expect(fileByPath.get("src")).toBe(files[1]);
     expect(fileByPath.get("src/app.ts")).toBe(files[0]);
     expect(pathById.has("missing")).toBe(false);
+    expect(projectPaths(files, { onOrphan: "root" }).ancestorsById.get("child"))
+      .toEqual([files[1], files[0]]);
+    expect(() => projectPaths(files, { onOrphan: "throw" }))
+      .toThrow("Invalid file tree: parent record not found");
+  });
+
+  test("keeps ancestor ids when paths collide", () => {
+    const files = [
+      { _id: "child", name: "app.ts", parentId: "orphan" },
+      { _id: "orphan", name: "src", parentId: "missing" },
+      { _id: "root", name: "src" },
+      { _id: "other-child", name: "app.ts", parentId: "root" },
+    ];
+    const { pathById, fileByPath, ancestorsById } = projectPaths(files);
+    expect(pathById.get("child")).toBe(pathById.get("other-child"));
+    expect(fileByPath.get("src/app.ts")).toBe(files[3]);
+    expect(ancestorsById.get("child")?.map((file) => file._id))
+      .toEqual(["orphan", "child"]);
+    expect(ancestorsById.get("other-child")?.map((file) => file._id))
+      .toEqual(["root", "other-child"]);
   });
 
   test("uses root names without a leading slash", () => {
