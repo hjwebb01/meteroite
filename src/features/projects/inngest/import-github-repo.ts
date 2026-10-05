@@ -1,10 +1,10 @@
 import ky from "ky";
-import { Octokit } from "octokit";
 import { isBinaryFile } from "isbinaryfile";
 import { NonRetriableError } from "inngest";
 
 import { convex } from "@/lib/convex-client";
 import { inngest } from "@/inngest/client";
+import { createUserOctokit } from "@/lib/github";
 
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
@@ -13,7 +13,7 @@ interface ImportGithubRepoEvent {
   owner: string;
   repo: string;
   projectId: Id<"projects">;
-  githubToken: string;
+  userId: string;
 }
 
 export const importGithubRepo = inngest.createFunction(
@@ -36,7 +36,7 @@ export const importGithubRepo = inngest.createFunction(
   },
   { event: "github/import.repo" },
   async ({ event, step }) => {
-    const { owner, repo, projectId, githubToken } =
+    const { owner, repo, projectId, userId } =
       event.data as ImportGithubRepoEvent;
 
     const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
@@ -45,8 +45,6 @@ export const importGithubRepo = inngest.createFunction(
         "METEROITE_CONVEX_INTERNAL_KEY is not configured",
       );
     }
-
-    const octokit = new Octokit({ auth: githubToken });
 
     // Cleanup any existing files in the project
     await step.run("cleanup-project", async () => {
@@ -57,6 +55,7 @@ export const importGithubRepo = inngest.createFunction(
     });
 
     const tree = await step.run("fetch-repo-tree", async () => {
+      const octokit = await createUserOctokit(userId);
       try {
         const { data } = await octokit.rest.git.getTree({
           owner,
@@ -125,6 +124,7 @@ export const importGithubRepo = inngest.createFunction(
     );
 
     await step.run("create-files", async () => {
+      const octokit = await createUserOctokit(userId);
       for (const file of allFiles) {
         if (!file.path || !file.sha) {
           continue;
