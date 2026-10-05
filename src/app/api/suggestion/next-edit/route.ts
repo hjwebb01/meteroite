@@ -8,23 +8,23 @@ import {
   escapeAttribute,
   formatRelatedFiles,
 } from "@/features/editor/extensions/suggestion/prompt-format";
+import { relatedFilesSchema } from "@/features/editor/extensions/suggestion/suggestion-schema";
 
 const MAX_REGION_CHARS = 4_000;
+const MAX_CONTEXT_CHARS = 4_000;
 
 const requestSchema = z.object({
-  path: z.string().min(1),
-  contextBefore: z.string(),
+  path: z.string().min(1).max(1_000),
+  contextBefore: z.string().max(MAX_CONTEXT_CHARS),
   region: z
     .string()
     .max(MAX_REGION_CHARS)
     .refine((text) => text.split(CURSOR_MARKER).length === 2, {
       message: "Region must contain exactly one cursor marker",
     }),
-  contextAfter: z.string(),
-  recentEdits: z.string(),
-  relatedFiles: z
-    .array(z.object({ path: z.string(), signatures: z.string() }))
-    .optional(),
+  contextAfter: z.string().max(MAX_CONTEXT_CHARS),
+  recentEdits: z.string().max(MAX_CONTEXT_CHARS),
+  relatedFiles: relatedFilesSchema.optional(),
 });
 
 const SYSTEM_PROMPT = `You predict the user's next code edit.
