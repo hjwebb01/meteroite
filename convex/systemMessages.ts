@@ -26,6 +26,24 @@ const progressStepValidator = v.object({
   toolName: v.optional(v.string()),
 });
 
+const turnSummaryValidator = v.object({
+  filesRead: v.array(v.string()),
+  filesChanged: v.array(
+    v.object({
+      action: v.union(
+        v.literal("created"),
+        v.literal("updated"),
+        v.literal("deleted"),
+        v.literal("renamed"),
+        v.literal("folder"),
+      ),
+      path: v.string(),
+      fileId: v.optional(v.string()),
+    }),
+  ),
+  findings: v.array(v.string()),
+});
+
 export const createMessage = internalMutation({
   args: {
     conversationId: v.id("conversations"),
@@ -92,6 +110,7 @@ export const updateMessageContent = internalMutation({
   args: {
     messageId: v.id("messages"),
     content: v.string(),
+    turnSummary: v.optional(turnSummaryValidator),
   },
   handler: async (ctx, args) => {
     const message = await ctx.db.get(args.messageId);
@@ -101,6 +120,7 @@ export const updateMessageContent = internalMutation({
     await ctx.db.patch(args.messageId, {
       content: args.content,
       status: "completed" as const,
+      ...(args.turnSummary ? { turnSummary: args.turnSummary } : {}),
     });
   },
 });
@@ -111,16 +131,23 @@ export const getRecentMessages = internalQuery({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const messages = await ctx.db
+    const limit = args.limit ?? 10;
+    const newestFirst = await ctx.db
       .query("messages")
       .withIndex("by_conversation", (q) =>
         q.eq("conversationId", args.conversationId),
       )
-      .order("asc")
-      .collect();
-    const limit = args.limit ?? 10;
+      .order("desc")
+      .take(limit);
 
-    return messages.slice(-limit);
+    // Oldest first, without the bulky progress fields history never uses.
+    return newestFirst.reverse().map((message) => ({
+      _id: message._id,
+      role: message.role,
+      content: message.content,
+      status: message.status,
+      turnSummary: message.turnSummary,
+    }));
   },
 });
 

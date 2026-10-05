@@ -1,13 +1,15 @@
 import { inngest } from "@/inngest/client";
 import { Id } from "../../../../convex/_generated/dataModel";
 import { NonRetriableError } from "inngest";
-import { createAgent, createNetwork, openai } from "@inngest/agent-kit";
+import {
+  createAgent,
+  createNetwork,
+  type TextMessage,
+} from "@inngest/agent-kit";
 import { getConvexAdminClient } from "@/lib/convex-client";
 import { internal } from "../../../../convex/_generated/api";
 import {
   CODING_AGENT_SYSTEM_PROMPT,
-  OPENROUTER_GPT_5_4_MINI,
-  OPENROUTER_OPENAI_BASE_URL,
   TITLE_GENERATOR_SYSTEM_PROMPT,
 } from "./constants";
 import { DEFAULT_CONVERSATION_TITLE } from "../../../../convex/constants";
@@ -21,34 +23,21 @@ import { createDeleteFilesTool } from "./tools/delete-files";
 import { createRenameFileTool } from "./tools/rename-file";
 import { createScrapeUrlsTool } from "./tools/scrape-urls";
 import { createMessageProgressReporter } from "./message-progress";
+import { createCodingModel, createTitleModel } from "./models";
+import {
+  isEmptySummary,
+  selectHistoryTurns,
+  summarizeTurn,
+  withHistoryTurns,
+} from "./conversation-history";
 
-const titleModel = openai({
-  model: OPENROUTER_GPT_5_4_MINI,
-  baseUrl: OPENROUTER_OPENAI_BASE_URL,
-  apiKey: process.env.OPENROUTER_API_KEY,
-  defaultParameters: {
-    temperature: 0,
-    reasoning: { effort: "low" },
-    // OpenRouter extended params (not in default typings)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } as any,
-});
-
-const baseModel = openai({
-  model: OPENROUTER_GPT_5_4_MINI,
-  baseUrl: OPENROUTER_OPENAI_BASE_URL,
-  apiKey: process.env.OPENROUTER_API_KEY,
-  defaultParameters: {
-    temperature: 0.3,
-    reasoning: { effort: "low" },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- OpenRouter extended params
-  } as any,
-});
+/** Messages fetched per turn; the token budget decides how many actually reach the prompt. */
+const HISTORY_FETCH_LIMIT = 40;
 
 const titleAgent = createAgent({
   name: "conversation-title",
   system: TITLE_GENERATOR_SYSTEM_PROMPT,
-  model: titleModel,
+  model: createTitleModel(),
 });
 
 interface MessageEvent {
@@ -59,6 +48,8 @@ interface MessageEvent {
   conversationId: Id<"conversations">;
   projectId: Id<"projects">;
   message: string;
+  /** Snapshot of the conversation model at submission time. */
+  model?: string;
 }
 
 export const processMessage = inngest.createFunction(
@@ -89,8 +80,14 @@ export const processMessage = inngest.createFunction(
     },
   },
   async ({ event, step }) => {
-    const { messageId, userMessageId, conversationId, projectId, message } =
-      event.data as MessageEvent;
+    const {
+      messageId,
+      userMessageId,
+      conversationId,
+      projectId,
+      message,
+      model,
+    } = event.data as MessageEvent;
     const deployKey = process.env.CONVEX_DEPLOY_KEY;
     if (!deployKey) {
       throw new NonRetriableError("CONVEX_DEPLOY_KEY is not set");
@@ -107,6 +104,8 @@ export const processMessage = inngest.createFunction(
       throw new NonRetriableError("Conversation not found");
     }
 
+    const selectedModel = model ?? conversation.model;
+
     // Load messages + first progress update in one step (single Convex round-trip;
     // a separate step here was prone to stalling between query and progress mutation).
     const recentMessages = await step.run(
@@ -116,8 +115,7 @@ export const processMessage = inngest.createFunction(
           internal.systemMessages.getRecentMessages,
           {
             conversationId,
-            /** Slightly above MAX_HISTORY_MESSAGES to allow filtering placeholders / current user. */
-            limit: 8,
+            limit: HISTORY_FETCH_LIMIT,
           },
         );
         await getConvexAdminClient().mutation(
@@ -139,31 +137,25 @@ export const processMessage = inngest.createFunction(
       },
     );
 
-    /** Keep recent history small to limit prompt tokens (last N non-empty turns only). */
-    const MAX_HISTORY_MESSAGES = 4;
-
-    let systemPrompt = CODING_AGENT_SYSTEM_PROMPT;
-
     const userMessageIdToExclude =
       userMessageId ??
       recentMessages
         .filter((m) => m.role === "user" && m.content === message)
         .at(-1)?._id;
 
-    const contextMessages = recentMessages
-      .filter(
-        (msg) =>
-          msg._id !== messageId &&
-          msg._id !== userMessageIdToExclude &&
-          msg.content.trim() !== "",
-      )
-      .slice(-MAX_HISTORY_MESSAGES);
-    if (contextMessages.length > 0) {
-      const historyText = contextMessages
-        .map((msg) => `${msg.role.toUpperCase()}: ${msg.content}`)
-        .join("\n\n");
-      systemPrompt += `\n\n## Previous (do not repeat verbatim): \n${historyText}\n\n## Current message: answer the user's latest request only.`;
-    }
+    // Prior turns replay as real chat messages (assistant turns carry their tool
+    // activity summary), chosen newest-first under a token budget.
+    const historyTurns: TextMessage[] = selectHistoryTurns(recentMessages, {
+      excludeIds: new Set(
+        [messageId, userMessageIdToExclude].filter(
+          (id): id is Id<"messages"> => id !== undefined,
+        ),
+      ),
+    }).map((turn) => ({
+      type: "text",
+      role: turn.role,
+      content: turn.content,
+    }));
 
     const reporter = createMessageProgressReporter({
       messageId,
@@ -218,8 +210,15 @@ export const processMessage = inngest.createFunction(
     const codingAgent = createAgent({
       name: "meteroite",
       description: "Default Meteroite coding assistant (OpenRouter)",
-      system: systemPrompt,
-      model: baseModel,
+      system: CODING_AGENT_SYSTEM_PROMPT,
+      model: createCodingModel(selectedModel),
+      lifecycle: {
+        onStart: ({ prompt, history }) => ({
+          prompt: withHistoryTurns(prompt, historyTurns),
+          history: history ?? [],
+          stop: false,
+        }),
+      },
       tools: [
         createListFilesTool({ projectId, reporter }),
         createReadFilesTool({ projectId, reporter }),
@@ -295,12 +294,15 @@ export const processMessage = inngest.createFunction(
       await reporter.finalizeResponse();
     });
 
+    const turnSummary = summarizeTurn(result.state.results);
+
     await step.run("update-assistant-message", async () => {
       await getConvexAdminClient().mutation(
         internal.systemMessages.updateMessageContent,
         {
           messageId,
           content: assistantResponse,
+          ...(isEmptySummary(turnSummary) ? {} : { turnSummary }),
         },
       );
     });

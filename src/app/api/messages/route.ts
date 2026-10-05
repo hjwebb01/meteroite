@@ -5,10 +5,15 @@ import { Id } from "../../../../convex/_generated/dataModel";
 import { api } from "../../../../convex/_generated/api";
 import { getConvexAuth } from "@/lib/convex-auth";
 import { inngest } from "@/inngest/client";
+import { isCodingModelId } from "../../../../convex/lib/coding-models";
 
 const requestSchema = z.object({
   conversationId: z.string(),
   message: z.string(),
+  model: z
+    .string()
+    .refine(isCodingModelId, { message: "Unsupported model" })
+    .optional(),
 });
 
 export async function POST(request: Request) {
@@ -19,15 +24,28 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { conversationId, message } = requestSchema.parse(body);
+  const parsed = requestSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  }
+  const { conversationId, message, model: requestedModel } = parsed.data;
 
   // Runs as the user, so Convex rejects conversations they don't own.
-  const { projectId, userMessageId, assistantMessageId, cancelledMessageIds } =
-    await fetchMutation(
-      api.conversations.startMessage,
-      { conversationId: conversationId as Id<"conversations">, message },
-      { token: convexAuth.token },
-    );
+  const {
+    projectId,
+    userMessageId,
+    assistantMessageId,
+    cancelledMessageIds,
+    model,
+  } = await fetchMutation(
+    api.conversations.startMessage,
+    {
+      conversationId: conversationId as Id<"conversations">,
+      message,
+      model: requestedModel,
+    },
+    { token: convexAuth.token },
+  );
 
   if (cancelledMessageIds.length > 0) {
     await inngest.send(
@@ -46,6 +64,7 @@ export async function POST(request: Request) {
       conversationId,
       projectId,
       message,
+      model,
     },
   });
 

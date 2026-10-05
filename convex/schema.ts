@@ -48,6 +48,7 @@ export default defineSchema({
   conversations: defineTable({
     projectId: v.id("projects"),
     title: v.string(),
+    model: v.optional(v.string()),
     updatedAt: v.number(),
   }).index("by_project", ["projectId"]),
 
@@ -84,6 +85,26 @@ export default defineSchema({
           toolName: v.optional(v.string()),
         }),
       ),
+    ),
+    /** Compact record of what an assistant turn read/changed, replayed as history. */
+    turnSummary: v.optional(
+      v.object({
+        filesRead: v.array(v.string()),
+        filesChanged: v.array(
+          v.object({
+            action: v.union(
+              v.literal("created"),
+              v.literal("updated"),
+              v.literal("deleted"),
+              v.literal("renamed"),
+              v.literal("folder"),
+            ),
+            path: v.string(),
+            fileId: v.optional(v.string()),
+          }),
+        ),
+        findings: v.array(v.string()),
+      }),
     ),
   })
     .index("by_conversation", ["conversationId"])

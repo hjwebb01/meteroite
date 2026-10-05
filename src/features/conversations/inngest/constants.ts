@@ -57,5 +57,8 @@ export const TITLE_GENERATOR_SYSTEM_PROMPT =
 /** OpenRouter OpenAI-compatible API root (see OpenRouter OpenAI SDK guide). */
 export const OPENROUTER_OPENAI_BASE_URL = "https://openrouter.ai/api/v1";
 
-/** OpenRouter slug for MiniMax M2.7 */
+/** OpenRouter slug for GPT-5.4 Mini. */
 export const OPENROUTER_GPT_5_4_MINI = "openai/gpt-5.4-mini";
+
+/** Conversation titles always use this cheap model, whatever the user picks for coding. */
+export const TITLE_GENERATOR_MODEL = OPENROUTER_GPT_5_4_MINI;

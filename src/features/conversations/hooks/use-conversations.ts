@@ -20,6 +20,24 @@ export const useCreateConversation = () => {
   // TODO: Add optimistic mutation
 };
 
+export const useSetConversationModel = () => {
+  return useMutation(api.conversations.setModel).withOptimisticUpdate(
+    (store, { id, model }) => {
+      const conversation = store.getQuery(api.conversations.getById, { id });
+      if (conversation) {
+        store.setQuery(
+          api.conversations.getById,
+          { id },
+          {
+            ...conversation,
+            model,
+          },
+        );
+      }
+    },
+  );
+};
+
 export const useGetConversations = (projectId: Id<"projects">) => {
   return useQuery(api.conversations.getByProjectId, { projectId });
 };

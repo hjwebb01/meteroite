@@ -10,6 +10,8 @@ import {
 
 import { DEFAULT_CONVERSATION_TITLE } from "../../../../../convex/constants";
 
+import { DEFAULT_CODING_MODEL_ID } from "../../../../../convex/lib/coding-models";
+
 import { inngest } from "@/inngest/client";
 import { getConvexAdminClient } from "@/lib/convex-client";
 
@@ -86,6 +88,7 @@ export async function POST(request: Request) {
       conversationId,
       projectId,
       message: prompt,
+      model: DEFAULT_CODING_MODEL_ID,
     },
   });
 

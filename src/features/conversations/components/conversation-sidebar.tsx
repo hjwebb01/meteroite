@@ -42,12 +42,19 @@ import {
   useConversations,
   useCreateConversation,
   useMessages,
+  useSetConversationModel,
 } from "../hooks/use-conversations";
 import { getProgressViewModel } from "../lib/progress-view-model";
 
 import type { Doc, Id } from "../../../../convex/_generated/dataModel";
 import { DEFAULT_CONVERSATION_TITLE } from "../../../../convex/constants";
+import {
+  DEFAULT_CODING_MODEL_ID,
+  resolveCodingModelId,
+  type CodingModelId,
+} from "../../../../convex/lib/coding-models";
 import type { MonotonicProgressStep } from "../hooks/use-monotonic-progress-steps";
+import { ConversationModelSelector } from "./conversation-model-selector";
 import { PastConversationsDialog } from "./past-conversations-dialog";
 
 /** Mirrors Convex `messages.progressSteps` items (client-safe, no worker imports). */
@@ -300,14 +307,23 @@ export const ConversationSideBar = ({
   const [selectedConversationId, setSelectedConversationId] =
     useState<Id<"conversations"> | null>(null);
   const [pastConversationsOpen, setPastConversationsOpen] = useState(false);
+  // Choice made before a conversation exists; new conversations start from it.
+  const [draftModel, setDraftModel] = useState<CodingModelId>(
+    DEFAULT_CODING_MODEL_ID,
+  );
 
   const createConversation = useCreateConversation();
+  const setConversationModel = useSetConversationModel();
   const conversations = useConversations(projectId);
   const activeConversationId =
     selectedConversationId ?? conversations?.[0]?._id ?? null;
 
   const activeConversation = useConversation(activeConversationId);
   const conversationMessages = useMessages(activeConversationId);
+
+  const selectedModel = activeConversationId
+    ? resolveCodingModelId(activeConversation?.model)
+    : draftModel;
 
   const isProcessing = conversationMessages?.some(
     (msg) => msg.status === "processing",
@@ -330,12 +346,25 @@ export const ConversationSideBar = ({
       const newConversationId = await createConversation({
         projectId,
         title: DEFAULT_CONVERSATION_TITLE,
+        model: selectedModel,
       });
       setSelectedConversationId(newConversationId);
       return newConversationId;
     } catch {
       toast.error("Failed to create conversation");
       return null;
+    }
+  };
+
+  const handleModelChange = async (model: CodingModelId) => {
+    setDraftModel(model);
+    if (!activeConversationId) {
+      return;
+    }
+    try {
+      await setConversationModel({ id: activeConversationId, model });
+    } catch {
+      toast.error("Failed to change model");
     }
   };
 
@@ -346,8 +375,13 @@ export const ConversationSideBar = ({
       return;
     }
     let conversationId = activeConversationId;
+    // An unloaded conversation's stored model is unknown, so let the server use it.
+    let model: CodingModelId | undefined = activeConversation
+      ? selectedModel
+      : undefined;
 
     if (!conversationId) {
+      model = selectedModel;
       conversationId = await handleCreateConversation();
       if (!conversationId) {
         return;
@@ -359,6 +393,7 @@ export const ConversationSideBar = ({
         json: {
           conversationId,
           message: message.text,
+          model,
         },
       });
     } catch {
@@ -423,7 +458,12 @@ export const ConversationSideBar = ({
               />
             </PromptInputBody>
             <PromptInputFooter>
-              <PromptInputTools />
+              <PromptInputTools>
+                <ConversationModelSelector
+                  value={selectedModel}
+                  onValueChange={handleModelChange}
+                />
+              </PromptInputTools>
               <PromptInputSubmit
                 disabled={isProcessing ? false : !input}
                 status={isProcessing ? "streaming" : undefined}

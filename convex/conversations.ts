@@ -2,6 +2,7 @@ import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
 import { mutation, MutationCtx, query } from "./_generated/server";
 import { getOwnedProject, verifyAuth } from "./auth";
+import { assertCodingModelId, resolveCodingModelId } from "./lib/coding-models";
 
 const cancelProcessingMessagesInProject = async (
   ctx: MutationCtx,
@@ -26,12 +27,14 @@ const cancelProcessingMessagesInProject = async (
 /**
  * Cancels any running assistant turn in the project and creates the next
  * user/assistant message pair in one transaction, so concurrent submissions
- * cannot both end up processing.
+ * cannot both end up processing. A `model` argument becomes the conversation's
+ * model; the resolved model for this turn is returned for the worker event.
  */
 export const startMessage = mutation({
   args: {
     conversationId: v.id("conversations"),
     message: v.string(),
+    model: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const conversation = await ctx.db.get("conversations", args.conversationId);
@@ -40,6 +43,7 @@ export const startMessage = mutation({
     }
     const { projectId } = conversation;
     await getOwnedProject(ctx, projectId);
+    const requestedModel = assertCodingModelId(args.model);
 
     const cancelledMessageIds = await cancelProcessingMessagesInProject(
       ctx,
@@ -61,6 +65,7 @@ export const startMessage = mutation({
     });
     await ctx.db.patch("conversations", args.conversationId, {
       updatedAt: Date.now(),
+      ...(requestedModel && { model: requestedModel }),
     });
 
     return {
@@ -68,7 +73,25 @@ export const startMessage = mutation({
       userMessageId,
       assistantMessageId,
       cancelledMessageIds,
+      model: resolveCodingModelId(requestedModel ?? conversation.model),
     };
+  },
+});
+
+export const setModel = mutation({
+  args: {
+    id: v.id("conversations"),
+    model: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const conversation = await ctx.db.get("conversations", args.id);
+    if (!conversation) {
+      throw new Error("Conversation not found");
+    }
+    await getOwnedProject(ctx, conversation.projectId);
+    await ctx.db.patch("conversations", args.id, {
+      model: assertCodingModelId(args.model),
+    });
   },
 });
 
@@ -86,6 +109,7 @@ export const create = mutation({
   args: {
     projectId: v.id("projects"),
     title: v.string(),
+    model: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const userId = await verifyAuth(ctx);
@@ -102,6 +126,7 @@ export const create = mutation({
       projectId: args.projectId,
       title: args.title,
       updatedAt: Date.now(),
+      model: assertCodingModelId(args.model),
     });
     return conversationId;
   },
