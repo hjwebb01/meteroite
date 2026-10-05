@@ -1,6 +1,6 @@
 import type { WebContainer } from "@webcontainer/api";
 import type { Doc } from "../../../../convex/_generated/dataModel";
-import { projectPaths } from "../../../../convex/lib/project-paths";
+import { projectPaths } from "../../../../convex/lib/project_paths";
 
 type Entry = { path: string; type: "file" | "folder"; content?: string };
 

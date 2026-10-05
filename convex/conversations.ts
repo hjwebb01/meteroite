@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { Id } from "./_generated/dataModel";
 import { mutation, MutationCtx, query } from "./_generated/server";
 import { getOwnedProject, verifyAuth } from "./auth";
-import { assertCodingModelId, resolveCodingModelId } from "./lib/coding-models";
+import { assertCodingModelId, resolveCodingModelId } from "./lib/coding_models";
 
 const cancelProcessingMessagesInProject = async (
   ctx: MutationCtx,

@@ -2,7 +2,7 @@ import { openai } from "@inngest/agent-kit";
 import {
   resolveCodingModelId,
   type CodingModelId,
-} from "../../../../convex/lib/coding-models";
+} from "../../../../convex/lib/coding_models";
 import { OPENROUTER_OPENAI_BASE_URL, TITLE_GENERATOR_MODEL } from "./constants";
 
 const createOpenRouterModel = (

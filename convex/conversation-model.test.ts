@@ -3,7 +3,7 @@ import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
 import { api } from "./_generated/api";
 import schema from "./schema";
-import { DEFAULT_CODING_MODEL_ID } from "./lib/coding-models";
+import { DEFAULT_CODING_MODEL_ID } from "./lib/coding_models";
 
 const modules = import.meta.glob("./**/*.ts");
 

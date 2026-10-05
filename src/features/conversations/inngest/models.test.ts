@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CODING_MODELS } from "../../../../convex/lib/coding-models";
+import { CODING_MODELS } from "../../../../convex/lib/coding_models";
 import { createCodingModel, createTitleModel } from "./models";
 
 describe("conversation models", () => {

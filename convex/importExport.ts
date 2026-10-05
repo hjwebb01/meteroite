@@ -1,6 +1,6 @@
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
-import * as projectFiles from "./lib/project-files";
+import * as projectFiles from "./lib/project_files";
 
 // Text-file creation used by GitHub import
 export const createSingleFile = internalMutation({

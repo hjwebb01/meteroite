@@ -19,7 +19,7 @@ import {
   getCodingModel,
   type CodingModel,
   type CodingModelId,
-} from "../../../../convex/lib/coding-models";
+} from "../../../../convex/lib/coding_models";
 
 const PROVIDER_NAMES: Record<CodingModel["provider"], string> = {
   openai: "OpenAI",

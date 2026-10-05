@@ -5,7 +5,7 @@ import { Id } from "../../../../convex/_generated/dataModel";
 import { api } from "../../../../convex/_generated/api";
 import { getConvexAuth } from "@/lib/convex-auth";
 import { inngest } from "@/inngest/client";
-import { isCodingModelId } from "../../../../convex/lib/coding-models";
+import { isCodingModelId } from "../../../../convex/lib/coding_models";
 
 const requestSchema = z.object({
   conversationId: z.string(),

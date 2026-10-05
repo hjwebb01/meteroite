@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { projectPaths } from "./project-paths";
+import { projectPaths } from "./project_paths";
 
 describe("projectPaths", () => {
   test("resolves nested paths even when children precede parents", () => {

@@ -1,7 +1,7 @@
 import { FileSystemTree } from "@webcontainer/api";
 
 import { Doc } from "../../../../convex/_generated/dataModel";
-import { projectPaths } from "../../../../convex/lib/project-paths";
+import { projectPaths } from "../../../../convex/lib/project_paths";
 
 type FileDoc = Doc<"files">;
 

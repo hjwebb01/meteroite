@@ -15,6 +15,9 @@ import type * as constants from "../constants.js";
 import type * as conversations from "../conversations.js";
 import type * as files from "../files.js";
 import type * as importExport from "../importExport.js";
+import type * as lib_coding_models from "../lib/coding_models.js";
+import type * as lib_project_files from "../lib/project_files.js";
+import type * as lib_project_paths from "../lib/project_paths.js";
 import type * as projects from "../projects.js";
 import type * as systemMessages from "../systemMessages.js";
 
@@ -32,6 +35,9 @@ declare const fullApi: ApiFromModules<{
   conversations: typeof conversations;
   files: typeof files;
   importExport: typeof importExport;
+  "lib/coding_models": typeof lib_coding_models;
+  "lib/project_files": typeof lib_project_files;
+  "lib/project_paths": typeof lib_project_paths;
   projects: typeof projects;
   systemMessages: typeof systemMessages;
 }>;

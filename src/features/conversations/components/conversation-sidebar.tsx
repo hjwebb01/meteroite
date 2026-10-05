@@ -52,7 +52,7 @@ import {
   DEFAULT_CODING_MODEL_ID,
   resolveCodingModelId,
   type CodingModelId,
-} from "../../../../convex/lib/coding-models";
+} from "../../../../convex/lib/coding_models";
 import type { MonotonicProgressStep } from "../hooks/use-monotonic-progress-steps";
 import { ConversationModelSelector } from "./conversation-model-selector";
 import { PastConversationsDialog } from "./past-conversations-dialog";

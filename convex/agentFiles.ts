@@ -1,9 +1,9 @@
 import { MAX_AGENT_CREATE_FILES_PER_MUTATION } from "./agentLimits";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
-import { projectPaths } from "./lib/project-paths";
-import * as projectFiles from "./lib/project-files";
-import { normalizeWorkspacePathToSegments } from "./lib/project-files";
+import { projectPaths } from "./lib/project_paths";
+import * as projectFiles from "./lib/project_files";
+import { normalizeWorkspacePathToSegments } from "./lib/project_files";
 import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 

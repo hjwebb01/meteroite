@@ -10,7 +10,7 @@ import {
 
 import { DEFAULT_CONVERSATION_TITLE } from "../../../../../convex/constants";
 
-import { DEFAULT_CODING_MODEL_ID } from "../../../../../convex/lib/coding-models";
+import { DEFAULT_CODING_MODEL_ID } from "../../../../../convex/lib/coding_models";
 
 import { inngest } from "@/inngest/client";
 import { getConvexAdminClient } from "@/lib/convex-client";

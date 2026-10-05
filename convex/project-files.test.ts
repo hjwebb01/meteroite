@@ -4,7 +4,7 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
-import { createFileAtPath } from "./lib/project-files";
+import { createFileAtPath } from "./lib/project_files";
 import schema from "./schema";
 import { buildFileTree } from "../src/features/preview/utils/file-tree";
 

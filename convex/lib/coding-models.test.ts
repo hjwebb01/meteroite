@@ -6,7 +6,7 @@ import {
   getCodingModel,
   isCodingModelId,
   resolveCodingModelId,
-} from "./coding-models";
+} from "./coding_models";
 
 describe("coding models", () => {
   test("the default model is selectable and listed once per id", () => {

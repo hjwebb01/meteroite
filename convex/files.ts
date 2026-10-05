@@ -1,8 +1,8 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getOwnedProject, verifyAuth } from "./auth";
-import { projectPaths } from "./lib/project-paths";
-import * as projectFiles from "./lib/project-files";
+import { projectPaths } from "./lib/project_paths";
+import * as projectFiles from "./lib/project_files";
 
 export const getFiles = query({
   args: {

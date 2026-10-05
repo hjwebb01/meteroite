@@ -7,7 +7,7 @@ import { createUserOctokit } from "@/lib/github";
 
 import { internal } from "../../../../convex/_generated/api";
 import { Doc, Id } from "../../../../convex/_generated/dataModel";
-import { projectPaths } from "../../../../convex/lib/project-paths";
+import { projectPaths } from "../../../../convex/lib/project_paths";
 
 interface ExportToGithubEvent {
   projectId: Id<"projects">;
