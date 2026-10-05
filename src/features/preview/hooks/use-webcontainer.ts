@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WebContainer } from "@webcontainer/api";
 
+import { createFileSync } from "@/features/preview/utils/file-sync";
+import { parseCommand } from "@/features/preview/utils/command";
 import { buildFileTree } from "@/features/preview/utils/file-tree";
 import { useFiles } from "@/features/projects/hooks/use-files";
 
-import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
-import { projectPaths } from "../../../../convex/lib/project-paths";
 
 // Singleton WebContainer instance
 let webcontainerInstance: WebContainer | null = null;
@@ -55,8 +55,8 @@ export const useWebContainer = ({
   const [restartKey, setRestartKey] = useState(0);
   const [terminalOutput, setTerminalOutput] = useState("");
 
-  const containerRef = useRef<WebContainer | null>(null);
   const hasStartedRef = useRef(false);
+  const syncFilesRef = useRef<ReturnType<typeof createFileSync> | null>(null);
 
   // Fetch files from Convex (auto-updates on changes)
   const files = useFiles(projectId);
@@ -80,10 +80,10 @@ export const useWebContainer = ({
         };
 
         const container = await getWebContainer();
-        containerRef.current = container;
 
         const fileTree = buildFileTree(files);
         await container.mount(fileTree);
+        syncFilesRef.current = createFileSync(container.fs, files);
 
         container.on("server-ready", (_port, url) => {
           setPreviewUrl(url);
@@ -94,7 +94,7 @@ export const useWebContainer = ({
 
         // Parse install command (default: npm install)
         const installCmd = settings?.installCommand || "npm install";
-        const [installBin, ...installArgs] = installCmd.split(" ");
+        const [installBin, ...installArgs] = parseCommand(installCmd);
         appendOutput(`$ ${installCmd}\n`);
         const installProcess = await container.spawn(installBin, installArgs);
         installProcess.output.pipeTo(
@@ -112,7 +112,7 @@ export const useWebContainer = ({
 
         // Parse dev command (default: npm run dev)
         const devCmd = settings?.devCommand || "npm run dev";
-        const [devBin, ...devArgs] = devCmd.split(" ");
+        const [devBin, ...devArgs] = parseCommand(devCmd);
         appendOutput(`\n$ ${devCmd}\n`);
         const devProcess = await container.spawn(devBin, devArgs);
         devProcess.output.pipeTo(
@@ -139,18 +139,15 @@ export const useWebContainer = ({
 
   // Sync file changes (hot-reload)
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container || !files || status !== "running") return;
+    const syncFiles = syncFilesRef.current;
+    if (!syncFiles || !files || !enabled || status !== "running") return;
 
-    const { pathById } = projectPaths(files);
-
-    for (const file of files) {
-      if (file.type !== "file" || file.storageId || !file.content) continue;
-
-      const filePath = pathById.get(file._id)!;
-      container.fs.writeFile(filePath, file.content);
-    }
-  }, [files, status]);
+    void syncFiles(files).catch((error: unknown) => {
+      if (syncFilesRef.current !== syncFiles) return;
+      setError(error instanceof Error ? error.message : "File sync failed");
+      setStatus("error");
+    });
+  }, [enabled, files, status]);
 
   // Reset when disabled
   useEffect(() => {
@@ -167,7 +164,7 @@ export const useWebContainer = ({
   // Restart the entire WebContainer process
   const restart = useCallback(() => {
     teardownWebContainer();
-    containerRef.current = null;
+    syncFilesRef.current = null;
     hasStartedRef.current = false;
     setStatus("idle");
     setPreviewUrl(null);
