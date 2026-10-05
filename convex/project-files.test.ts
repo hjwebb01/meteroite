@@ -639,3 +639,168 @@ describe("project path consumers", () => {
     })).rejects.toThrow("Invalid file tree: parent record not found");
   });
 });
+
+describe("agent path writes and exact edits", () => {
+  async function workspace(content = "original") {
+    const w = await setup();
+    await w.t.mutation(internal.agentFiles.agentCreateFilesByPaths, {
+      projectId: w.projectId,
+      files: [{ path: "src/app.ts", content }],
+    });
+    return w;
+  }
+
+  test("updates, renames folders, and deletes recursively by path without listing", async () => {
+    const w = await workspace();
+    await w.t.mutation(internal.agentFiles.agentUpdateFileByPath, {
+      projectId: w.projectId,
+      path: "src/app.ts",
+      content: "updated",
+    });
+    await w.t.mutation(internal.agentFiles.agentRenameFileByPath, {
+      projectId: w.projectId,
+      path: "src",
+      newName: "lib",
+    });
+    const [read] = await w.t.query(internal.agentFiles.agentReadFiles, {
+      projectId: w.projectId,
+      paths: ["lib/app.ts"],
+    });
+    expect(read).toMatchObject({ status: "ok", content: "updated" });
+    const result = await w.t.mutation(
+      internal.agentFiles.agentDeleteFilesByPaths,
+      {
+        projectId: w.projectId,
+        paths: ["lib"],
+      },
+    );
+    expect(result).toEqual([{ path: "lib", alreadyMissing: false }]);
+    expect(await files(w)).toEqual([]);
+    expect(
+      await w.t.mutation(internal.agentFiles.agentDeleteFilesByPaths, {
+        projectId: w.projectId,
+        paths: ["lib"],
+      }),
+    ).toEqual([{ path: "lib", alreadyMissing: true }]);
+  });
+
+  test("edits a large file with only small replacements, preserving literal text", async () => {
+    const prefix = "prefix\r\n".repeat(20000);
+    const suffix = "\r\nsuffix".repeat(20000);
+    const w = await workspace(prefix + "unique target" + suffix);
+    await resetTimestamp(w);
+    vi.spyOn(Date, "now").mockReturnValue(5000);
+    expect(
+      await w.t.mutation(internal.agentFiles.agentEditFile, {
+        projectId: w.projectId,
+        path: "src/app.ts",
+        edits: [
+          { search: "unique target", replace: "$&\\nnew target" },
+          { search: "new target", replace: "" },
+        ],
+      }),
+    ).toEqual({ path: "src/app.ts", editsApplied: 2 });
+    const file = (await files(w)).find((f) => f.name === "app.ts")!;
+    expect(file.content).toBe(prefix + "$&\\n" + suffix);
+    expect(file.updatedAt).toBe(5000);
+    expect(await projectTimestamp(w)).toBe(5000);
+  });
+
+  test.each([
+    [{ search: "missing", replace: "x" }, /not found/],
+    [{ search: "a", replace: "x" }, /ambiguous/],
+    [{ search: "aa", replace: "x" }, /ambiguous/],
+    [{ search: "", replace: "x" }, /cannot be empty/],
+  ])(
+    "failed edits leave content and recency unchanged",
+    async (edit, error) => {
+      const w = await workspace("unique aaa");
+      await resetTimestamp(w);
+      await expect(
+        w.t.mutation(internal.agentFiles.agentEditFile, {
+          projectId: w.projectId,
+          path: "src/app.ts",
+          edits: [{ search: "unique", replace: "changed" }, edit],
+        }),
+      ).rejects.toThrow(error);
+      expect((await files(w)).find((f) => f.name === "app.ts")?.content).toBe(
+        "unique aaa",
+      );
+      expect(await projectTimestamp(w)).toBe(1);
+    },
+  );
+
+  test("rejects invalid paths and rolls back deletion batches", async () => {
+    const w = await workspace();
+    for (const path of [
+      "/src/app.ts",
+      "../src/app.ts",
+      "src/../app.ts",
+      "",
+      "src/app.ts/child",
+    ]) {
+      await expect(
+        w.t.mutation(internal.agentFiles.agentUpdateFileByPath, {
+          projectId: w.projectId,
+          path,
+          content: "changed",
+        }),
+      ).rejects.toThrow();
+    }
+    await expect(
+      w.t.mutation(internal.agentFiles.agentDeleteFilesByPaths, {
+        projectId: w.projectId,
+        paths: ["src", "../private"],
+      }),
+    ).rejects.toThrow();
+    expect((await files(w)).find((f) => f.name === "app.ts")?.content).toBe(
+      "original",
+    );
+  });
+
+  test("path writes remain scoped to their Project and enforce text/name rules", async () => {
+    const w = await workspace();
+    await expect(
+      w.t.mutation(internal.agentFiles.agentUpdateFileByPath, {
+        projectId: w.otherProjectId,
+        path: "src/app.ts",
+        content: "stolen",
+      }),
+    ).rejects.toThrow(/not found/);
+    await expect(
+      w.t.mutation(internal.agentFiles.agentRenameFileByPath, {
+        projectId: w.projectId,
+        path: "src/app.ts",
+        newName: "../stolen",
+      }),
+    ).rejects.toThrow(/slashes/);
+    for (const path of ["src", "missing"]) {
+      await expect(
+        w.t.mutation(internal.agentFiles.agentEditFile, {
+          projectId: w.projectId,
+          path,
+          edits: [{ search: "original", replace: "x" }],
+        }),
+      ).rejects.toThrow();
+    }
+    const storageId = await w.t.run((ctx) =>
+      ctx.storage.store(new Blob(["binary"])),
+    );
+    await w.t.run((ctx) =>
+      ctx.db.insert("files", {
+        projectId: w.projectId,
+        name: "image",
+        type: "file",
+        storageId,
+        updatedAt: 1,
+      }),
+    );
+    await expect(
+      w.t.mutation(internal.agentFiles.agentEditFile, {
+        projectId: w.projectId,
+        path: "image",
+        edits: [{ search: "x", replace: "y" }],
+      }),
+    ).rejects.toThrow(/Only text files/);
+  });
+});

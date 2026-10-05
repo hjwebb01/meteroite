@@ -13,6 +13,7 @@ import {
 import { DEFAULT_CONVERSATION_TITLE } from "../../../../convex/constants";
 import { createReadFilesTool } from "./tools/read-files";
 import { createListFilesTool } from "./tools/list-files";
+import { createEditFileTool } from "./tools/edit-file";
 import { createUpdateFileTool } from "./tools/update-file";
 import { createCreateFilesTool } from "./tools/create-files";
 import { createCreateFolderTool } from "./tools/create-folder";
@@ -223,6 +224,7 @@ export const processMessage = inngest.createFunction(
         createListFilesTool({ projectId, reporter }),
         createReadFilesTool({ projectId, reporter }),
         createUpdateFileTool({ projectId, reporter }),
+        createEditFileTool({ projectId, reporter }),
         createCreateFilesTool({ projectId, reporter }),
         createCreateFolderTool({ projectId, reporter }),
         createDeleteFilesTool({ projectId, reporter }),

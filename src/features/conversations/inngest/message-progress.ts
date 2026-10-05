@@ -41,6 +41,7 @@ const TOOL_LABELS: Record<string, string> = {
   listFiles: "Listing files",
   readFiles: "Reading files",
   updateFile: "Updating file",
+  editFile: "Editing file",
   createFiles: "Creating files",
   createFolder: "Creating folder",
   deleteFiles: "Deleting files",

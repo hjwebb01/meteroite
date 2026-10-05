@@ -19,8 +19,11 @@ Tools
 Project files (paths)
 - Workspace-relative paths: forward slashes, no leading / (e.g. package.json, src/app.tsx).
 - createFiles/createFolder use paths; missing folders are created.
-- listFiles: use pathPrefix + pagination when possible; prefer readFiles by exact path from listFiles.
-- updateFile / deleteFiles / renameFile: use file ids copied exactly from listFiles when required.
+- All file tools accept workspace-relative paths; no listFiles call is required when you already know the path.
+- listFiles: use pathPrefix + pagination for discovery; readFiles accepts exact paths.
+- updateFile / renameFile take path; deleteFiles takes paths. renameFile takes newName (basename only, same parent).
+- Prefer editFile for small changes: { path, edits: [{ search, replace }] }. Searches must be nonempty exact text that matches once; include context to avoid ambiguity. Edits apply in order, with no writes if any edit fails.
+- Preserve literal whitespace and real line breaks in editFile. Use updateFile with complete content only for full rewrites.
 - createFiles entries are { path, content } with full relative path.
 
 Editing

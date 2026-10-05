@@ -624,3 +624,86 @@ export const agentDeleteFiles = internalMutation({
     });
   },
 });
+
+export const agentUpdateFileByPath = internalMutation({
+  args: { projectId: v.id("projects"), path: v.string(), content: v.string() },
+  handler: async (ctx, args) => {
+    const file = await projectFiles.requireEntryAtPath(ctx, args);
+    return projectFiles.updateTextFile(ctx, { ...args, fileId: file._id });
+  },
+});
+
+export const agentRenameFileByPath = internalMutation({
+  args: { projectId: v.id("projects"), path: v.string(), newName: v.string() },
+  handler: async (ctx, args) => {
+    const file = await projectFiles.requireEntryAtPath(ctx, args);
+    return projectFiles.renameEntry(ctx, { ...args, fileId: file._id });
+  },
+});
+
+export const agentDeleteFilesByPaths = internalMutation({
+  args: { projectId: v.id("projects"), paths: v.array(v.string()) },
+  handler: async (ctx, args) => {
+    if (!args.paths.length) throw new Error("Provide at least one path");
+    const entries = [];
+    for (const path of args.paths) {
+      entries.push({
+        path,
+        file: await projectFiles.findEntryAtPath(ctx, {
+          projectId: args.projectId,
+          path,
+        }),
+      });
+    }
+    const results = [];
+    for (const { path, file } of entries) {
+      if (file)
+        await projectFiles.deleteEntry(ctx, {
+          projectId: args.projectId,
+          fileId: file._id,
+        });
+      results.push({ path, alreadyMissing: !file });
+    }
+    return results;
+  },
+});
+
+/** Sequential exact edits are validated before the single atomic write. */
+export const agentEditFile = internalMutation({
+  args: {
+    projectId: v.id("projects"),
+    path: v.string(),
+    edits: v.array(v.object({ search: v.string(), replace: v.string() })),
+  },
+  handler: async (ctx, args) => {
+    if (!args.edits.length) throw new Error("Provide at least one edit");
+    const file = await projectFiles.requireEntryAtPath(ctx, args);
+    if (file.type !== "file" || file.storageId)
+      throw new Error("Only text files can be edited");
+    let content = file.content ?? "";
+    for (const [i, edit] of args.edits.entries()) {
+      if (!edit.search.length)
+        throw new Error(`Edit ${i + 1}: search cannot be empty`);
+      const start = content.indexOf(edit.search);
+      if (start < 0)
+        throw new Error(
+          `Edit ${i + 1}: search string not found in "${args.path}"`,
+        );
+      if (content.indexOf(edit.search, start + 1) >= 0) {
+        throw new Error(
+          `Edit ${i + 1}: search string is ambiguous in "${args.path}"; include more surrounding text`,
+        );
+      }
+      content =
+        content.slice(0, start) +
+        edit.replace +
+        content.slice(start + edit.search.length);
+    }
+    await projectFiles.updateTextFile(ctx, {
+      projectId: args.projectId,
+      fileId: file._id,
+      content,
+    });
+    return { path: args.path, editsApplied: args.edits.length };
+  },
+});

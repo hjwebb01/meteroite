@@ -1,52 +1,41 @@
 import { z } from "zod";
 import { defineProjectTool } from "./define-project-tool";
-
 import { getConvexAdminClient } from "@/lib/convex-client";
-
 import { internal } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import type { MessageProgressReporter } from "../message-progress";
 
-interface DeleteFilesToolOptions {
-  projectId: Id<"projects">;
-  reporter: MessageProgressReporter;
-}
-
-const paramsSchema = z.object({
-  fileIds: z
-    .array(z.string().min(1, "File ID cannot be empty"))
-    .min(1, "Provide at least one file ID"),
-});
-
 export const createDeleteFilesTool = ({
   projectId,
   reporter,
-}: DeleteFilesToolOptions) => {
-  return defineProjectTool({
+}: {
+  projectId: Id<"projects">;
+  reporter: MessageProgressReporter;
+}) =>
+  defineProjectTool({
     name: "deleteFiles",
     description:
-      "Delete files or folders from the project. If deleting a folder, all contents will be deleted recursively. Use ids from listFiles exactly.",
+      "Delete files or folders by workspace-relative paths. Folders are deleted recursively. Missing paths are safe retries.",
     parameters: z.object({
-      fileIds: z
-        .array(z.string())
-        .describe("Array of file or folder IDs to delete"),
+      paths: z
+        .array(z.string().min(1))
+        .min(1)
+        .describe("Workspace-relative paths of files or folders to delete"),
     }),
-    validation: paramsSchema,
     reporter,
-    label: ({ fileIds }) => `${fileIds.length} item(s)`,
+    label: ({ paths }) => `${paths.length} item(s)`,
     errorPrefix: "Error deleting files",
-    run: async ({ fileIds }) => {
-      const results = await getConvexAdminClient().mutation(internal.agentFiles.agentDeleteFiles, {
-        projectId,
-        rawIds: fileIds,
-      });
+    run: async ({ paths }) => {
+      const results = await getConvexAdminClient().mutation(
+        internal.agentFiles.agentDeleteFilesByPaths,
+        { projectId, paths },
+      );
       return results
-        .map((result) =>
-          result.alreadyMissing
-            ? `File with ID "${result.fileId}" is already deleted`
-            : `Deleted ${result.type} "${result.name}" successfully`,
+        .map(({ path, alreadyMissing }) =>
+          alreadyMissing
+            ? `Path "${path}" is already deleted`
+            : `Deleted "${path}" successfully`,
         )
         .join("\n");
     },
   });
-};

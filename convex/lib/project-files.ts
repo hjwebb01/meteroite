@@ -325,3 +325,40 @@ export async function deleteEntries(
   }
   return results;
 }
+
+/** Resolve an existing entry without creating parents or leaving the Project. */
+export async function findEntryAtPath(
+  ctx: MutationCtx,
+  args: { projectId: Id<"projects">; path: string },
+) {
+  await requireProject(ctx, args.projectId);
+  const segments = normalizeWorkspacePathToSegments(args.path);
+  let parentId: Id<"files"> | undefined;
+  let entry: Doc<"files"> | undefined;
+  for (let i = 0; i < segments.length; i++) {
+    const matches = (
+      await siblingsAt(ctx, { projectId: args.projectId, parentId })
+    ).filter((file) => file.name === segments[i]);
+    if (matches.length > 1) {
+      throw new Error(
+        `Ambiguous path "${args.path}": multiple items named "${segments[i]}"`,
+      );
+    }
+    entry = matches[0];
+    if (!entry) return undefined;
+    if (i < segments.length - 1 && entry.type !== "folder") {
+      throw new Error(`Path "${args.path}" traverses a file`);
+    }
+    parentId = entry._id;
+  }
+  return entry;
+}
+
+export async function requireEntryAtPath(
+  ctx: MutationCtx,
+  args: { projectId: Id<"projects">; path: string },
+) {
+  const file = await findEntryAtPath(ctx, args);
+  if (!file) throw new Error(`File or folder not found at path "${args.path}"`);
+  return file;
+}

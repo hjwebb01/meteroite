@@ -13,7 +13,7 @@ interface ReadFilesToolArgs {
 const paramsSchema = z
   .object({
     paths: z.array(z.string().min(1, "Path cannot be empty")),
-    fileIds: z.array(z.string().min(1, "File ID cannot be empty")),
+    fileIds: z.array(z.string().min(1, "File ID cannot be empty")).default([]),
     format: z.enum(["full", "compact"]).default("compact"),
     maxChars: z.number().int().min(1).max(500_000).default(80_000),
     lineStart: z.number().int().min(1).optional(),
@@ -118,9 +118,10 @@ export const createReadFilesTool = ({
     parameters: z.object({
       paths: z
         .array(z.string())
-        .describe("Workspace-relative paths from listFiles."),
+        .describe("Workspace-relative paths; no listFiles call required if known."),
       fileIds: z
         .array(z.string())
+        .optional()
         .describe("Optional ids from listFiles if not using paths."),
       format: z
         .enum(["full", "compact"])
