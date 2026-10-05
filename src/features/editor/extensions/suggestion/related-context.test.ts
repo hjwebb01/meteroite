@@ -154,6 +154,47 @@ describe("extractSignatures", () => {
 });
 
 describe("buildRelatedContext", () => {
+  it("returns the same related context for repeated inputs", () => {
+    const input = {
+      path: "src/main.ts",
+      source: 'import { helper } from "./helper";',
+      files: [
+        {
+          path: "src/helper.ts",
+          content: "export function helper(): void {}",
+        },
+      ],
+    };
+    const first = buildRelatedContext(input);
+    const second = buildRelatedContext(input);
+
+    expect(second).toEqual(first);
+  });
+
+  it("updates signatures when an imported file's content changes", () => {
+    const source = 'import { helper } from "./helper";';
+    const first = buildRelatedContext({
+      path: "src/main.ts",
+      source,
+      files: [
+        { path: "src/helper.ts", content: "export function helper() {}" },
+      ],
+    });
+    const second = buildRelatedContext({
+      path: "src/main.ts",
+      source,
+      files: [
+        {
+          path: "src/helper.ts",
+          content: "export const helper: string = 'updated';",
+        },
+      ],
+    });
+
+    expect(first[0].signatures).toContain("export function helper();");
+    expect(second[0].signatures).toContain("export const helper: string;");
+  });
+
   it("ignores bare imports and prioritizes imported signatures within the budget", () => {
     const context = buildRelatedContext({
       path: "src/app/page.tsx",
@@ -221,6 +262,30 @@ describe("alias and open-tab context", () => {
         openTabPaths: [helper.path, tab.path, tab.path],
       }).map((file) => file.path),
     ).toEqual([helper.path, tab.path]);
+  });
+  it("uses updated path aliases from a new files array", () => {
+    const source = 'import { helper } from "@/helper";';
+    const files = (target: string) => [
+      {
+        path: "tsconfig.json",
+        content: JSON.stringify({
+          compilerOptions: { paths: { "@/*": [`${target}/*`] } },
+        }),
+      },
+      { path: "src/helper.ts", content: "export function helper() {}" },
+      { path: "lib/helper.ts", content: "export const helper = 1;" },
+    ];
+
+    expect(
+      buildRelatedContext({ path: "main.ts", source, files: files("src") }).map(
+        ({ path }) => path,
+      ),
+    ).toEqual(["src/helper.ts"]);
+    expect(
+      buildRelatedContext({ path: "main.ts", source, files: files("lib") }).map(
+        ({ path }) => path,
+      ),
+    ).toEqual(["lib/helper.ts"]);
   });
   it.each([undefined, { ...config, content: "{ broken" }])(
     "falls back to relative imports with invalid or missing config %s",

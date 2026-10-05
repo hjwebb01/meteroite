@@ -1,11 +1,12 @@
 import type { Text } from "@codemirror/state";
 import type { EditHunk } from "./edit-history";
 import { buildRelatedContext, type ProjectSourceFile } from "./related-context";
+import { CURSOR_MARKER } from "./prompt-format";
+import type { SuggestionRequest } from "./suggestion-schema";
 
-/** Full-file prompts are expensive; send a cursor-centered excerpt for large buffers. */
-const MAX_CODE_SNIPPET_CHARS = 14_000;
-const CURSOR_RADIUS_CHARS = 6_000;
-const CONTEXT_LINES = 5;
+const LINES_BEFORE_CURSOR = 60;
+const LINES_AFTER_CURSOR = 30;
+const MAX_CODE_SNIPPET_CHARS = 6_000;
 
 export interface CompletionRequestInput {
   doc: Text;
@@ -25,34 +26,30 @@ export const buildCompletionRequest = ({
   projectFiles = [],
   recentEdits = [],
   openTabPaths = [],
-}: CompletionRequestInput) => {
+}: CompletionRequestInput): SuggestionRequest | null => {
   const fullCode = doc.toString();
   if (fullCode.trim().length === 0) return null;
 
   const currentLine = doc.lineAt(cursor);
-  const cursorInLine = cursor - currentLine.from;
-  const previousLines: string[] = [];
-  const previousLinesToFetch = Math.min(CONTEXT_LINES, currentLine.number - 1);
-  for (let i = previousLinesToFetch; i >= 0; i--) {
-    previousLines.push(doc.line(currentLine.number - i).text);
+  let firstLine = Math.max(1, currentLine.number - LINES_BEFORE_CURSOR);
+  let lastLine = Math.min(doc.lines, currentLine.number + LINES_AFTER_CURSOR);
+  // Keep whole lines, including an unusually long cursor line even if it exceeds the budget.
+  while (
+    doc.line(lastLine).to - doc.line(firstLine).from > MAX_CODE_SNIPPET_CHARS &&
+    (firstLine < currentLine.number || lastLine > currentLine.number)
+  ) {
+    if (
+      currentLine.number - firstLine >= lastLine - currentLine.number &&
+      firstLine < currentLine.number
+    ) {
+      firstLine++;
+    } else {
+      lastLine--;
+    }
   }
-  const nextLines: string[] = [];
-  const nextLinesToFetch = Math.min(
-    CONTEXT_LINES,
-    doc.lines - currentLine.number,
-  );
-  for (let i = 1; i <= nextLinesToFetch; i++) {
-    nextLines.push(doc.line(currentLine.number + i).text);
-  }
-
-  let code = fullCode;
-  if (fullCode.length > MAX_CODE_SNIPPET_CHARS) {
-    const lo = Math.max(0, cursor - CURSOR_RADIUS_CHARS);
-    const hi = Math.min(fullCode.length, cursor + CURSOR_RADIUS_CHARS);
-    const head = lo > 0 ? "[…]\n" : "";
-    const tail = hi < fullCode.length ? "\n[…]" : "";
-    code = `${head}${fullCode.slice(lo, hi)}${tail}`;
-  }
+  const from = doc.line(firstLine).from;
+  const to = doc.line(lastLine).to;
+  const code = `${firstLine > 1 ? "[…]\n" : ""}${doc.sliceString(from, cursor)}${CURSOR_MARKER}${doc.sliceString(cursor, to)}${lastLine < doc.lines ? "\n[…]" : ""}`;
 
   const relatedFiles = buildRelatedContext({
     path,
@@ -64,13 +61,9 @@ export const buildCompletionRequest = ({
   return {
     fileName: path.split("/").pop() ?? path,
     code,
-    currentLine: currentLine.text,
-    previousLines: previousLines.join("\n"),
-    textBeforeCursor: currentLine.text.slice(0, cursorInLine),
-    textAfterCursor: currentLine.text.slice(cursorInLine),
-    nextLines: nextLines.join("\n"),
-    lineNumber: currentLine.number,
     ...(relatedFiles.length > 0 && { relatedFiles }),
-    ...(recentEdits.length > 0 && { recentEdits: [...recentEdits] }),
+    ...(recentEdits.length > 0 && {
+      recentEdits: recentEdits.map(({ before, after }) => ({ before, after })),
+    }),
   };
 };

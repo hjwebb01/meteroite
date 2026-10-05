@@ -4,14 +4,14 @@ import { createCodingModel, createTitleModel } from "./models";
 
 describe("conversation models", () => {
   it("builds the selected coding model and falls back to the default", () => {
-    expect(createCodingModel("anthropic/claude-opus-5.5").options.model).toBe(
-      "anthropic/claude-opus-5.5",
+    expect(createCodingModel("z-ai/glm-5.3-flash").options.model).toBe(
+      "z-ai/glm-5.3-flash",
     );
     expect(createCodingModel(undefined).options.model).toBe(
-      "openai/gpt-5.4-mini",
+      "openai/gpt-6-luna",
     );
     expect(createCodingModel("retired/model").options.model).toBe(
-      "openai/gpt-5.4-mini",
+      "openai/gpt-6-luna",
     );
   });
 

@@ -1,4 +1,9 @@
-import type { ChangeSet, Text } from "@codemirror/state";
+import {
+  Annotation,
+  StateField,
+  type ChangeSet,
+  type Text,
+} from "@codemirror/state";
 
 /**
  * A recently edited region of the open file. Lines are 1-based and refer to the document as it
@@ -32,6 +37,23 @@ const cap = (history: EditHunk[]) => {
   return capped;
 };
 
+/** Maps retained hunk lines through a document change without recording that change. */
+export const remapHunks = (
+  history: readonly EditHunk[],
+  changes: ChangeSet,
+  startDoc: Text,
+  endDoc: Text,
+): EditHunk[] =>
+  history.map((hunk) => {
+    const start = changes.mapPos(startDoc.line(hunk.startLine).from, -1);
+    const end = changes.mapPos(startDoc.line(hunk.endLine).to, 1);
+    return {
+      ...hunk,
+      startLine: endDoc.lineAt(start).number,
+      endLine: endDoc.lineAt(end).number,
+    };
+  });
+
 /**
  * Folds a user change into the history. An edit inside the most recent hunk's lines (typing a
  * word, deleting characters) extends that hunk instead of adding a new one.
@@ -42,23 +64,13 @@ export const recordChanges = (
   startDoc: Text,
   endDoc: Text,
 ): EditHunk[] => {
-  const next = [...history];
+  const previous = [...history];
+  const next = remapHunks(history, changes, startDoc, endDoc);
   const edits: { fromA: number; toA: number; fromB: number; toB: number }[] =
     [];
   changes.iterChanges((fromA, toA, fromB, toB) => {
     edits.push({ fromA, toA, fromB, toB });
   });
-  const previous = [...next];
-  for (let index = 0; index < next.length; index += 1) {
-    const hunk = next[index];
-    const start = changes.mapPos(startDoc.line(hunk.startLine).from, -1);
-    const end = changes.mapPos(startDoc.line(hunk.endLine).to, 1);
-    next[index] = {
-      ...hunk,
-      startLine: endDoc.lineAt(start).number,
-      endLine: endDoc.lineAt(end).number,
-    };
-  }
   edits.forEach(({ fromA, toA, fromB, toB }, editIndex) => {
     const startLineA = startDoc.lineAt(fromA).number;
     const endLineA = startDoc.lineAt(toA).number;
@@ -99,3 +111,25 @@ export const recordChanges = (
   });
   return cap(next);
 };
+
+/** Marks a transaction that applies model output, which is not a user edit. */
+export const predictionAccepted = Annotation.define<boolean>();
+
+/** Recent user edits in this editor; a new editor per Project file resets it. */
+export const editHistoryState = StateField.define<EditHunk[]>({
+  create() {
+    return [];
+  },
+  update(history, transaction) {
+    if (!transaction.docChanged) return history;
+    const apply = transaction.annotation(predictionAccepted)
+      ? remapHunks
+      : recordChanges;
+    return apply(
+      history,
+      transaction.changes,
+      transaction.startState.doc,
+      transaction.state.doc,
+    );
+  },
+});

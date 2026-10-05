@@ -4,36 +4,19 @@
  * route, the worker, and the sidebar, so it must stay free of runtime imports.
  */
 export const CODING_MODELS = [
-  { id: "openai/gpt-5.4-mini", name: "GPT-5.4 Mini", provider: "openai" },
-  { id: "openai/gpt-5.4", name: "GPT-5.4", provider: "openai" },
-  {
-    id: "anthropic/claude-sonnet-5.5",
-    name: "Claude Sonnet 5.5",
-    provider: "anthropic",
-  },
-  {
-    id: "anthropic/claude-opus-5.5",
-    name: "Claude Opus 5.5",
-    provider: "anthropic",
-  },
-  {
-    id: "google/gemini-3.8-flash",
-    name: "Gemini 3.8 Flash",
-    provider: "google",
-  },
+  { id: "openai/gpt-6-luna", name: "GPT 6 Luna", provider: "openai" },
   {
     id: "deepseek/deepseek-v4.1-flash",
     name: "DeepSeek V4.1 Flash",
     provider: "deepseek",
   },
-  { id: "moonshotai/kimi-k3", name: "Kimi K3", provider: "moonshotai" },
-  { id: "z-ai/glm-5.3", name: "GLM 5.3", provider: "zai" },
+  { id: "z-ai/glm-5.3-flash", name: "GLM 5.3 Flash", provider: "zai" },
 ] as const;
 
 export type CodingModel = (typeof CODING_MODELS)[number];
 export type CodingModelId = CodingModel["id"];
 
-export const DEFAULT_CODING_MODEL_ID: CodingModelId = "openai/gpt-5.4-mini";
+export const DEFAULT_CODING_MODEL_ID: CodingModelId = "openai/gpt-6-luna";
 
 export const isCodingModelId = (value: unknown): value is CodingModelId =>
   CODING_MODELS.some((model) => model.id === value);

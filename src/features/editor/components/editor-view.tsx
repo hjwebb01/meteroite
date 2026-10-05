@@ -11,7 +11,7 @@ import {
 import Image from "next/image";
 import { CodeEditor } from "./code-editor";
 import { useEffect, useMemo, useRef } from "react";
-import { projectPaths } from "../../../../convex/lib/project-paths";
+import { projectPaths } from "../../../../convex/lib/project_paths";
 import type { ProjectSourceFile } from "../extensions/suggestion/related-context";
 import { AlertTriangleIcon } from "lucide-react";
 

@@ -24,10 +24,10 @@ describe("conversation model", () => {
     const id = await alice.mutation(api.conversations.create, {
       projectId,
       title: "chat",
-      model: "anthropic/claude-sonnet-5.5",
+      model: "z-ai/glm-5.3-flash",
     });
     const conversation = await alice.query(api.conversations.getById, { id });
-    expect(conversation.model).toBe("anthropic/claude-sonnet-5.5");
+    expect(conversation.model).toBe("z-ai/glm-5.3-flash");
 
     await expect(
       alice.mutation(api.conversations.create, {
@@ -47,10 +47,10 @@ describe("conversation model", () => {
 
     await alice.mutation(api.conversations.setModel, {
       id,
-      model: "openai/gpt-5.4",
+      model: "deepseek/deepseek-v4.1-flash",
     });
     expect((await alice.query(api.conversations.getById, { id })).model).toBe(
-      "openai/gpt-5.4",
+      "deepseek/deepseek-v4.1-flash",
     );
     await expect(
       alice.mutation(api.conversations.setModel, { id, model: "nope" }),
@@ -58,7 +58,7 @@ describe("conversation model", () => {
     await expect(
       bob.mutation(api.conversations.setModel, {
         id,
-        model: "openai/gpt-5.4",
+        model: "deepseek/deepseek-v4.1-flash",
       }),
     ).rejects.toThrow(/Unauthorized/);
   });
@@ -79,15 +79,15 @@ describe("conversation model", () => {
     const chosen = await alice.mutation(api.conversations.startMessage, {
       conversationId: id,
       message: "again",
-      model: "google/gemini-3.8-flash",
+      model: "z-ai/glm-5.3-flash",
     });
-    expect(chosen.model).toBe("google/gemini-3.8-flash");
+    expect(chosen.model).toBe("z-ai/glm-5.3-flash");
 
     const remembered = await alice.mutation(api.conversations.startMessage, {
       conversationId: id,
       message: "and again",
     });
-    expect(remembered.model).toBe("google/gemini-3.8-flash");
+    expect(remembered.model).toBe("z-ai/glm-5.3-flash");
 
     await expect(
       alice.mutation(api.conversations.startMessage, {

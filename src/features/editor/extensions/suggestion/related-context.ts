@@ -30,6 +30,9 @@ const MAX_INITIALIZER_HEAD_CHARS = 60;
 
 const scriptParser = parser.configure({ dialect: "ts jsx" });
 
+const MAX_SIGNATURE_CACHE_ENTRIES = 200;
+const signatureCache = new Map<string, ExportedSignature[]>();
+
 export interface ProjectSourceFile {
   /** Workspace-relative path. */
   path: string;
@@ -215,6 +218,30 @@ const aliasResolver = (
   }
 };
 
+interface FilesCache {
+  contentByPath: Map<string, string>;
+  filePaths: Set<string>;
+  aliasResolvers: Map<string, (specifier: string) => string | null>;
+}
+
+const filesCache = new WeakMap<readonly ProjectSourceFile[], FilesCache>();
+
+const getFilesCache = (files: readonly ProjectSourceFile[]) => {
+  let cache = filesCache.get(files);
+  if (!cache) {
+    const contentByPath = new Map(
+      files.map((file) => [file.path, file.content]),
+    );
+    cache = {
+      contentByPath,
+      filePaths: new Set(contentByPath.keys()),
+      aliasResolvers: new Map(),
+    };
+    filesCache.set(files, cache);
+  }
+  return cache;
+};
+
 const oneLine = (text: string) => text.replace(/\s+/g, " ").trim();
 
 const sliceBefore = (
@@ -307,8 +334,7 @@ const declarationSignatures = (
   return [{ name: name ?? "default", isDefault, text }];
 };
 
-/** Top-level exported declarations as headers only; function and class bodies are never included. */
-export const extractSignatures = (source: string): ExportedSignature[] => {
+const parseSignatures = (source: string): ExportedSignature[] => {
   const tree = scriptParser.parse(source);
   const signatures: ExportedSignature[] = [];
   const localSignatures = new Map<string, ExportedSignature[]>();
@@ -414,6 +440,22 @@ export const extractSignatures = (source: string): ExportedSignature[] => {
   return signatures;
 };
 
+/** Top-level exported declarations as headers only; function and class bodies are never included. */
+export const extractSignatures = (source: string): ExportedSignature[] => {
+  const cached = signatureCache.get(source);
+  if (cached) {
+    signatureCache.delete(source);
+    signatureCache.set(source, cached);
+    return cached;
+  }
+  const signatures = parseSignatures(source);
+  signatureCache.set(source, signatures);
+  if (signatureCache.size > MAX_SIGNATURE_CACHE_ENTRIES) {
+    signatureCache.delete(signatureCache.keys().next().value!);
+  }
+  return signatures;
+};
+
 /**
  * Signatures from files the current file imports, within a character budget. Declarations of
  * symbols the file actually imports come first, then the remaining exports; anything that does
@@ -433,10 +475,13 @@ export const buildRelatedContext = ({
   openTabPaths?: readonly string[];
 }): RelatedFile[] => {
   if (!isScriptPath(path)) return [];
-  const contentByPath = new Map(files.map((file) => [file.path, file.content]));
-  const filePaths = new Set(contentByPath.keys());
+  const { contentByPath, filePaths, aliasResolvers } = getFilesCache(files);
 
-  const resolveAlias = aliasResolver(contentByPath, path);
+  let resolveAlias = aliasResolvers.get(path);
+  if (!resolveAlias) {
+    resolveAlias = aliasResolver(contentByPath, path);
+    aliasResolvers.set(path, resolveAlias);
+  }
   const wanted = new Map<string, Set<string>>();
   for (const reference of parseImports(source)) {
     const resolved =
