@@ -5,11 +5,16 @@ import { openRouter } from "@/lib/openrouter";
 import { auth } from "@clerk/nextjs/server";
 
 const suggestionSchema = z.object({
-  suggestion: z
-    .string()
-    .describe(
-      "The code to be inserted at the cursor position, or null if no suggestion is available.",
-    ),
+  edits: z.array(
+    z.object({
+      anchor: z
+        .string()
+        .describe(
+          "Exact existing text to replace, or empty for insertion at cursor.",
+        ),
+      replacement: z.string(),
+    }),
+  ),
 });
 
 const SUGGESTION_PROMPT = `You are a code suggestion assistant.
@@ -28,21 +33,66 @@ const SUGGESTION_PROMPT = `You are a code suggestion assistant.
 <full_code>
 {code}
 </full_code>
-</context>
+{relatedFiles}{recentEdits}</context>
 
 <instructions>
 If full_code begins with "[…]" or ends with "[…]", it is a cursor-centered excerpt of a larger file (not the whole file). Still use previous_lines, current_line, and next_lines as the primary local context.
 
-Follow these steps IN ORDER:
+Return edits as { anchor, replacement }. Use an empty anchor to insert at the cursor. For a change elsewhere, anchor must be exact, unique existing text from full_code. Prefer continuing the user's recent edits, including a related rename elsewhere. Return an empty edits array when no useful change is needed. Never insert code already present.
 
-1. First, look at next_lines. If next_lines contains ANY code, check if it continues from where the cursor is. If it does, return empty string immediately - the code is already written.
+If related_files is present, it lists exported signatures from other Project files this file imports or has open in other tabs. Use their exact names and argument shapes, and never reproduce their bodies.
 
-2. Check if before_cursor ends with a complete statement (;, }, )). If yes, return empty string.
-
-3. Only if steps 1 and 2 don't apply: suggest what should be typed at the cursor position, using context from full_code.
+If recent_edits is present, it lists the user's latest changes (oldest first) with the lines before and after each change. Continue that change: for example, use a new name the user just introduced instead of the old one.
 
 Your suggestion is inserted immediately after the cursor, so never suggest code that's already in the file.
 </instructions>`;
+
+const requestSchema = z.object({
+  fileName: z.string(),
+  code: z.string().min(1),
+  currentLine: z.string(),
+  previousLines: z.string().optional(),
+  textBeforeCursor: z.string(),
+  textAfterCursor: z.string(),
+  nextLines: z.string().optional(),
+  lineNumber: z.number(),
+  relatedFiles: z
+    .array(z.object({ path: z.string(), signatures: z.string() }))
+    .optional(),
+  recentEdits: z
+    .array(
+      z.object({
+        startLine: z.number(),
+        endLine: z.number(),
+        before: z.string(),
+        after: z.string(),
+      }),
+    )
+    .optional(),
+});
+
+const relatedFilesSection = (
+  files: z.infer<typeof requestSchema>["relatedFiles"],
+) =>
+  files?.length
+    ? `<related_files>\n${files
+        .map(
+          (file) => `<file path="${file.path}">\n${file.signatures}\n</file>`,
+        )
+        .join("\n")}\n</related_files>\n`
+    : "";
+
+const recentEditsSection = (
+  edits: z.infer<typeof requestSchema>["recentEdits"],
+) =>
+  edits?.length
+    ? `<recent_edits>\n${edits
+        .map(
+          (edit) =>
+            `<edit lines="${edit.startLine}-${edit.endLine}">\n<before>${edit.before}</before>\n<after>${edit.after}</after>\n</edit>`,
+        )
+        .join("\n")}\n</recent_edits>\n`
+    : "";
 
 export async function POST(request: Request) {
   try {
@@ -50,34 +100,42 @@ export async function POST(request: Request) {
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 403 });
     }
-    const {
-      fileName,
-      code,
-      currentLine,
-      previousLines,
-      textBeforeCursor,
-      textAfterCursor,
-      nextLines,
-      lineNumber,
-    } = await request.json();
-    if (!code) {
+    const parsed = requestSchema.safeParse(await request.json());
+    if (!parsed.success) {
       return NextResponse.json({ error: "Code is required" }, { status: 400 });
     }
-    const prompt = SUGGESTION_PROMPT.replace("{fileName}", fileName)
-      .replace("{code}", code)
-      .replace("{previousLines}", previousLines || "")
-      .replace("{currentLine}", currentLine)
-      .replace("{textBeforeCursor}", textBeforeCursor)
-      .replace("{textAfterCursor}", textAfterCursor)
-      .replace("{nextLines}", nextLines || "")
-      .replace("{lineNumber}", lineNumber.toString());
+    const body = parsed.data;
+    // Replacer functions keep `$` sequences in user code from being treated as patterns.
+    const values: Record<string, string> = {
+      fileName: body.fileName,
+      code: body.code,
+      previousLines: body.previousLines ?? "",
+      currentLine: body.currentLine,
+      textBeforeCursor: body.textBeforeCursor,
+      textAfterCursor: body.textAfterCursor,
+      nextLines: body.nextLines ?? "",
+      lineNumber: body.lineNumber.toString(),
+      relatedFiles: relatedFilesSection(body.relatedFiles),
+      recentEdits: recentEditsSection(body.recentEdits),
+    };
+    const prompt = SUGGESTION_PROMPT.replace(
+      /\{(\w+)\}/g,
+      (match, key: string) => values[key] ?? match,
+    );
 
     const { output } = await generateText({
       model: openRouter.chat("qwen/qwen3-coder-next"),
       output: Output.object({ schema: suggestionSchema }),
       prompt,
     });
-    return NextResponse.json({ suggestion: output.suggestion });
+    const normalized = suggestionSchema.safeParse(output);
+    return NextResponse.json({
+      edits: normalized.success
+        ? normalized.data.edits.filter(
+            (edit) => edit.anchor !== edit.replacement,
+          )
+        : [],
+    });
   } catch (error) {
     console.error("Error generating suggestion:", error);
     return NextResponse.json(

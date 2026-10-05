@@ -2,17 +2,43 @@ import { Id } from "../../../../convex/_generated/dataModel";
 import { TopNavigation } from "./top-navigation";
 import { useEditor } from "../hooks/use-editor";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
-import { useFile, useUpdateFile } from "@/features/projects/hooks/use-files";
+import {
+  useFile,
+  useFiles,
+  useFilePath,
+  useUpdateFile,
+} from "@/features/projects/hooks/use-files";
 import Image from "next/image";
 import { CodeEditor } from "./code-editor";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { projectPaths } from "../../../../convex/lib/project-paths";
+import type { ProjectSourceFile } from "../extensions/suggestion/related-context";
 import { AlertTriangleIcon } from "lucide-react";
 
 const DEBOUNCE_MS = 1500;
 
 export const EditorView = ({ projectId }: { projectId: Id<"projects"> }) => {
-  const { activeTabId } = useEditor(projectId);
+  const { activeTabId, openTabs } = useEditor(projectId);
   const activeFile = useFile(activeTabId);
+  const filePath = useFilePath(activeTabId);
+  const files = useFiles(projectId);
+  const projectFiles = useMemo<ProjectSourceFile[]>(() => {
+    if (!files) return [];
+    const { pathById } = projectPaths(files);
+    return files.flatMap((file) =>
+      file.type === "file" && file.content !== undefined
+        ? [{ path: pathById.get(file._id)!, content: file.content }]
+        : [],
+    );
+  }, [files]);
+  const openTabPaths = useMemo(() => {
+    if (!files) return [];
+    const { pathById } = projectPaths(files);
+    return openTabs.flatMap((id) => {
+      const path = pathById.get(id);
+      return path ? [path] : [];
+    });
+  }, [files, openTabs]);
   const updateFile = useUpdateFile();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -45,9 +71,12 @@ export const EditorView = ({ projectId }: { projectId: Id<"projects"> }) => {
             />
           </div>
         )}
-        {isActiveFileText && (
+        {isActiveFileText && filePath && (
           <CodeEditor
             fileName={activeFile.name}
+            filePath={filePath.map((entry) => entry.name).join("/")}
+            projectFiles={projectFiles}
+            openTabPaths={openTabPaths}
             key={activeFile._id}
             initialValue={activeFile.content}
             onChange={(content: string) => {

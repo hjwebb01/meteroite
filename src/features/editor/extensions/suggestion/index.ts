@@ -6,24 +6,44 @@ import {
   ViewUpdate,
   WidgetType,
   keymap,
+  gutter,
+  GutterMarker,
 } from "@codemirror/view";
-import { StateEffect, StateField } from "@codemirror/state";
+import { Prec, StateField } from "@codemirror/state";
+import {
+  predictionState,
+  setPrediction,
+  resolvePredictions,
+  predictionQueueState,
+  setPredictionQueue,
+  advancePrediction,
+} from "./prediction";
 import { fetcher } from "./fetcher";
+import { buildCompletionRequest } from "./completion-request";
+import { recordChanges, type EditHunk } from "./edit-history";
+import type { ProjectSourceFile } from "./related-context";
 
-const setSuggestionEffect = StateEffect.define<string | null>();
-const suggestionState = StateField.define<string | null>({
+/** Recent user edits in this editor; a new editor per Project file resets it. */
+const editHistoryState = StateField.define<EditHunk[]>({
   create() {
-    return null;
+    return [];
   },
-  update(value, transaction) {
-    for (const effect of transaction.effects) {
-      if (effect.is(setSuggestionEffect)) {
-        return effect.value;
-      }
-    }
-    return value;
+  update(history, transaction) {
+    if (!transaction.docChanged) return history;
+    return recordChanges(
+      history,
+      transaction.changes,
+      transaction.startState.doc,
+      transaction.state.doc,
+    );
   },
 });
+
+interface SuggestionOptions {
+  getOpenTabPaths: () => readonly string[];
+  getPath: () => string;
+  getProjectFiles: () => readonly ProjectSourceFile[];
+}
 
 // WidgetType: Creates custom DOM elements to display in the editor.
 // toDom() is called by codemirror to create the actual html element.
@@ -40,105 +60,83 @@ class SuggestionWidget extends WidgetType {
   }
 }
 
-let debounceTimer: number | null = null;
-let isWaitingForSuggestion = false;
 const DEBOUNCE_DELAY = 300;
 
-let currentAbortController: AbortController | null = null;
-
-/** Full-file prompts are expensive; send a cursor-centered excerpt for large buffers. */
-const MAX_CODE_SNIPPET_CHARS = 14_000;
-const CURSOR_RADIUS_CHARS = 6_000;
-
-const generatePayload = (view: EditorView, fileName: string) => {
-  const fullCode = view.state.doc.toString();
-  if (!fullCode || fullCode.trim().length === 0) return null;
-
-  const cursorPosition = view.state.selection.main.head;
-  const currentLine = view.state.doc.lineAt(cursorPosition);
-  const cursorInLine = cursorPosition - currentLine.from;
-  const previousLines: string[] = [];
-  const previousLinesToFetch = Math.min(5, currentLine.number - 1);
-  for (let i = previousLinesToFetch; i >= 0; i--) {
-    previousLines.push(view.state.doc.line(currentLine.number - i).text);
-  }
-  const nextLines: string[] = [];
-  const totalLines = view.state.doc.lines;
-  const nextLinesToFetch = Math.min(5, totalLines - currentLine.number);
-  for (let i = 1; i <= nextLinesToFetch; i++) {
-    nextLines.push(view.state.doc.line(currentLine.number + i).text);
-  }
-
-  let code = fullCode;
-  if (fullCode.length > MAX_CODE_SNIPPET_CHARS) {
-    const lo = Math.max(0, cursorPosition - CURSOR_RADIUS_CHARS);
-    const hi = Math.min(fullCode.length, cursorPosition + CURSOR_RADIUS_CHARS);
-    const head = lo > 0 ? "[…]\n" : "";
-    const tail = hi < fullCode.length ? "\n[…]" : "";
-    code = `${head}${fullCode.slice(lo, hi)}${tail}`;
-  }
-
-  return {
-    fileName,
-    code,
-    currentLine: currentLine.text,
-    previousLines: previousLines.join("\n"),
-    textBeforeCursor: currentLine.text.slice(0, cursorInLine),
-    textAfterCursor: currentLine.text.slice(cursorInLine),
-    nextLines: nextLines.join("\n"),
-    lineNumber: currentLine.number,
-  };
-};
-
-const createDebouncePlugin = (fileName: string) => {
+const createDebouncePlugin = ({
+  getPath,
+  getProjectFiles,
+  getOpenTabPaths,
+}: SuggestionOptions) => {
   return ViewPlugin.fromClass(
     class {
+      debounceTimer: number | null = null;
+      currentAbortController: AbortController | null = null;
       constructor(view: EditorView) {
         this.triggerSuggestion(view);
       }
 
       update(update: ViewUpdate) {
-        if (update.docChanged || update.selectionSet) {
+        if (update.docChanged) {
           this.triggerSuggestion(update.view);
         }
       }
 
       triggerSuggestion(view: EditorView) {
-        if (debounceTimer !== null) {
-          clearTimeout(debounceTimer);
+        if (this.debounceTimer !== null) {
+          clearTimeout(this.debounceTimer);
         }
-        if (currentAbortController !== null) {
-          currentAbortController.abort();
+        if (this.currentAbortController !== null) {
+          this.currentAbortController.abort();
         }
 
-        currentAbortController = new AbortController();
-        isWaitingForSuggestion = true;
-        debounceTimer = window.setTimeout(async () => {
-          const payload = generatePayload(view, fileName);
+        if (view.state.field(predictionState)) return;
+        this.debounceTimer = window.setTimeout(async () => {
+          const payload = buildCompletionRequest({
+            doc: view.state.doc,
+            cursor: view.state.selection.main.head,
+            path: getPath(),
+            projectFiles: getProjectFiles(),
+            openTabPaths: getOpenTabPaths(),
+            recentEdits: view.state.field(editHistoryState),
+          });
           if (!payload) {
-            isWaitingForSuggestion = false;
             view.dispatch({
-              effects: setSuggestionEffect.of(null),
+              effects: setPrediction.of(null),
             });
             return;
           }
-          currentAbortController = new AbortController();
-          const suggestion = await fetcher(
+          this.currentAbortController = new AbortController();
+          const requestDoc = view.state.doc;
+          const requestCursor = view.state.selection.main.head;
+          const controller = this.currentAbortController;
+          const edits = await fetcher(
             payload,
-            currentAbortController.signal,
+            this.currentAbortController.signal,
           );
-          isWaitingForSuggestion = false;
+          if (
+            controller.signal.aborted ||
+            view.state.field(predictionState) !== null ||
+            view.state.doc !== requestDoc
+          )
+            return;
           view.dispatch({
-            effects: setSuggestionEffect.of(suggestion),
+            effects: setPredictionQueue.of(
+              resolvePredictions(
+                requestDoc.toString(),
+                edits ?? [],
+                requestCursor,
+                view.visibleRanges,
+              ),
+            ),
           });
         }, DEBOUNCE_DELAY);
       }
       destroy() {
-        if (debounceTimer !== null) {
-          clearTimeout(debounceTimer);
+        if (this.debounceTimer !== null) {
+          clearTimeout(this.debounceTimer);
         }
-        if (currentAbortController !== null) {
-          currentAbortController.abort();
+        if (this.currentAbortController !== null) {
+          this.currentAbortController.abort();
         }
       }
     },
@@ -153,7 +151,11 @@ const renderPlugin = ViewPlugin.fromClass(
     update(update: ViewUpdate) {
       const suggestionChanged = update.transactions.some((transaction) => {
         return transaction.effects.some((effect) => {
-          return effect.is(setSuggestionEffect);
+          return (
+            effect.is(setPrediction) ||
+            effect.is(setPredictionQueue) ||
+            effect.is(advancePrediction)
+          );
         });
       });
       const shouldRebuild =
@@ -164,20 +166,26 @@ const renderPlugin = ViewPlugin.fromClass(
       }
     }
     build(view: EditorView) {
-      if (isWaitingForSuggestion) return Decoration.none;
-
-      const suggestion = view.state.field(suggestionState);
+      const suggestion = view.state.field(predictionState);
       if (!suggestion) {
         return Decoration.none;
       }
 
-      const cursor = view.state.selection.main.head;
-      return Decoration.set([
+      const decorations = [
         Decoration.widget({
-          widget: new SuggestionWidget(suggestion),
+          widget: new SuggestionWidget(suggestion.replacement),
           side: 1,
-        }).range(cursor),
-      ]);
+        }).range(suggestion.to),
+      ];
+      if (suggestion.to > suggestion.from)
+        decorations.push(
+          Decoration.mark({
+            attributes: {
+              style: "text-decoration: line-through; opacity: 0.6",
+            },
+          }).range(suggestion.from, suggestion.to),
+        );
+      return Decoration.set(decorations, true);
     }
   },
 
@@ -185,31 +193,88 @@ const renderPlugin = ViewPlugin.fromClass(
     decorations: (plugin) => plugin.decorations,
   },
 );
-const acceptSuggestionKeymap = keymap.of([
-  {
-    key: "Tab",
-    run: (view) => {
-      const suggestion = view.state.field(suggestionState);
-      if (!suggestion) return false;
+export const acceptPrediction = (view: EditorView) => {
+  const prediction = view.state.field(predictionState);
+  if (!prediction) return false;
+  const selection = view.state.selection.main;
+  if (!selection.empty || selection.head !== prediction.from) {
+    view.dispatch({
+      selection: { anchor: prediction.from },
+      effects: [
+        setPredictionQueue.of([
+          { ...prediction, jumped: true },
+          ...view.state.field(predictionQueueState).slice(1),
+        ]),
+        EditorView.scrollIntoView(prediction.from),
+      ],
+    });
+  } else {
+    view.dispatch({
+      changes: {
+        from: prediction.from,
+        to: prediction.to,
+        insert: prediction.replacement,
+      },
+      selection: { anchor: prediction.from + prediction.replacement.length },
+      effects: advancePrediction.of(null),
+    });
+  }
+  return true;
+};
 
-      const cursor = view.state.selection.main.head;
-      view.dispatch({
-        changes: {
-          from: cursor,
-          insert: suggestion,
-        },
-        selection: {
-          anchor: cursor + suggestion.length,
-        },
-        effects: setSuggestionEffect.of(null),
-      });
-      return true;
+export const clearPredictions = (view: EditorView) => {
+  if (!view.state.field(predictionState)) return false;
+  view.dispatch({ effects: setPrediction.of(null) });
+  return true;
+};
+
+const acceptSuggestionKeymap = Prec.highest(
+  keymap.of([
+    { key: "Tab", run: acceptPrediction },
+    {
+      key: "Escape",
+      run: clearPredictions,
     },
+  ]),
+);
+
+class PredictionMarker extends GutterMarker {
+  toDOM() {
+    const marker = document.createElement("span");
+    marker.textContent = "✦";
+    marker.title = "Suggested edit: Tab to jump, Tab again to apply";
+    return marker;
+  }
+}
+const marker = new PredictionMarker();
+export const predictionGutter = gutter({
+  lineMarker(view, line) {
+    return view.state
+      .field(predictionQueueState)
+      .some(
+        (prediction) =>
+          view.state.doc.lineAt(prediction.from).from === line.from,
+      )
+      ? marker
+      : null;
   },
-]);
-export const suggestion = (fileName: string) => [
-  suggestionState,
+  lineMarkerChange: (update) =>
+    update.docChanged ||
+    update.transactions.some((transaction) =>
+      transaction.effects.some(
+        (effect) =>
+          effect.is(setPrediction) ||
+          effect.is(setPredictionQueue) ||
+          effect.is(advancePrediction),
+      ),
+    ),
+});
+
+export const suggestion = (options: SuggestionOptions) => [
+  predictionState,
+  editHistoryState,
   renderPlugin,
+  predictionGutter,
   acceptSuggestionKeymap,
-  createDebouncePlugin(fileName),
+  createDebouncePlugin(options),
 ];
