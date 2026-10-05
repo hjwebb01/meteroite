@@ -321,6 +321,11 @@ export const updateMessageProgress = mutation({
     if (args.progressSteps !== undefined) {
       patch.progressSteps = args.progressSteps;
     }
+    const message = await ctx.db.get(args.messageId);
+    // A cancelled or finished turn must not get progress back from a late worker write.
+    if (message?.status !== "processing") {
+      return;
+    }
     await ctx.db.patch(args.messageId, patch);
   },
 });
@@ -333,52 +338,14 @@ export const updateMessageContent = mutation({
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
+    const message = await ctx.db.get(args.messageId);
+    if (message?.status !== "processing") {
+      return;
+    }
     await ctx.db.patch(args.messageId, {
       content: args.content,
       status: "completed" as const,
     });
-  },
-});
-
-export const getProcessingMessages = query({
-  args: {
-    internalKey: v.string(),
-    projectId: v.id("projects"),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-    return await ctx.db
-      .query("messages")
-      .withIndex("by_project_status", (q) =>
-        q.eq("projectId", args.projectId).eq("status", "processing"),
-      )
-      .collect();
-  },
-});
-
-export const updateMessageStatus = mutation({
-  args: {
-    internalKey: v.string(),
-    messageId: v.id("messages"),
-    status: v.union(
-      v.literal("processing"),
-      v.literal("completed"),
-      v.literal("cancelled"),
-    ),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-    if (args.status === "cancelled") {
-      await ctx.db.patch(args.messageId, {
-        status: args.status,
-        progressLabel: undefined,
-        progressSteps: undefined,
-      });
-    } else {
-      await ctx.db.patch(args.messageId, {
-        status: args.status,
-      });
-    }
   },
 });
 

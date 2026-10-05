@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
+import { fetchMutation } from "convex/nextjs";
 import { Id } from "../../../../convex/_generated/dataModel";
 import { api } from "../../../../convex/_generated/api";
-import { convex } from "@/lib/convex-client";
+import { getConvexAuth } from "@/lib/convex-auth";
 import { inngest } from "@/inngest/client";
 
 const requestSchema = z.object({
@@ -12,76 +12,31 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const { userId } = await auth();
+  const convexAuth = await getConvexAuth();
 
-  if (!userId) {
+  if (!convexAuth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
-  if (!internalKey) {
-    return NextResponse.json(
-      { error: "Internal key is not set" },
-      { status: 500 },
-    );
   }
 
   const body = await request.json();
   const { conversationId, message } = requestSchema.parse(body);
 
-  const conversation = await convex.query(api.system.getConversationById, {
-    internalKey,
-    conversationId: conversationId as Id<"conversations">,
-  });
-  if (!conversation) {
-    return NextResponse.json(
-      { error: "Conversation not found" },
-      { status: 404 },
+  // Runs as the user, so Convex rejects conversations they don't own.
+  const { projectId, userMessageId, assistantMessageId, cancelledMessageIds } =
+    await fetchMutation(
+      api.conversations.startMessage,
+      { conversationId: conversationId as Id<"conversations">, message },
+      { token: convexAuth.token },
+    );
+
+  if (cancelledMessageIds.length > 0) {
+    await inngest.send(
+      cancelledMessageIds.map((messageId) => ({
+        name: "message/cancel",
+        data: { messageId },
+      })),
     );
   }
-  const projectId = conversation.projectId;
-
-  const processingMessages = await convex.query(
-    api.system.getProcessingMessages,
-    {
-      internalKey,
-      projectId,
-    },
-  );
-  if (processingMessages.length > 0) {
-    await Promise.all(
-      processingMessages.map(async (msg) => {
-        await inngest.send({
-          name: "message/cancel",
-          data: {
-            messageId: msg._id,
-          },
-        });
-
-        await convex.mutation(api.system.updateMessageStatus, {
-          internalKey,
-          messageId: msg._id,
-          status: "cancelled",
-        });
-      }),
-    );
-  }
-  const userMessageId = await convex.mutation(api.system.createMessage, {
-    internalKey,
-    conversationId: conversationId as Id<"conversations">,
-    projectId,
-    role: "user",
-    content: message,
-  });
-
-  const assistantMessageId = await convex.mutation(api.system.createMessage, {
-    internalKey,
-    conversationId: conversationId as Id<"conversations">,
-    projectId,
-    role: "assistant",
-    content: "",
-    status: "processing",
-  });
 
   const event = await inngest.send({
     name: "message/sent",

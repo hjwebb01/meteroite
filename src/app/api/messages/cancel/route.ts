@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { convex } from "@/lib/convex-client";
+import { fetchMutation } from "convex/nextjs";
+import { getConvexAuth } from "@/lib/convex-auth";
 import { api } from "../../../../../convex/_generated/api";
 import { inngest } from "@/inngest/client";
 import { Id } from "../../../../../convex/_generated/dataModel";
@@ -11,48 +11,30 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const { userId } = await auth();
-  if (!userId) {
+  const convexAuth = await getConvexAuth();
+  if (!convexAuth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const body = await request.json();
   const { projectId } = requestSchema.parse(body);
-  const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
-  if (!internalKey) {
-    return NextResponse.json(
-      { error: "Internal key not set" },
-      { status: 500 },
-    );
-  }
-  const processingMessages = await convex.query(
-    api.system.getProcessingMessages,
-    {
-      internalKey,
-      projectId: projectId as Id<"projects">,
-    },
+
+  const cancelledIds = await fetchMutation(
+    api.conversations.cancelProcessingMessages,
+    { projectId: projectId as Id<"projects"> },
+    { token: convexAuth.token },
   );
 
-  if (processingMessages.length === 0) {
+  if (cancelledIds.length === 0) {
     return NextResponse.json({ success: true, cancelled: false });
   }
 
-  const cancelledIds = await Promise.all(
-    processingMessages.map(async (msg) => {
-      await inngest.send({
-        name: "message/cancel",
-        data: {
-          messageId: msg._id,
-        },
-      });
-
-      await convex.mutation(api.system.updateMessageStatus, {
-        internalKey,
-        messageId: msg._id,
-        status: "cancelled",
-      });
-      return msg._id;
-    }),
+  await inngest.send(
+    cancelledIds.map((messageId) => ({
+      name: "message/cancel",
+      data: { messageId },
+    })),
   );
+
   return NextResponse.json({
     success: true,
     cancelled: true,

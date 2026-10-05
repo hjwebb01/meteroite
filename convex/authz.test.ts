@@ -28,6 +28,71 @@ const setup = async () => {
   return { t, alice, bob, aliceProject, bobProject, aliceConversation };
 };
 
+describe("messages", () => {
+  test("users cannot start or cancel turns in projects they don't own", async () => {
+    const { bob, aliceProject, aliceConversation } = await setup();
+
+    await expect(
+      bob.mutation(api.conversations.startMessage, {
+        conversationId: aliceConversation,
+        message: "delete everything",
+      }),
+    ).rejects.toThrow(/Unauthorized/);
+    await expect(
+      bob.mutation(api.conversations.cancelProcessingMessages, {
+        projectId: aliceProject,
+      }),
+    ).rejects.toThrow(/Unauthorized/);
+  });
+
+  test("starting a turn cancels the previous one atomically", async () => {
+    const { alice, aliceConversation } = await setup();
+
+    const first = await alice.mutation(api.conversations.startMessage, {
+      conversationId: aliceConversation,
+      message: "one",
+    });
+    const second = await alice.mutation(api.conversations.startMessage, {
+      conversationId: aliceConversation,
+      message: "two",
+    });
+
+    expect(second.cancelledMessageIds).toEqual([first.assistantMessageId]);
+    const messages = await alice.query(api.conversations.getMessages, {
+      conversationId: aliceConversation,
+    });
+    expect(messages.filter((m) => m.status === "processing")).toHaveLength(1);
+  });
+
+  test("a cancelled turn stays cancelled when its worker finishes late", async () => {
+    const { t, alice, aliceProject, aliceConversation } = await setup();
+
+    const { assistantMessageId } = await alice.mutation(
+      api.conversations.startMessage,
+      { conversationId: aliceConversation, message: "hi" },
+    );
+    await alice.mutation(api.conversations.cancelProcessingMessages, {
+      projectId: aliceProject,
+    });
+
+    await t.mutation(api.system.updateMessageProgress, {
+      internalKey,
+      messageId: assistantMessageId,
+      progressLabel: "Late progress",
+    });
+    await t.mutation(api.system.updateMessageContent, {
+      internalKey,
+      messageId: assistantMessageId,
+      content: "late answer",
+    });
+
+    const message = await t.run((ctx) => ctx.db.get(assistantMessageId));
+    expect(message?.status).toBe("cancelled");
+    expect(message?.content).toBe("");
+    expect(message?.progressLabel).toBeUndefined();
+  });
+});
+
 describe("files", () => {
   test("a parent folder from another project is rejected", async () => {
     const { t, bob, aliceProject, bobProject } = await setup();
