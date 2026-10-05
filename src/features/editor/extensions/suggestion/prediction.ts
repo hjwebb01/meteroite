@@ -103,19 +103,25 @@ export const predictionQueueState = StateField.define<Prediction[]>({
       (transaction.isUserEvent("input") || transaction.isUserEvent("delete"))
     )
       queue = [];
-    if (transaction.docChanged) {
-      const doc = transaction.newDoc.toString();
-      queue = queue.flatMap((prediction) => {
+    if (transaction.docChanged && queue.length > 0) {
+      const mappedQueue = queue.flatMap((prediction) => {
         const mapped = mapPrediction(prediction, transaction.changes);
         if (!mapped) return [];
-        if (
-          mapped.anchor &&
-          (doc.slice(mapped.from, mapped.to) !== mapped.anchor ||
-            doc.indexOf(mapped.anchor) !== mapped.from ||
-            doc.indexOf(mapped.anchor, mapped.from + 1) !== -1)
-        )
-          return [];
         return [mapped];
+      });
+      let doc: string | null = null;
+      queue = mappedQueue.filter((prediction) => {
+        if (!prediction.anchor) return true;
+        if (
+          transaction.newDoc.sliceString(prediction.from, prediction.to) !==
+          prediction.anchor
+        )
+          return false;
+        doc ??= transaction.newDoc.toString();
+        return (
+          doc.indexOf(prediction.anchor) === prediction.from &&
+          doc.indexOf(prediction.anchor, prediction.from + 1) === -1
+        );
       });
       queue = orderPredictions(queue, transaction.newSelection.main.head);
     }

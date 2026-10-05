@@ -1,5 +1,5 @@
-import { ChangeSet, EditorState } from "@codemirror/state";
-import { describe, expect, it } from "vitest";
+import { ChangeSet, EditorState, Text } from "@codemirror/state";
+import { describe, expect, it, vi } from "vitest";
 import {
   mapPrediction,
   predictionState,
@@ -10,6 +10,7 @@ import {
   setPredictionQueue,
 } from "./prediction";
 import { acceptPrediction, clearPredictions } from "./index";
+import { editHistoryState } from "./edit-history";
 import type { EditorView } from "@codemirror/view";
 
 describe("predictions", () => {
@@ -114,15 +115,26 @@ const queuedView = (
 };
 
 describe("prediction queue", () => {
+  it("does not stringify the document when mapping an empty queue", () => {
+    const state = EditorState.create({
+      doc: "some text",
+      extensions: [predictionQueueState],
+    });
+    const toString = vi.spyOn(Text.prototype, "toString");
+
+    state.update({ changes: { from: 0, insert: "!" } });
+
+    expect(toString).not.toHaveBeenCalled();
+    toString.mockRestore();
+  });
+
   it.each([
     { anchor: "old", replacement: "new" },
     { anchor: "", replacement: "!" },
   ])("applies immediately at the target for $anchor", (edit) => {
     const view = queuedView("xx old", [edit], 3);
     expect(acceptPrediction(view)).toBe(true);
-    expect(view.state.doc.toString()).toBe(
-      edit.anchor ? "xx new" : "xx !old",
-    );
+    expect(view.state.doc.toString()).toBe(edit.anchor ? "xx new" : "xx !old");
     expect(view.state.field(predictionState)).toBeNull();
   });
   it.each([
@@ -137,9 +149,7 @@ describe("prediction queue", () => {
     expect(view.state.doc.toString()).toBe("xx old");
     expect(view.state.selection.main.head).toBe(3);
     expect(acceptPrediction(view)).toBe(true);
-    expect(view.state.doc.toString()).toBe(
-      edit.anchor ? "xx new" : "xx !old",
-    );
+    expect(view.state.doc.toString()).toBe(edit.anchor ? "xx new" : "xx !old");
   });
   it("collapses a nonempty selection with its head at the target before applying", () => {
     const view = queuedView("xx old", [{ anchor: "old", replacement: "new" }]);
@@ -181,6 +191,40 @@ describe("prediction queue", () => {
     for (let i = 0; i < 4; i++) expect(acceptPrediction(view)).toBe(true);
     expect(view.state.doc.toString()).toBe("longer first 2 3");
     expect(acceptPrediction(view)).toBe(false);
+  });
+  it("does not record accepted model output and maps existing hunks", () => {
+    let state = EditorState.create({
+      doc: "old\nb\nc",
+      selection: { anchor: 7 },
+      extensions: [predictionState, editHistoryState],
+    });
+    state = state.update({ changes: { from: 6, to: 7, insert: "C" } }).state;
+    const originalHistory = state.field(editHistoryState);
+    state = state.update({
+      selection: { anchor: 0 },
+      effects: setPredictionQueue.of(
+        resolvePredictions(
+          state.doc.toString(),
+          [{ anchor: "old", replacement: "old\nextra" }],
+          0,
+          [{ from: 0, to: state.doc.length }],
+        ),
+      ),
+    }).state;
+    const view = {
+      get state() {
+        return state;
+      },
+      dispatch(spec: Parameters<EditorState["update"]>[0]) {
+        state = state.update(spec).state;
+      },
+    } as EditorView;
+
+    expect(acceptPrediction(view)).toBe(true);
+    expect(state.field(editHistoryState)).toEqual([
+      { ...originalHistory[0], startLine: 4, endLine: 4 },
+    ]);
+    expect(state.doc.toString()).toBe("old\nextra\nb\nC");
   });
   it("removes overlapping and newly ambiguous edits without losing valid edits", () => {
     const view = queuedView("first second third", [

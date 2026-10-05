@@ -4,6 +4,7 @@ import {
   MAX_HISTORY_CHARS,
   MAX_HUNKS,
   recordChanges,
+  remapHunks,
   type EditHunk,
 } from "./edit-history";
 
@@ -31,6 +32,19 @@ const historySize = (history: readonly EditHunk[]) =>
   );
 
 describe("recordChanges", () => {
+  it("remaps retained hunks without recording a new change", () => {
+    const startDoc = Text.of(["a", "b", "c"]);
+    const endDoc = Text.of(["", "a", "b", "c"]);
+    const changes = ChangeSet.of({ from: 0, insert: "\n" }, startDoc.length);
+    const history: EditHunk[] = [
+      { startLine: 3, endLine: 3, before: "c", after: "C" },
+    ];
+
+    expect(remapHunks(history, changes, startDoc, endDoc)).toEqual([
+      { startLine: 4, endLine: 4, before: "c", after: "C" },
+    ]);
+  });
+
   it("keeps separate hunks for coalesced edits in one ChangeSet", () => {
     const startDoc = Text.of(["a", "b", "c"]);
     const changes = ChangeSet.of(

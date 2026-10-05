@@ -9,7 +9,7 @@ import {
   gutter,
   GutterMarker,
 } from "@codemirror/view";
-import { Prec, StateField } from "@codemirror/state";
+import { Prec } from "@codemirror/state";
 import {
   predictionState,
   setPrediction,
@@ -20,24 +20,8 @@ import {
 } from "./prediction";
 import { fetcher } from "./fetcher";
 import { buildCompletionRequest } from "./completion-request";
-import { recordChanges, type EditHunk } from "./edit-history";
+import { editHistoryState, predictionAccepted } from "./edit-history";
 import type { ProjectSourceFile } from "./related-context";
-
-/** Recent user edits in this editor; a new editor per Project file resets it. */
-const editHistoryState = StateField.define<EditHunk[]>({
-  create() {
-    return [];
-  },
-  update(history, transaction) {
-    if (!transaction.docChanged) return history;
-    return recordChanges(
-      history,
-      transaction.changes,
-      transaction.startState.doc,
-      transaction.state.doc,
-    );
-  },
-});
 
 interface SuggestionOptions {
   getOpenTabPaths: () => readonly string[];
@@ -71,10 +55,6 @@ const createDebouncePlugin = ({
     class {
       debounceTimer: number | null = null;
       currentAbortController: AbortController | null = null;
-      constructor(view: EditorView) {
-        this.triggerSuggestion(view);
-      }
-
       update(update: ViewUpdate) {
         if (update.docChanged) {
           this.triggerSuggestion(update.view);
@@ -217,6 +197,7 @@ export const acceptPrediction = (view: EditorView) => {
       },
       selection: { anchor: prediction.from + prediction.replacement.length },
       effects: advancePrediction.of(null),
+      annotations: predictionAccepted.of(true),
     });
   }
   return true;

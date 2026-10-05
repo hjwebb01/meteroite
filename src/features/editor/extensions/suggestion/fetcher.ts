@@ -1,60 +1,37 @@
 import ky from "ky";
-import { z } from "zod";
 import { toast } from "sonner";
+import {
+  suggestionResponseSchema,
+  type SuggestionRequest,
+  type SuggestionResponse,
+} from "./suggestion-schema";
+import { useAutocompleteModelStore } from "../../store/use-autocomplete-model-store";
 
-const suggestionRequestSchema = z.object({
-  fileName: z.string(),
-  code: z.string(),
-  currentLine: z.string(),
-  previousLines: z.string().optional(),
-  textBeforeCursor: z.string(),
-  textAfterCursor: z.string(),
-  nextLines: z.string().optional(),
-  lineNumber: z.number(),
-  relatedFiles: z
-    .array(z.object({ path: z.string(), signatures: z.string() }))
-    .optional(),
-  recentEdits: z
-    .array(
-      z.object({
-        startLine: z.number(),
-        endLine: z.number(),
-        before: z.string(),
-        after: z.string(),
-      }),
-    )
-    .optional(),
-});
-
-const suggestionResponseSchema = z.object({
-  edits: z.array(z.object({ anchor: z.string(), replacement: z.string() })),
-});
-
-type SuggestionRequest = z.infer<typeof suggestionRequestSchema>;
-type SuggestionResponse = z.infer<typeof suggestionResponseSchema>;
+const ERROR_TOAST_COOLDOWN_MS = 60_000;
+let lastErrorToastAt = -Infinity;
 
 export const fetcher = async (
   payload: SuggestionRequest,
   signal: AbortSignal,
 ): Promise<SuggestionResponse["edits"] | null> => {
   try {
-    const validatedPayload = suggestionRequestSchema.parse(payload);
     const response = await ky
       .post("/api/suggestion", {
-        json: validatedPayload,
+        json: { ...payload, model: useAutocompleteModelStore.getState().model },
         signal,
         timeout: 10_000,
         retry: 0,
       })
-      .json<SuggestionResponse>();
+      .json();
 
-    const validatedResponse = suggestionResponseSchema.parse(response);
-    return validatedResponse.edits;
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      return null;
+    return suggestionResponseSchema.parse(response).edits;
+  } catch {
+    if (signal.aborted) return null;
+    const now = Date.now();
+    if (now - lastErrorToastAt >= ERROR_TOAST_COOLDOWN_MS) {
+      lastErrorToastAt = now;
+      toast.error("Failed to fetch suggestion");
     }
-    toast.error("Failed to fetch suggestion");
     return null;
   }
 };

@@ -19,15 +19,15 @@ describe("coding models", () => {
     expect(resolveCodingModelId(undefined)).toBe(DEFAULT_CODING_MODEL_ID);
     expect(resolveCodingModelId(null)).toBe(DEFAULT_CODING_MODEL_ID);
     expect(resolveCodingModelId("retired/model")).toBe(DEFAULT_CODING_MODEL_ID);
-    expect(resolveCodingModelId("anthropic/claude-opus-5.5")).toBe(
-      "anthropic/claude-opus-5.5",
+    expect(resolveCodingModelId("z-ai/glm-5.3-flash")).toBe(
+      "z-ai/glm-5.3-flash",
     );
     expect(getCodingModel("retired/model").id).toBe(DEFAULT_CODING_MODEL_ID);
   });
 
   test("assertCodingModelId only rejects defined, unsupported ids", () => {
     expect(assertCodingModelId(undefined)).toBeUndefined();
-    expect(assertCodingModelId("openai/gpt-5.4")).toBe("openai/gpt-5.4");
+    expect(assertCodingModelId("deepseek/deepseek-v4.1-flash")).toBe("deepseek/deepseek-v4.1-flash");
     expect(() => assertCodingModelId("openai/not-a-model")).toThrow(
       /Unsupported model/,
     );

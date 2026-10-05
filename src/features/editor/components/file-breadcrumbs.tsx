@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/breadcrumb";
 
 import { Id } from "../../../../convex/_generated/dataModel";
-import Link from "next/link";
+import { AutocompleteModelSelector } from "./autocomplete-model-selector";
 
 export const FileBreadcrumbs = ({
   projectId,
@@ -25,7 +25,7 @@ export const FileBreadcrumbs = ({
 
   if (filePath === undefined || !activeTabId) {
     return (
-      <div className="p-2 bg-background pl-4 border-b">
+      <div className="flex items-center justify-between gap-2 p-2 bg-background pl-4 border-b">
         <Breadcrumb>
           <BreadcrumbList className="sm:gap-0.5 gap-0.5">
             <BreadcrumbItem className="text-sm">
@@ -33,11 +33,12 @@ export const FileBreadcrumbs = ({
             </BreadcrumbItem>
           </BreadcrumbList>
         </Breadcrumb>
+        <AutocompleteModelSelector />
       </div>
     );
   }
   return (
-    <div className="p-2 bg-background pl-4 border-b">
+    <div className="flex items-center justify-between gap-2 p-2 bg-background pl-4 border-b">
       <Breadcrumb>
         <BreadcrumbList className="sm:gap-0.5 gap-0.5">
           {filePath.map((item, index) => {
@@ -64,6 +65,7 @@ export const FileBreadcrumbs = ({
           })}
         </BreadcrumbList>
       </Breadcrumb>
+      <AutocompleteModelSelector />
     </div>
   );
 };
