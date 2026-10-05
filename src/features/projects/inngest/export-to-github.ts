@@ -7,6 +7,7 @@ import { createUserOctokit } from "@/lib/github";
 
 import { api } from "../../../../convex/_generated/api";
 import { Doc, Id } from "../../../../convex/_generated/dataModel";
+import { projectPaths } from "../../../../convex/lib/project-paths";
 
 interface ExportToGithubEvent {
   projectId: Id<"projects">;
@@ -98,37 +99,10 @@ export const exportToGithub = inngest.createFunction(
       })) as FileWithUrl[];
     });
 
-    // Build a map of file IDs to their full paths
-    const buildFilePaths = (files: FileWithUrl[]) => {
-      const fileMap = new Map<Id<"files">, FileWithUrl>();
-      files.forEach((f) => fileMap.set(f._id, f));
-
-      const getFullPath = (file: FileWithUrl): string => {
-        if (!file.parentId) {
-          return file.name;
-        }
-
-        const parent = fileMap.get(file.parentId);
-
-        if (!parent) {
-          return file.name;
-        }
-
-        return `${getFullPath(parent)}/${file.name}`;
-      };
-
-      const paths: Record<string, FileWithUrl> = {};
-      files.forEach((file) => {
-        paths[getFullPath(file)] = file;
-      });
-
-      return paths;
-    };
-
-    const filePaths = buildFilePaths(files);
+    const { fileByPath } = projectPaths(files);
 
     // Filter to only actual files (not folders)
-    const fileEntries = Object.entries(filePaths).filter(
+    const fileEntries = [...fileByPath.entries()].filter(
       ([, file]) => file.type === "file",
     );
 

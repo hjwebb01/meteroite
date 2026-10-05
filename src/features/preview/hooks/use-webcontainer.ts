@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { WebContainer } from "@webcontainer/api";
 
-import { buildFileTree, getFilePath } from "@/features/preview/utils/file-tree";
+import { buildFileTree } from "@/features/preview/utils/file-tree";
 import { useFiles } from "@/features/projects/hooks/use-files";
 
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
+import { projectPaths } from "../../../../convex/lib/project-paths";
 
 // Singleton WebContainer instance
 let webcontainerInstance: WebContainer | null = null;
@@ -141,12 +142,12 @@ export const useWebContainer = ({
     const container = containerRef.current;
     if (!container || !files || status !== "running") return;
 
-    const filesMap = new Map(files.map((f) => [f._id, f]));
+    const { pathById } = projectPaths(files);
 
     for (const file of files) {
       if (file.type !== "file" || file.storageId || !file.content) continue;
 
-      const filePath = getFilePath(file, filesMap);
+      const filePath = pathById.get(file._id)!;
       container.fs.writeFile(filePath, file.content);
     }
   }, [files, status]);

@@ -1,7 +1,7 @@
 import { v } from "convex/values";
-import { Doc, Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
 import { getOwnedProject, verifyAuth } from "./auth";
+import { projectPaths } from "./lib/project-paths";
 import * as projectFiles from "./lib/project-files";
 
 export const getFiles = query({
@@ -92,18 +92,16 @@ export const getFilePath = query({
     if (project.ownerId !== userId.subject) {
       throw new Error("Unauthorized to access this project");
     }
-    const path: { _id: string; name: string }[] = [];
-    let current: Id<"files"> | undefined = args.id;
-
-    while (current) {
-      const file = (await ctx.db.get("files", current)) as
-        | Doc<"files">
-        | undefined;
-      if (!file) break;
-      path.unshift({ _id: file._id, name: file.name });
-      current = file.parentId;
-    }
-    return path;
+    const files = await ctx.db
+      .query("files")
+      .withIndex("by_project", (q) => q.eq("projectId", file.projectId))
+      .collect();
+    const { pathById, fileByPath } = projectPaths(files);
+    const parts = pathById.get(file._id)!.split("/");
+    return parts.map((_, index) => {
+      const ancestor = fileByPath.get(parts.slice(0, index + 1).join("/"))!;
+      return { _id: ancestor._id, name: ancestor.name };
+    });
   },
 });
 

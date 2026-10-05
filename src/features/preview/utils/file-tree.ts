@@ -1,6 +1,7 @@
 import { FileSystemTree } from "@webcontainer/api";
 
-import { Doc, Id } from "../../../../convex/_generated/dataModel";
+import { Doc } from "../../../../convex/_generated/dataModel";
+import { projectPaths } from "../../../../convex/lib/project-paths";
 
 type FileDoc = Doc<"files">;
 
@@ -9,26 +10,10 @@ type FileDoc = Doc<"files">;
  */
 export const buildFileTree = (files: FileDoc[]): FileSystemTree => {
   const tree: FileSystemTree = {};
-  // Fast lookup so we can walk parent links without repeated scans.
-  const filesMap = new Map(files.map((f) => [f._id, f]));
-
-  const getPath = (file: FileDoc): string[] => {
-    const parts: string[] = [file.name];
-    let parentId = file.parentId;
-
-    // Rebuild the full path by following parents back to the root.
-    while (parentId) {
-      const parent = filesMap.get(parentId);
-      if (!parent) break;
-      parts.unshift(parent.name);
-      parentId = parent.parentId;
-    }
-
-    return parts;
-  };
+  const { pathById } = projectPaths(files);
 
   for (const file of files) {
-    const pathParts = getPath(file);
+    const pathParts = pathById.get(file._id)!.split("/");
     let current = tree;
 
     for (let i = 0; i < pathParts.length; i++) {
@@ -57,24 +42,4 @@ export const buildFileTree = (files: FileDoc[]): FileSystemTree => {
   }
 
   return tree;
-};
-
-/**
- * Get full path for a file by traversing parent chain
- */
-export const getFilePath = (
-  file: FileDoc,
-  filesMap: Map<Id<"files">, FileDoc>,
-): string => {
-  const parts: string[] = [file.name];
-  let parentId = file.parentId;
-
-  while (parentId) {
-    const parent = filesMap.get(parentId);
-    if (!parent) break;
-    parts.unshift(parent.name);
-    parentId = parent.parentId;
-  }
-
-  return parts.join("/");
 };

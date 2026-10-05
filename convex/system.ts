@@ -2,6 +2,7 @@ import { MAX_AGENT_CREATE_FILES_PER_MUTATION } from "./agentLimits";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { projectPaths } from "./lib/project-paths";
 import * as projectFiles from "./lib/project-files";
 import { normalizeWorkspacePathToSegments } from "./lib/project-files";
 import { v } from "convex/values";
@@ -97,66 +98,6 @@ const validateInternalKey = (key: string) => {
     throw new Error("Invalid internal key");
   }
 };
-
-/**
- * Computes workspace-relative paths for every file/folder in a project.
- * Used by getProjectFilesWithPaths and agentReadFiles.
- */
-function buildPathsForProjectFiles(files: Doc<"files">[]): {
-  pathById: Map<Id<"files">, string>;
-  fileByPath: Map<string, Doc<"files">>;
-} {
-  const byId = new Map(files.map((f) => [f._id, f]));
-  const pathCache = new Map<Id<"files">, string>();
-  const maxDepth = files.length + 1;
-
-  const pathFor = (
-    id: Id<"files">,
-    chain: Set<Id<"files">>,
-    depth: number,
-  ): string => {
-    const cached = pathCache.get(id);
-    if (cached !== undefined) {
-      return cached;
-    }
-    if (depth > maxDepth) {
-      throw new Error("Invalid file tree: path depth exceeds project file count");
-    }
-    if (chain.has(id)) {
-      throw new Error("Invalid file tree: cycle in parent chain");
-    }
-    const node = byId.get(id);
-    if (!node) {
-      throw new Error("Invalid file tree: missing file record");
-    }
-    chain.add(id);
-    try {
-      if (!node.parentId) {
-        const result = node.name;
-        pathCache.set(id, result);
-        return result;
-      }
-      if (!byId.get(node.parentId)) {
-        throw new Error("Invalid file tree: parent record not found");
-      }
-      const parentPath = pathFor(node.parentId, chain, depth + 1);
-      const result = parentPath ? `${parentPath}/${node.name}` : node.name;
-      pathCache.set(id, result);
-      return result;
-    } finally {
-      chain.delete(id);
-    }
-  };
-
-  const pathById = new Map<Id<"files">, string>();
-  const fileByPath = new Map<string, Doc<"files">>();
-  for (const f of files) {
-    const p = pathFor(f._id, new Set(), 0);
-    pathById.set(f._id, p);
-    fileByPath.set(p, f);
-  }
-  return { pathById, fileByPath };
-}
 
 function fileDocToAgentReadResult(
   doc: Doc<"files">,
@@ -413,7 +354,7 @@ export const getProjectFilesWithPaths = query({
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
-    const { pathById } = buildPathsForProjectFiles(files);
+    const { pathById } = projectPaths(files);
 
     return files.map((f) => ({
       id: f._id,
@@ -449,7 +390,7 @@ export const agentListProjectFiles = query({
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
-    const { pathById } = buildPathsForProjectFiles(files);
+    const { pathById } = projectPaths(files);
 
     const rows = files.map((f) => ({
       id: f._id,
@@ -525,7 +466,7 @@ export const agentReadFiles = query({
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
       .collect();
-    const { pathById, fileByPath } = buildPathsForProjectFiles(files);
+    const { pathById, fileByPath } = projectPaths(files);
 
     const results: Array<
       | {

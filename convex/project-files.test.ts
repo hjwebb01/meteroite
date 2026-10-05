@@ -6,6 +6,7 @@ import type { Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
 import { createFileAtPath } from "./lib/project-files";
 import schema from "./schema";
+import { buildFileTree } from "../src/features/preview/utils/file-tree";
 
 const modules = import.meta.glob("./**/*.ts");
 const internalKey = "project-files-test-key";
@@ -580,5 +581,41 @@ describe("deletion and import cleanup", () => {
     expect(
       await w.other.query(api.files.getFiles, { projectId: w.otherProjectId }),
     ).toHaveLength(1);
+  });
+});
+
+describe("project path consumers", () => {
+  test("keeps agent paths, preview paths, and breadcrumbs consistent for orphans", async () => {
+    const w = await setup();
+    const { rootId, folderId, fileId } = await w.t.run(async (ctx) => {
+      const rootId = await ctx.db.insert("files", {
+        projectId: w.projectId, updatedAt: 1, name: "root", type: "folder",
+      });
+      const folderId = await ctx.db.insert("files", {
+        projectId: w.projectId, updatedAt: 1, name: "src", type: "folder", parentId: rootId,
+      });
+      const fileId = await ctx.db.insert("files", {
+        projectId: w.projectId, updatedAt: 1, name: "app.ts", type: "file",
+        parentId: folderId, content: "source",
+      });
+      return { rootId, folderId, fileId };
+    });
+    expect(await w.owner.query(api.files.getFilePath, { id: fileId })).toEqual([
+      { _id: rootId, name: "root" },
+      { _id: folderId, name: "src" },
+      { _id: fileId, name: "app.ts" },
+    ]);
+    await w.t.run((ctx) => ctx.db.delete(rootId));
+    expect(await w.owner.query(api.files.getFilePath, { id: fileId })).toEqual([
+      { _id: folderId, name: "src" },
+      { _id: fileId, name: "app.ts" },
+    ]);
+    const paths = await w.t.query(api.system.getProjectFilesWithPaths, {
+      internalKey, projectId: w.projectId,
+    });
+    expect(paths.find((file) => file.id === fileId)?.path).toBe("src/app.ts");
+    expect(buildFileTree(await files(w))).toEqual({
+      src: { directory: { "app.ts": { file: { contents: "source" } } } },
+    });
   });
 });
