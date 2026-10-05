@@ -1,4 +1,6 @@
 import type { Text } from "@codemirror/state";
+import type { EditHunk } from "./edit-history";
+import { buildRelatedContext, type ProjectSourceFile } from "./related-context";
 
 /** Full-file prompts are expensive; send a cursor-centered excerpt for large buffers. */
 const MAX_CODE_SNIPPET_CHARS = 14_000;
@@ -10,12 +12,19 @@ export interface CompletionRequestInput {
   cursor: number;
   /** Workspace-relative path of the Project file being edited. */
   path: string;
+  /** Project files used to resolve imports; omit to send no related context. */
+  projectFiles?: readonly ProjectSourceFile[];
+  openTabPaths?: readonly string[];
+  recentEdits?: readonly EditHunk[];
 }
 
 export const buildCompletionRequest = ({
   doc,
   cursor,
   path,
+  projectFiles = [],
+  recentEdits = [],
+  openTabPaths = [],
 }: CompletionRequestInput) => {
   const fullCode = doc.toString();
   if (fullCode.trim().length === 0) return null;
@@ -45,6 +54,13 @@ export const buildCompletionRequest = ({
     code = `${head}${fullCode.slice(lo, hi)}${tail}`;
   }
 
+  const relatedFiles = buildRelatedContext({
+    path,
+    source: fullCode,
+    files: projectFiles,
+    openTabPaths,
+  });
+
   return {
     fileName: path.split("/").pop() ?? path,
     code,
@@ -54,5 +70,7 @@ export const buildCompletionRequest = ({
     textAfterCursor: currentLine.text.slice(cursorInLine),
     nextLines: nextLines.join("\n"),
     lineNumber: currentLine.number,
+    ...(relatedFiles.length > 0 && { relatedFiles }),
+    ...(recentEdits.length > 0 && { recentEdits: [...recentEdits] }),
   };
 };

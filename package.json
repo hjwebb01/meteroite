@@ -26,6 +26,8 @@
     "@hookform/resolvers": "^5.9.1",
     "@inngest/agent-kit": "^0.13.2",
     "@inngest/middleware-sentry": "^1.0.0",
+    "@lezer/common": "^1.5.3",
+    "@lezer/javascript": "^1.5.6",
     "@mendable/firecrawl-js": "^4.42.4",
     "@openrouter/ai-sdk-provider": "^3.1.0",
     "@radix-ui/react-use-controllable-state": "^1.2.6",

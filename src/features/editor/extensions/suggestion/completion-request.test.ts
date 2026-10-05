@@ -43,4 +43,44 @@ describe("buildCompletionRequest", () => {
     expect(result.code.startsWith("[…]")).toBe(false);
     expect(result.code.endsWith("\n[…]")).toBe(true);
   });
+
+  it("includes optional related files and recent edits when provided", () => {
+    const source =
+      'import { add } from "../lib/math";\nconst renamed = add(1, 2);';
+    const result = buildCompletionRequest({
+      doc: Text.of(source.split("\n")),
+      cursor: source.length,
+      path: "src/app/page.tsx",
+      projectFiles: [
+        {
+          path: "src/lib/math.ts",
+          content:
+            "export function add(a: number, b: number): number { return a + b; }",
+        },
+      ],
+      recentEdits: [
+        {
+          startLine: 2,
+          endLine: 2,
+          before: "const value = add(1, 2);",
+          after: "const renamed = add(1, 2);",
+        },
+      ],
+    });
+
+    expect(result?.relatedFiles).toEqual([
+      {
+        path: "src/lib/math.ts",
+        signatures: "export function add(a: number, b: number): number;",
+      },
+    ]);
+    expect(result?.recentEdits).toEqual([
+      {
+        startLine: 2,
+        endLine: 2,
+        before: "const value = add(1, 2);",
+        after: "const renamed = add(1, 2);",
+      },
+    ]);
+  });
 });
