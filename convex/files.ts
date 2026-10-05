@@ -1,7 +1,8 @@
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
 import { mutation, query } from "./_generated/server";
-import { verifyAuth } from "./auth";
+import { getOwnedProject, verifyAuth } from "./auth";
+import * as projectFiles from "./lib/project-files";
 
 export const getFiles = query({
   args: {
@@ -114,42 +115,8 @@ export const createFile = mutation({
     content: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await verifyAuth(ctx);
-    const project = await ctx.db.get("projects", args.projectId);
-    if (!project) {
-      throw new Error("Project not found");
-    }
-    if (project.ownerId !== userId.subject) {
-      throw new Error("Unauthorized to access this project");
-    }
-
-    // Check if the file exists with same name in parent folder
-    const files = await ctx.db
-      .query("files")
-      .withIndex("by_project_parent", (q) =>
-        q.eq("projectId", args.projectId).eq("parentId", args.parentId),
-      )
-      .collect();
-    const existing = files.find(
-      (file) => file.name === args.name && file.type !== "folder",
-    );
-    if (existing) {
-      throw new Error("File with this name already exists");
-    }
-    const now = Date.now();
-
-    await ctx.db.insert("files", {
-      projectId: args.projectId,
-      name: args.name,
-      content: args.content,
-      type: "file",
-      parentId: args.parentId,
-      updatedAt: now,
-    });
-
-    await ctx.db.patch("projects", args.projectId, {
-      updatedAt: now,
-    });
+    await getOwnedProject(ctx, args.projectId);
+    await projectFiles.createFile(ctx, args);
   },
 });
 
@@ -160,41 +127,8 @@ export const createFolder = mutation({
     name: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await verifyAuth(ctx);
-    const project = await ctx.db.get("projects", args.projectId);
-    if (!project) {
-      throw new Error("Project not found");
-    }
-    if (project.ownerId !== userId.subject) {
-      throw new Error("Unauthorized to access this project");
-    }
-
-    // Check if the folder exists with same name in parent folder
-    const files = await ctx.db
-      .query("files")
-      .withIndex("by_project_parent", (q) =>
-        q.eq("projectId", args.projectId).eq("parentId", args.parentId),
-      )
-      .collect();
-    const existing = files.find(
-      (file) => file.name === args.name && file.type === "folder",
-    );
-    if (existing) {
-      throw new Error("Folder with this name already exists");
-    }
-
-    const now = Date.now();
-    await ctx.db.insert("files", {
-      projectId: args.projectId,
-      name: args.name,
-      type: "folder",
-      parentId: args.parentId,
-      updatedAt: now,
-    });
-
-    await ctx.db.patch("projects", args.projectId, {
-      updatedAt: now,
-    });
+    await getOwnedProject(ctx, args.projectId);
+    await projectFiles.createFolder(ctx, args);
   },
 });
 
@@ -204,45 +138,16 @@ export const renameFile = mutation({
     newName: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await verifyAuth(ctx);
+    await verifyAuth(ctx);
     const file = await ctx.db.get("files", args.id);
     if (!file) {
-      throw new Error("File not Found");
+      throw new Error("File not found");
     }
-    const project = await ctx.db.get("projects", file.projectId);
-    if (!project) {
-      throw new Error("Project not found");
-    }
-    if (project.ownerId !== userId.subject) {
-      throw new Error("Unauthorized to access this project");
-    }
-
-    // Check if a file with the new name already exists in same parent folder
-    const siblings = await ctx.db
-      .query("files")
-      .withIndex("by_project_parent", (q) =>
-        q.eq("projectId", file.projectId).eq("parentId", file.parentId),
-      )
-      .collect();
-    const existing = siblings.find(
-      (siblings) =>
-        siblings.name === args.newName &&
-        siblings.type === file.type &&
-        siblings._id !== args.id,
-    );
-    if (existing) {
-      throw new Error(
-        `A ${file.type} with this name already exists in this location`,
-      );
-    }
-    const now = Date.now();
-    await ctx.db.patch("files", args.id, {
-      name: args.newName,
-      updatedAt: now,
-    });
-
-    await ctx.db.patch("projects", file.projectId, {
-      updatedAt: now,
+    await getOwnedProject(ctx, file.projectId);
+    await projectFiles.renameEntry(ctx, {
+      projectId: file.projectId,
+      fileId: args.id,
+      newName: args.newName,
     });
   },
 });
@@ -252,48 +157,15 @@ export const deleteFile = mutation({
     id: v.id("files"),
   },
   handler: async (ctx, args) => {
-    const userId = await verifyAuth(ctx);
+    await verifyAuth(ctx);
     const file = await ctx.db.get("files", args.id);
     if (!file) {
-      // Delete is intentionally idempotent because recursive batch deletes can
-      // invalidate later file ids in the same run.
       return;
     }
-    const project = await ctx.db.get("projects", file.projectId);
-    if (!project) {
-      throw new Error("Project not found");
-    }
-    if (project.ownerId !== userId.subject) {
-      throw new Error("Unauthorized to access this project");
-    }
-
-    // Recursively delete all children files/folders
-    const deleteRecursive = async (fileId: Id<"files">) => {
-      const item = await ctx.db.get("files", fileId);
-      if (!item) {
-        return;
-      }
-      if (item.type === "folder") {
-        const children = await ctx.db
-          .query("files")
-          .withIndex("by_project_parent", (q) =>
-            q.eq("projectId", item.projectId).eq("parentId", fileId),
-          )
-          .collect();
-        for (const child of children) {
-          await deleteRecursive(child._id);
-        }
-      }
-      if (item.storageId) {
-        await ctx.storage.delete(item.storageId);
-      }
-      await ctx.db.delete("files", fileId);
-    };
-    await deleteRecursive(args.id);
-
-    const now = Date.now();
-    await ctx.db.patch("projects", file.projectId, {
-      updatedAt: now,
+    await getOwnedProject(ctx, file.projectId);
+    await projectFiles.deleteEntry(ctx, {
+      projectId: file.projectId,
+      fileId: args.id,
     });
   },
 });
@@ -304,25 +176,16 @@ export const updateFile = mutation({
     content: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await verifyAuth(ctx);
+    await verifyAuth(ctx);
     const file = await ctx.db.get("files", args.id);
     if (!file) {
-      throw new Error("File not Found");
+      throw new Error("File not found");
     }
-    const project = await ctx.db.get("projects", file.projectId);
-    if (!project) {
-      throw new Error("Project not found");
-    }
-    if (project.ownerId !== userId.subject) {
-      throw new Error("Unauthorized to access this project");
-    }
-    await ctx.db.patch("files", args.id, {
+    await getOwnedProject(ctx, file.projectId);
+    await projectFiles.updateTextFile(ctx, {
+      projectId: file.projectId,
+      fileId: args.id,
       content: args.content,
-      updatedAt: Date.now(),
-    });
-
-    await ctx.db.patch("projects", file.projectId, {
-      updatedAt: Date.now(),
     });
   },
 });
