@@ -13,7 +13,10 @@ import { Prec, StateField } from "@codemirror/state";
 import {
   predictionState,
   setPrediction,
-  resolvePrediction,
+  resolvePredictions,
+  predictionQueueState,
+  setPredictionQueue,
+  advancePrediction,
 } from "./prediction";
 import { fetcher } from "./fetcher";
 import { buildCompletionRequest } from "./completion-request";
@@ -118,8 +121,8 @@ const createDebouncePlugin = ({
           )
             return;
           view.dispatch({
-            effects: setPrediction.of(
-              resolvePrediction(
+            effects: setPredictionQueue.of(
+              resolvePredictions(
                 requestDoc.toString(),
                 edits ?? [],
                 requestCursor,
@@ -149,7 +152,11 @@ const renderPlugin = ViewPlugin.fromClass(
     update(update: ViewUpdate) {
       const suggestionChanged = update.transactions.some((transaction) => {
         return transaction.effects.some((effect) => {
-          return effect.is(setPrediction);
+          return (
+            effect.is(setPrediction) ||
+            effect.is(setPredictionQueue) ||
+            effect.is(advancePrediction)
+          );
         });
       });
       const shouldRebuild =
@@ -194,7 +201,10 @@ export const acceptPrediction = (view: EditorView) => {
     view.dispatch({
       selection: { anchor: prediction.from },
       effects: [
-        setPrediction.of({ ...prediction, jumped: true }),
+        setPredictionQueue.of([
+          { ...prediction, jumped: true },
+          ...view.state.field(predictionQueueState).slice(1),
+        ]),
         EditorView.scrollIntoView(prediction.from),
       ],
     });
@@ -206,9 +216,15 @@ export const acceptPrediction = (view: EditorView) => {
         insert: prediction.replacement,
       },
       selection: { anchor: prediction.from + prediction.replacement.length },
-      effects: setPrediction.of(null),
+      effects: advancePrediction.of(null),
     });
   }
+  return true;
+};
+
+export const clearPredictions = (view: EditorView) => {
+  if (!view.state.field(predictionState)) return false;
+  view.dispatch({ effects: setPrediction.of(null) });
   return true;
 };
 
@@ -217,11 +233,7 @@ const acceptSuggestionKeymap = Prec.highest(
     { key: "Tab", run: acceptPrediction },
     {
       key: "Escape",
-      run: (view) => {
-        if (!view.state.field(predictionState)) return false;
-        view.dispatch({ effects: setPrediction.of(null) });
-        return true;
-      },
+      run: clearPredictions,
     },
   ]),
 );
@@ -235,18 +247,26 @@ class PredictionMarker extends GutterMarker {
   }
 }
 const marker = new PredictionMarker();
-const predictionGutter = gutter({
+export const predictionGutter = gutter({
   lineMarker(view, line) {
-    const prediction = view.state.field(predictionState);
-    return prediction?.anchor &&
-      view.state.doc.lineAt(prediction.from).from === line.from
+    return view.state
+      .field(predictionQueueState)
+      .some(
+        (prediction) =>
+          view.state.doc.lineAt(prediction.from).from === line.from,
+      )
       ? marker
       : null;
   },
   lineMarkerChange: (update) =>
     update.docChanged ||
     update.transactions.some((transaction) =>
-      transaction.effects.some((effect) => effect.is(setPrediction)),
+      transaction.effects.some(
+        (effect) =>
+          effect.is(setPrediction) ||
+          effect.is(setPredictionQueue) ||
+          effect.is(advancePrediction),
+      ),
     ),
 });
 

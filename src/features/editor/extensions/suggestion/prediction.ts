@@ -60,20 +60,78 @@ export const mapPrediction = (
 };
 
 export const setPrediction = StateEffect.define<Prediction | null>();
+export const setPredictionQueue = StateEffect.define<Prediction[]>();
+export const advancePrediction = StateEffect.define<null>();
+
+const orderPredictions = (queue: Prediction[], cursor: number) =>
+  queue.sort(
+    (a, b) =>
+      Math.max(a.from - cursor, cursor - a.to, 0) -
+      Math.max(b.from - cursor, cursor - b.to, 0),
+  );
+
+export const resolvePredictions = (
+  doc: string,
+  edits: readonly SuggestedEdit[],
+  cursor: number,
+  windows: readonly { from: number; to: number }[],
+): Prediction[] => {
+  const queue: Prediction[] = [];
+  for (const edit of edits) {
+    const prediction = resolvePrediction(doc, [edit], cursor, windows);
+    if (
+      prediction &&
+      !queue.some(
+        (item) =>
+          item.from === prediction.from &&
+          item.to === prediction.to &&
+          item.replacement === prediction.replacement,
+      )
+    )
+      queue.push(prediction);
+  }
+  return orderPredictions(queue, cursor);
+};
+
+export const predictionQueueState = StateField.define<Prediction[]>({
+  create: () => [],
+  update(queue, transaction) {
+    if (transaction.effects.some((effect) => effect.is(advancePrediction)))
+      queue = queue.slice(1);
+    if (transaction.docChanged) {
+      const doc = transaction.newDoc.toString();
+      queue = queue.flatMap((prediction) => {
+        const mapped = mapPrediction(prediction, transaction.changes);
+        if (!mapped) return [];
+        if (
+          mapped.anchor &&
+          (doc.slice(mapped.from, mapped.to) !== mapped.anchor ||
+            doc.indexOf(mapped.anchor) !== mapped.from ||
+            doc.indexOf(mapped.anchor, mapped.from + 1) !== -1)
+        )
+          return [];
+        return [mapped];
+      });
+      queue = orderPredictions(queue, transaction.newSelection.main.head);
+    }
+    if (transaction.selection)
+      queue = queue.filter(
+        (prediction) =>
+          prediction.anchor !== "" ||
+          transaction.newSelection.main.head === prediction.from,
+      );
+    for (const effect of transaction.effects) {
+      if (effect.is(setPrediction)) queue = effect.value ? [effect.value] : [];
+      if (effect.is(setPredictionQueue)) queue = effect.value;
+    }
+    return queue;
+  },
+});
+
 export const predictionState = StateField.define<Prediction | null>({
   create: () => null,
-  update(value, transaction) {
-    if (value && transaction.docChanged)
-      value = mapPrediction(value, transaction.changes);
-    if (
-      value?.anchor === "" &&
-      transaction.selection &&
-      transaction.selection.main.head !== value.from
-    )
-      value = null;
-    for (const effect of transaction.effects) {
-      if (effect.is(setPrediction)) value = effect.value;
-    }
-    return value;
+  update(_value, transaction) {
+    return transaction.state.field(predictionQueueState)[0] ?? null;
   },
+  provide: () => predictionQueueState,
 });
