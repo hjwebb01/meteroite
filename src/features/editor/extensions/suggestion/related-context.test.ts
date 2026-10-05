@@ -98,6 +98,59 @@ describe("extractSignatures", () => {
     expect(signature.text).toBe("export interface Large");
     expect(signature.text.length).toBeLessThan(600);
   });
+
+  it("keeps expression arrow bodies and local export implementations private", () => {
+    const signatures = extractSignatures(
+      [
+        "export { double as twice, greet as default };",
+        "const double = (value: number) => value * 2;",
+        "function greet(name: string): string { return name; }",
+        "export default (value: number) => value + 1;",
+        'export { other } from "./elsewhere";',
+      ].join("\n"),
+    );
+    expect(signatures.map(({ name }) => name)).toEqual([
+      "twice",
+      "default",
+      "default",
+    ]);
+    const text = signatures.map(({ text }) => text).join("\n");
+    expect(text).toContain("export const twice = (value: number) =>;");
+    expect(text).toContain(
+      "export default function greet(name: string): string;",
+    );
+    expect(text).toContain("export default (value: number) =>;");
+    expect(text).not.toContain("value * 2");
+    expect(text).not.toContain("value + 1");
+    expect(text).not.toContain("return name");
+  });
+
+  it("extracts a locally declared JSX component exported as default", () => {
+    const signatures = extractSignatures(
+      "const Component = (props: {name:string}) => <div>{props.name}</div>; export default Component;",
+    );
+
+    expect(signatures).toEqual([
+      {
+        name: "default",
+        isDefault: true,
+        text: "export const Component = (props: {name:string}) =>;\nexport default Component;",
+      },
+    ]);
+    expect(signatures[0].text).not.toContain("props.name</div>");
+    const context = buildRelatedContext({
+      path: "src/page.tsx",
+      source: 'import Component from "./component";',
+      files: [
+        {
+          path: "src/component.tsx",
+          content:
+            "const Component = (props: {name:string}) => <div>{props.name}</div>; export default Component;",
+        },
+      ],
+    });
+    expect(context[0].signatures).toContain("export default Component;");
+  });
 });
 
 describe("buildRelatedContext", () => {
@@ -210,4 +263,20 @@ it("resolves jsconfig exact aliases relative to baseUrl with target fallbacks", 
       ],
     }).map((file) => file.path),
   ).toEqual(["app/lib/helper.js"]);
+});
+
+it("resolves tsconfig paths relative to the config directory without baseUrl", () => {
+  expect(
+    buildRelatedContext({
+      path: "src/main.ts",
+      source: 'import { helper } from "@/helper";',
+      files: [
+        {
+          path: "tsconfig.json",
+          content: '{"compilerOptions":{"paths":{"@/*":["src/*"]}}}',
+        },
+        { path: "src/helper.ts", content: "export function helper(): void {}" },
+      ],
+    }).map((file) => file.path),
+  ).toEqual(["src/helper.ts"]);
 });

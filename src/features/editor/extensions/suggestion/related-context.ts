@@ -173,14 +173,9 @@ const aliasResolver = (
   if (!configPath) return () => null;
   try {
     const options = parseConfig(files.get(configPath)!).compilerOptions;
-    if (
-      typeof options?.baseUrl !== "string" ||
-      !options.paths ||
-      typeof options.paths !== "object"
-    )
-      return () => null;
+    if (!options?.paths || typeof options.paths !== "object") return () => null;
     const directory = configPath.slice(0, configPath.lastIndexOf("/") + 1);
-    const base = normalize(directory + options.baseUrl);
+    const base = normalize(directory + (options.baseUrl ?? "."));
     const paths = new Set(files.keys());
     return (specifier: string): string | null => {
       const entries = Object.entries(options.paths).sort(
@@ -260,7 +255,11 @@ const variableSignatures = (
     let head = "";
     if (initializer && next?.name === "Equals") {
       const body = initializer.lastChild;
-      const end = body?.name === "Block" ? body.from : initializer.to;
+      const end =
+        initializer.name === "ArrowFunction" ||
+        initializer.name === "FunctionExpression"
+          ? (body?.from ?? initializer.to)
+          : initializer.to;
       head = oneLine(source.slice(initializer.from, end));
       if (head.length > MAX_INITIALIZER_HEAD_CHARS) {
         head = `${head.slice(0, MAX_INITIALIZER_HEAD_CHARS)}…`;
@@ -275,49 +274,142 @@ const variableSignatures = (
   return signatures;
 };
 
+const declarationSignatures = (
+  declaration: SyntaxNode,
+  source: string,
+  isDefault: boolean,
+): ExportedSignature[] => {
+  const prefix = isDefault ? "export default " : "export ";
+  if (declaration.name === "VariableDeclaration")
+    return variableSignatures(declaration, source, declaration.from);
+  const name = nameOf(declaration, source);
+  if (!name && !isDefault) return [];
+  const body = children(declaration).find(
+    (node) => node.name === "Block" || node.name === "ClassBody",
+  );
+  const full = oneLine(source.slice(declaration.from, declaration.to));
+  let text: string;
+  if (declaration.name === "FunctionDeclaration") {
+    text = `${prefix}${sliceBefore(source, declaration.from, body)};`;
+  } else if (declaration.name === "ClassDeclaration") {
+    text = `${prefix}${sliceBefore(source, declaration.from, body)} { … }`;
+  } else {
+    const header = oneLine(
+      source.slice(
+        declaration.from,
+        children(declaration).find((node) =>
+          /^(Equals|ObjectType|EnumBody)$/.test(node.name),
+        )?.from,
+      ),
+    );
+    text = `${prefix}${full.length <= MAX_TYPE_DECLARATION_CHARS ? full : header}`;
+  }
+  return [{ name: name ?? "default", isDefault, text }];
+};
+
 /** Top-level exported declarations as headers only; function and class bodies are never included. */
 export const extractSignatures = (source: string): ExportedSignature[] => {
   const tree = scriptParser.parse(source);
   const signatures: ExportedSignature[] = [];
+  const localSignatures = new Map<string, ExportedSignature[]>();
+  for (const statement of children(tree.topNode)) {
+    const declarations =
+      statement.name === "ExportDeclaration"
+        ? children(statement).filter((node) => /Declaration$/.test(node.name))
+        : [statement];
+    for (const declaration of declarations) {
+      if (
+        !/^(VariableDeclaration|FunctionDeclaration|ClassDeclaration|InterfaceDeclaration|TypeDeclaration|EnumDeclaration)$/.test(
+          declaration.name,
+        )
+      )
+        continue;
+      const name = nameOf(declaration, source);
+      if (!name && declaration.name !== "VariableDeclaration") continue;
+      for (const signature of declarationSignatures(
+        declaration,
+        source,
+        false,
+      )) {
+        const values = localSignatures.get(signature.name) ?? [];
+        values.push(signature);
+        localSignatures.set(signature.name, values);
+      }
+    }
+  }
   for (const statement of children(tree.topNode)) {
     if (statement.name !== "ExportDeclaration") continue;
     const nodes = children(statement);
+    if (nodes.some((node) => node.name === "from")) continue;
     const declaration = nodes.find((node) => /Declaration$/.test(node.name));
-    if (!declaration) continue;
     const isDefault = nodes.some((node) => node.name === "default");
-    const prefix = isDefault ? "export default " : "export ";
 
-    if (declaration.name === "VariableDeclaration") {
-      signatures.push(
-        ...variableSignatures(declaration, source, declaration.from),
-      );
+    const exportGroup = nodes.find((node) => node.name === "ExportGroup");
+    if (exportGroup) {
+      const group = children(exportGroup);
+      for (let index = 0; index < group.length; index++) {
+        if (!/^(VariableName|VariableDefinition)$/.test(group[index].name))
+          continue;
+        const localName = source.slice(group[index].from, group[index].to);
+        let exportedName = localName;
+        if (group[index + 1]?.name === "as") {
+          exportedName = source.slice(
+            group[index + 2].from,
+            group[index + 2].to,
+          );
+          index += 2;
+        }
+        for (const signature of localSignatures.get(localName) ?? []) {
+          const isExportedDefault = exportedName === "default";
+          const text = signature.text
+            .replace(
+              /^export(?: default)? /,
+              isExportedDefault ? "export default " : "export ",
+            )
+            .replace(
+              ` ${localName}`,
+              isExportedDefault ? ` ${localName}` : ` ${exportedName}`,
+            );
+          signatures.push({
+            name: isExportedDefault ? "default" : exportedName,
+            isDefault: isExportedDefault,
+            text,
+          });
+        }
+      }
       continue;
     }
-    const name = nameOf(declaration, source);
-    if (!name && !isDefault) continue;
 
-    const body = children(declaration).find(
-      (node) => node.name === "Block" || node.name === "ClassBody",
-    );
-    const full = oneLine(source.slice(declaration.from, declaration.to));
-    let text: string;
-    if (declaration.name === "FunctionDeclaration") {
-      text = `${prefix}${sliceBefore(source, declaration.from, body)};`;
-    } else if (declaration.name === "ClassDeclaration") {
-      text = `${prefix}${sliceBefore(source, declaration.from, body)} { … }`;
-    } else {
-      // Type, interface and enum declarations are kept whole up to a cap, then reduced to the header.
-      const header = oneLine(
-        source.slice(
-          declaration.from,
-          children(declaration).find((n) =>
-            /^(Equals|ObjectType|EnumBody)$/.test(n.name),
-          )?.from,
-        ),
-      );
-      text = `${prefix}${full.length <= MAX_TYPE_DECLARATION_CHARS ? full : header}`;
+    const defaultBinding = nodes.find((node) => node.name === "VariableName");
+    if (isDefault && defaultBinding) {
+      const localName = source.slice(defaultBinding.from, defaultBinding.to);
+      for (const signature of localSignatures.get(localName) ?? []) {
+        signatures.push({
+          ...signature,
+          name: "default",
+          isDefault: true,
+          text: `${signature.text}\nexport default ${localName};`,
+        });
+      }
+      continue;
     }
-    signatures.push({ name: name ?? "default", isDefault, text });
+
+    if (!declaration) {
+      const defaultValue = nodes.find((node) =>
+        /^(ArrowFunction|FunctionExpression)$/.test(node.name),
+      );
+      if (isDefault && defaultValue) {
+        const body = defaultValue.lastChild;
+        signatures.push({
+          name: "default",
+          isDefault: true,
+          text: `export default ${sliceBefore(source, defaultValue.from, body ?? undefined)};`,
+        });
+      }
+      continue;
+    }
+
+    signatures.push(...declarationSignatures(declaration, source, isDefault));
   }
   return signatures;
 };

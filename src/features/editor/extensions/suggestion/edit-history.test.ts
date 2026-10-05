@@ -31,6 +31,52 @@ const historySize = (history: readonly EditHunk[]) =>
   );
 
 describe("recordChanges", () => {
+  it("keeps separate hunks for coalesced edits in one ChangeSet", () => {
+    const startDoc = Text.of(["a", "b", "c"]);
+    const changes = ChangeSet.of(
+      [
+        { from: 0, insert: "\n" },
+        { from: 2, to: 3, insert: "B" },
+      ],
+      startDoc.length,
+    );
+    const endDoc = changes.apply(startDoc);
+    const history = recordChanges([], changes, startDoc, endDoc);
+
+    expect(history).toHaveLength(2);
+    expect(history.map(({ before, after }) => [before, after])).toContainEqual([
+      "b",
+      "B",
+    ]);
+  });
+
+  it("maps retained hunk lines across later newline edits", () => {
+    const first = applyChange("a\nb\nc", [], 4, 5, "C");
+    const shifted = applyChange(first.source, first.history, 0, 0, "\n");
+    const updated = applyChange(
+      shifted.source,
+      shifted.history,
+      shifted.source.indexOf("C") + 1,
+      shifted.source.indexOf("C") + 1,
+      "!",
+    );
+
+    expect(updated.history).toHaveLength(3);
+    expect(updated.history[0]).toMatchObject({
+      startLine: 4,
+      endLine: 4,
+      before: "c",
+      after: "C",
+    });
+    expect(updated.history[1]).toMatchObject({ startLine: 1, endLine: 2 });
+    expect(updated.history[2]).toMatchObject({
+      startLine: 4,
+      endLine: 4,
+      before: "C",
+      after: "C!",
+    });
+  });
+
   it("coalesces consecutive keystrokes in one region into a net line change", () => {
     const original = "const value = 1;";
     const renamed = applyChange(original, [], 6, 11, "renamed");

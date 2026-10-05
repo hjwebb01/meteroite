@@ -116,8 +116,7 @@ const createDebouncePlugin = ({
           if (
             controller.signal.aborted ||
             view.state.field(predictionState) !== null ||
-            view.state.doc !== requestDoc ||
-            view.state.selection.main.head !== requestCursor
+            view.state.doc !== requestDoc
           )
             return;
           view.dispatch({

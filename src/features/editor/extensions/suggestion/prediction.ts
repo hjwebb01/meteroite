@@ -98,6 +98,11 @@ export const predictionQueueState = StateField.define<Prediction[]>({
   update(queue, transaction) {
     if (transaction.effects.some((effect) => effect.is(advancePrediction)))
       queue = queue.slice(1);
+    if (
+      transaction.docChanged &&
+      (transaction.isUserEvent("input") || transaction.isUserEvent("delete"))
+    )
+      queue = [];
     if (transaction.docChanged) {
       const doc = transaction.newDoc.toString();
       queue = queue.flatMap((prediction) => {
@@ -114,12 +119,6 @@ export const predictionQueueState = StateField.define<Prediction[]>({
       });
       queue = orderPredictions(queue, transaction.newSelection.main.head);
     }
-    if (transaction.selection)
-      queue = queue.filter(
-        (prediction) =>
-          prediction.anchor !== "" ||
-          transaction.newSelection.main.head === prediction.from,
-      );
     for (const effect of transaction.effects) {
       if (effect.is(setPrediction)) queue = effect.value ? [effect.value] : [];
       if (effect.is(setPredictionQueue)) queue = effect.value;

@@ -67,7 +67,7 @@ describe("predictions", () => {
     expect(state.doc.toString()).toBe("xx new");
     expect(acceptPrediction(view)).toBe(false);
   });
-  it("inserts at cursor immediately and invalidates insertions when cursor moves", () => {
+  it("keeps insertion predictions when the selection moves", () => {
     const prediction = resolvePrediction(
       "xx",
       [{ anchor: "", replacement: "!" }],
@@ -84,7 +84,7 @@ describe("predictions", () => {
     }).state;
     expect(
       state.update({ selection: { anchor: 2 } }).state.field(predictionState),
-    ).toBeNull();
+    ).toEqual(prediction);
   });
 });
 
@@ -184,6 +184,28 @@ describe("prediction queue", () => {
     expect(
       view.state.field(predictionQueueState).map((edit) => edit.anchor),
     ).toEqual(["first", "third"]);
+  });
+  it("dismisses all predictions for a user input transaction", () => {
+    const view = queuedView("first second", [
+      { anchor: "first", replacement: "1" },
+      { anchor: "second", replacement: "2" },
+    ]);
+    view.dispatch({
+      changes: { from: 0, insert: "x" },
+      userEvent: "input.type",
+    });
+    expect(view.state.field(predictionQueueState)).toEqual([]);
+  });
+  it("dismisses predictions for a user deletion transaction", () => {
+    const view = queuedView("first second", [
+      { anchor: "first", replacement: "1" },
+      { anchor: "second", replacement: "2" },
+    ]);
+    view.dispatch({
+      changes: { from: 0, to: 1 },
+      userEvent: "delete.backward",
+    });
+    expect(view.state.field(predictionQueueState)).toEqual([]);
   });
   it("clears the entire queue on Escape even after jumping", () => {
     const view = queuedView("first second", [

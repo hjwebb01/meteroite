@@ -43,24 +43,49 @@ export const recordChanges = (
   endDoc: Text,
 ): EditHunk[] => {
   const next = [...history];
+  const edits: { fromA: number; toA: number; fromB: number; toB: number }[] =
+    [];
   changes.iterChanges((fromA, toA, fromB, toB) => {
+    edits.push({ fromA, toA, fromB, toB });
+  });
+  const previous = [...next];
+  for (let index = 0; index < next.length; index += 1) {
+    const hunk = next[index];
+    const start = changes.mapPos(startDoc.line(hunk.startLine).from, -1);
+    const end = changes.mapPos(startDoc.line(hunk.endLine).to, 1);
+    next[index] = {
+      ...hunk,
+      startLine: endDoc.lineAt(start).number,
+      endLine: endDoc.lineAt(end).number,
+    };
+  }
+  edits.forEach(({ fromA, toA, fromB, toB }, editIndex) => {
     const startLineA = startDoc.lineAt(fromA).number;
     const endLineA = startDoc.lineAt(toA).number;
     const startLineB = endDoc.lineAt(fromB).number;
     const endLineB = endDoc.lineAt(toB).number;
-    const last = next[next.length - 1];
+    const recentIndex = previous.length - 1;
+    const recentHunk = previous[recentIndex];
+    const previousIndex =
+      edits.length === 1 &&
+      recentHunk &&
+      startLineA >= recentHunk.startLine &&
+      endLineA <= recentHunk.endLine
+        ? recentIndex
+        : -1;
+    const previousHunk = previousIndex >= 0 ? previous[previousIndex] : null;
 
-    if (last && startLineA >= last.startLine && endLineA <= last.endLine) {
-      const endLine =
-        last.endLine + (endLineB - startLineB) - (endLineA - startLineA);
+    if (editIndex === 0 && previousHunk) {
+      const mappedHunk = next[previousIndex];
       const after = lines(
         endDoc,
-        endDoc.line(last.startLine).from,
-        endDoc.line(Math.min(endLine, endDoc.lines)).to,
+        endDoc.line(mappedHunk.startLine).from,
+        endDoc.line(mappedHunk.endLine).to,
       );
-      next.pop();
-      if (after !== last.before) {
-        next.push({ ...last, endLine, after: clip(after) });
+      if (after !== previousHunk.before) {
+        next[previousIndex] = { ...mappedHunk, after: clip(after) };
+      } else {
+        next.splice(previousIndex, 1);
       }
       return;
     }
