@@ -196,7 +196,8 @@ const renderPlugin = ViewPlugin.fromClass(
 export const acceptPrediction = (view: EditorView) => {
   const prediction = view.state.field(predictionState);
   if (!prediction) return false;
-  if (!prediction.jumped) {
+  const selection = view.state.selection.main;
+  if (!selection.empty || selection.head !== prediction.from) {
     view.dispatch({
       selection: { anchor: prediction.from },
       effects: [

@@ -114,6 +114,44 @@ const queuedView = (
 };
 
 describe("prediction queue", () => {
+  it.each([
+    { anchor: "old", replacement: "new" },
+    { anchor: "", replacement: "!" },
+  ])("applies immediately at the target for $anchor", (edit) => {
+    const view = queuedView("xx old", [edit], 3);
+    expect(acceptPrediction(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(
+      edit.anchor ? "xx new" : "xx !old",
+    );
+    expect(view.state.field(predictionState)).toBeNull();
+  });
+  it.each([
+    { anchor: "old", replacement: "new" },
+    { anchor: "", replacement: "!" },
+  ])("jumps again after moving away from $anchor", (edit) => {
+    const view = queuedView("xx old", [edit], 3);
+    view.dispatch({ selection: { anchor: 0 } });
+    acceptPrediction(view);
+    view.dispatch({ selection: { anchor: 6 } });
+    expect(acceptPrediction(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe("xx old");
+    expect(view.state.selection.main.head).toBe(3);
+    expect(acceptPrediction(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe(
+      edit.anchor ? "xx new" : "xx !old",
+    );
+  });
+  it("collapses a nonempty selection with its head at the target before applying", () => {
+    const view = queuedView("xx old", [{ anchor: "old", replacement: "new" }]);
+    acceptPrediction(view);
+    view.dispatch({ selection: { anchor: 6, head: 3 } });
+    expect(acceptPrediction(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe("xx old");
+    expect(view.state.selection.main.empty).toBe(true);
+    expect(view.state.selection.main.head).toBe(3);
+    expect(acceptPrediction(view)).toBe(true);
+    expect(view.state.doc.toString()).toBe("xx new");
+  });
   it("orders by distance to the target range with stable ties and drops duplicates", () => {
     const edits = [
       { anchor: "third", replacement: "3" },
@@ -134,7 +172,6 @@ describe("prediction queue", () => {
       { anchor: "second", replacement: "2" },
     ]);
     expect(acceptPrediction(view)).toBe(true);
-    expect(acceptPrediction(view)).toBe(true);
     expect(view.state.doc.toString()).toBe("longer first second third");
     expect(view.state.field(predictionState)).toMatchObject({
       anchor: "second",
@@ -152,7 +189,6 @@ describe("prediction queue", () => {
       { anchor: "second", replacement: "2" },
       { anchor: "third", replacement: "3" },
     ]);
-    acceptPrediction(view);
     acceptPrediction(view);
     expect(
       view.state.field(predictionQueueState).map((edit) => edit.anchor),
@@ -208,10 +244,14 @@ describe("prediction queue", () => {
     expect(view.state.field(predictionQueueState)).toEqual([]);
   });
   it("clears the entire queue on Escape even after jumping", () => {
-    const view = queuedView("first second", [
-      { anchor: "first", replacement: "1" },
-      { anchor: "second", replacement: "2" },
-    ]);
+    const view = queuedView(
+      "first second",
+      [
+        { anchor: "first", replacement: "1" },
+        { anchor: "second", replacement: "2" },
+      ],
+      1,
+    );
     acceptPrediction(view);
     expect(clearPredictions(view)).toBe(true);
     expect(view.state.field(predictionQueueState)).toEqual([]);
