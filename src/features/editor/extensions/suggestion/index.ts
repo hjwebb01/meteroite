@@ -6,25 +6,41 @@ import {
   ViewUpdate,
   WidgetType,
   keymap,
+  gutter,
+  GutterMarker,
 } from "@codemirror/view";
-import { StateEffect, StateField } from "@codemirror/state";
+import { Prec, StateField } from "@codemirror/state";
+import {
+  predictionState,
+  setPrediction,
+  resolvePrediction,
+} from "./prediction";
 import { fetcher } from "./fetcher";
 import { buildCompletionRequest } from "./completion-request";
+import { recordChanges, type EditHunk } from "./edit-history";
+import type { ProjectSourceFile } from "./related-context";
 
-const setSuggestionEffect = StateEffect.define<string | null>();
-const suggestionState = StateField.define<string | null>({
+/** Recent user edits in this editor; a new editor per Project file resets it. */
+const editHistoryState = StateField.define<EditHunk[]>({
   create() {
-    return null;
+    return [];
   },
-  update(value, transaction) {
-    for (const effect of transaction.effects) {
-      if (effect.is(setSuggestionEffect)) {
-        return effect.value;
-      }
-    }
-    return value;
+  update(history, transaction) {
+    if (!transaction.docChanged) return history;
+    return recordChanges(
+      history,
+      transaction.changes,
+      transaction.startState.doc,
+      transaction.state.doc,
+    );
   },
 });
+
+interface SuggestionOptions {
+  getOpenTabPaths: () => readonly string[];
+  getPath: () => string;
+  getProjectFiles: () => readonly ProjectSourceFile[];
+}
 
 // WidgetType: Creates custom DOM elements to display in the editor.
 // toDom() is called by codemirror to create the actual html element.
@@ -41,15 +57,17 @@ class SuggestionWidget extends WidgetType {
   }
 }
 
-let debounceTimer: number | null = null;
-let isWaitingForSuggestion = false;
 const DEBOUNCE_DELAY = 300;
 
-let currentAbortController: AbortController | null = null;
-
-const createDebouncePlugin = (getPath: () => string) => {
+const createDebouncePlugin = ({
+  getPath,
+  getProjectFiles,
+  getOpenTabPaths,
+}: SuggestionOptions) => {
   return ViewPlugin.fromClass(
     class {
+      debounceTimer: number | null = null;
+      currentAbortController: AbortController | null = null;
       constructor(view: EditorView) {
         this.triggerSuggestion(view);
       }
@@ -61,45 +79,62 @@ const createDebouncePlugin = (getPath: () => string) => {
       }
 
       triggerSuggestion(view: EditorView) {
-        if (debounceTimer !== null) {
-          clearTimeout(debounceTimer);
+        if (this.debounceTimer !== null) {
+          clearTimeout(this.debounceTimer);
         }
-        if (currentAbortController !== null) {
-          currentAbortController.abort();
+        if (this.currentAbortController !== null) {
+          this.currentAbortController.abort();
         }
 
-        currentAbortController = new AbortController();
-        isWaitingForSuggestion = true;
-        debounceTimer = window.setTimeout(async () => {
+        if (view.state.field(predictionState)) return;
+        this.debounceTimer = window.setTimeout(async () => {
           const payload = buildCompletionRequest({
             doc: view.state.doc,
             cursor: view.state.selection.main.head,
             path: getPath(),
+            projectFiles: getProjectFiles(),
+            openTabPaths: getOpenTabPaths(),
+            recentEdits: view.state.field(editHistoryState),
           });
           if (!payload) {
-            isWaitingForSuggestion = false;
             view.dispatch({
-              effects: setSuggestionEffect.of(null),
+              effects: setPrediction.of(null),
             });
             return;
           }
-          currentAbortController = new AbortController();
-          const suggestion = await fetcher(
+          this.currentAbortController = new AbortController();
+          const requestDoc = view.state.doc;
+          const requestCursor = view.state.selection.main.head;
+          const controller = this.currentAbortController;
+          const edits = await fetcher(
             payload,
-            currentAbortController.signal,
+            this.currentAbortController.signal,
           );
-          isWaitingForSuggestion = false;
+          if (
+            controller.signal.aborted ||
+            view.state.field(predictionState) !== null ||
+            view.state.doc !== requestDoc ||
+            view.state.selection.main.head !== requestCursor
+          )
+            return;
           view.dispatch({
-            effects: setSuggestionEffect.of(suggestion),
+            effects: setPrediction.of(
+              resolvePrediction(
+                requestDoc.toString(),
+                edits ?? [],
+                requestCursor,
+                view.visibleRanges,
+              ),
+            ),
           });
         }, DEBOUNCE_DELAY);
       }
       destroy() {
-        if (debounceTimer !== null) {
-          clearTimeout(debounceTimer);
+        if (this.debounceTimer !== null) {
+          clearTimeout(this.debounceTimer);
         }
-        if (currentAbortController !== null) {
-          currentAbortController.abort();
+        if (this.currentAbortController !== null) {
+          this.currentAbortController.abort();
         }
       }
     },
@@ -114,7 +149,7 @@ const renderPlugin = ViewPlugin.fromClass(
     update(update: ViewUpdate) {
       const suggestionChanged = update.transactions.some((transaction) => {
         return transaction.effects.some((effect) => {
-          return effect.is(setSuggestionEffect);
+          return effect.is(setPrediction);
         });
       });
       const shouldRebuild =
@@ -125,20 +160,26 @@ const renderPlugin = ViewPlugin.fromClass(
       }
     }
     build(view: EditorView) {
-      if (isWaitingForSuggestion) return Decoration.none;
-
-      const suggestion = view.state.field(suggestionState);
+      const suggestion = view.state.field(predictionState);
       if (!suggestion) {
         return Decoration.none;
       }
 
-      const cursor = view.state.selection.main.head;
-      return Decoration.set([
+      const decorations = [
         Decoration.widget({
-          widget: new SuggestionWidget(suggestion),
+          widget: new SuggestionWidget(suggestion.replacement),
           side: 1,
-        }).range(cursor),
-      ]);
+        }).range(suggestion.to),
+      ];
+      if (suggestion.to > suggestion.from)
+        decorations.push(
+          Decoration.mark({
+            attributes: {
+              style: "text-decoration: line-through; opacity: 0.6",
+            },
+          }).range(suggestion.from, suggestion.to),
+        );
+      return Decoration.set(decorations, true);
     }
   },
 
@@ -146,31 +187,74 @@ const renderPlugin = ViewPlugin.fromClass(
     decorations: (plugin) => plugin.decorations,
   },
 );
-const acceptSuggestionKeymap = keymap.of([
-  {
-    key: "Tab",
-    run: (view) => {
-      const suggestion = view.state.field(suggestionState);
-      if (!suggestion) return false;
+export const acceptPrediction = (view: EditorView) => {
+  const prediction = view.state.field(predictionState);
+  if (!prediction) return false;
+  if (!prediction.jumped) {
+    view.dispatch({
+      selection: { anchor: prediction.from },
+      effects: [
+        setPrediction.of({ ...prediction, jumped: true }),
+        EditorView.scrollIntoView(prediction.from),
+      ],
+    });
+  } else {
+    view.dispatch({
+      changes: {
+        from: prediction.from,
+        to: prediction.to,
+        insert: prediction.replacement,
+      },
+      selection: { anchor: prediction.from + prediction.replacement.length },
+      effects: setPrediction.of(null),
+    });
+  }
+  return true;
+};
 
-      const cursor = view.state.selection.main.head;
-      view.dispatch({
-        changes: {
-          from: cursor,
-          insert: suggestion,
-        },
-        selection: {
-          anchor: cursor + suggestion.length,
-        },
-        effects: setSuggestionEffect.of(null),
-      });
-      return true;
+const acceptSuggestionKeymap = Prec.highest(
+  keymap.of([
+    { key: "Tab", run: acceptPrediction },
+    {
+      key: "Escape",
+      run: (view) => {
+        if (!view.state.field(predictionState)) return false;
+        view.dispatch({ effects: setPrediction.of(null) });
+        return true;
+      },
     },
+  ]),
+);
+
+class PredictionMarker extends GutterMarker {
+  toDOM() {
+    const marker = document.createElement("span");
+    marker.textContent = "✦";
+    marker.title = "Suggested edit: Tab to jump, Tab again to apply";
+    return marker;
+  }
+}
+const marker = new PredictionMarker();
+const predictionGutter = gutter({
+  lineMarker(view, line) {
+    const prediction = view.state.field(predictionState);
+    return prediction?.anchor &&
+      view.state.doc.lineAt(prediction.from).from === line.from
+      ? marker
+      : null;
   },
-]);
-export const suggestion = (getPath: () => string) => [
-  suggestionState,
+  lineMarkerChange: (update) =>
+    update.docChanged ||
+    update.transactions.some((transaction) =>
+      transaction.effects.some((effect) => effect.is(setPrediction)),
+    ),
+});
+
+export const suggestion = (options: SuggestionOptions) => [
+  predictionState,
+  editHistoryState,
   renderPlugin,
+  predictionGutter,
   acceptSuggestionKeymap,
-  createDebouncePlugin(getPath),
+  createDebouncePlugin(options),
 ];
