@@ -14,16 +14,23 @@ import { selectionTooltip } from "../extensions/selection-tooltip";
 
 interface Props {
   fileName: string;
+  /** Workspace-relative path of the Project file. */
+  filePath: string;
   initialValue?: string;
   onChange: (value: string) => void;
 }
 export const CodeEditor = ({
   fileName,
+  filePath,
   initialValue = "",
   onChange,
 }: Props) => {
   const editorRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const filePathRef = useRef(filePath);
+  useEffect(() => {
+    filePathRef.current = filePath;
+  }, [filePath]);
 
   const languageExtension = useMemo(() => {
     return getLanguageExtension(fileName);
@@ -39,7 +46,7 @@ export const CodeEditor = ({
         languageExtension,
         oneDark,
         customTheme,
-        suggestion(fileName),
+        suggestion(() => filePathRef.current),
         quickEdit(fileName),
         selectionTooltip(),
         keymap.of([indentWithTab]),

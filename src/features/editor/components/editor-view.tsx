@@ -2,7 +2,11 @@ import { Id } from "../../../../convex/_generated/dataModel";
 import { TopNavigation } from "./top-navigation";
 import { useEditor } from "../hooks/use-editor";
 import { FileBreadcrumbs } from "./file-breadcrumbs";
-import { useFile, useUpdateFile } from "@/features/projects/hooks/use-files";
+import {
+  useFile,
+  useFilePath,
+  useUpdateFile,
+} from "@/features/projects/hooks/use-files";
 import Image from "next/image";
 import { CodeEditor } from "./code-editor";
 import { useEffect, useRef } from "react";
@@ -13,6 +17,7 @@ const DEBOUNCE_MS = 1500;
 export const EditorView = ({ projectId }: { projectId: Id<"projects"> }) => {
   const { activeTabId } = useEditor(projectId);
   const activeFile = useFile(activeTabId);
+  const filePath = useFilePath(activeTabId);
   const updateFile = useUpdateFile();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -45,9 +50,10 @@ export const EditorView = ({ projectId }: { projectId: Id<"projects"> }) => {
             />
           </div>
         )}
-        {isActiveFileText && (
+        {isActiveFileText && filePath && (
           <CodeEditor
             fileName={activeFile.name}
+            filePath={filePath.map((entry) => entry.name).join("/")}
             key={activeFile._id}
             initialValue={activeFile.content}
             onChange={(content: string) => {
