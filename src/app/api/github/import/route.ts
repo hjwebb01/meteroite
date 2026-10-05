@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs/server";
 
 import { convex } from "@/lib/convex-client";
 import { inngest } from "@/inngest/client";
+import { getGithubToken } from "@/lib/github";
 
 import { api } from "../../../../../convex/_generated/api";
 
@@ -34,14 +35,8 @@ export async function POST(request: Request) {
   // https://github.com/AntonioErdeljac/cursor-dev
   // { owner: "AntonioErdeljac", repo: "cursor-dev" }
 
-  const client = await clerkClient();
-  const tokens = await client.users.getUserOauthAccessToken(
-    userId,
-    "github"
-  );
-  const githubToken = tokens.data[0]?.token;
-
-  if (!githubToken) {
+  // Checked here only for a friendly error; the worker fetches its own token.
+  if (!(await getGithubToken(userId))) {
     return NextResponse.json(
       { error: "GitHub not connected. Please reconnect your GitHub account." },
       { status: 400 }
@@ -69,7 +64,7 @@ export async function POST(request: Request) {
       owner,
       repo,
       projectId,
-      githubToken,
+      userId,
     },
   });
 

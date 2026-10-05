@@ -41,61 +41,25 @@ export const createDeleteFilesTool = ({
 
       const { fileIds } = parsed.data;
 
-      const resolved = await convex.query(api.system.agentResolveFileIdsInProject, {
-        internalKey,
-        projectId,
-        rawIds: fileIds,
-      });
-
-      const invalid = resolved.filter((r) => r.status === "invalid");
-      if (invalid.length > 0) {
-        return `Error: Invalid file id(s) for this project: ${invalid.map((r) => `"${r.raw}"`).join(", ")}. Use listFiles to get valid file IDs.`;
-      }
-
-      const filesToDelete: {
-        id: Id<"files">;
-        name: string;
-        type: string;
-      }[] = [];
-
-      for (const r of resolved) {
-        if (r.status !== "ok") {
-          continue;
-        }
-        const file = await convex.query(api.system.getFileById, {
-          internalKey,
-          fileId: r.fileId,
-        });
-        if (!file) {
-          return `Error: File with ID "${r.raw}" not found. Use listFiles to get valid file IDs.`;
-        }
-        filesToDelete.push({
-          id: file._id,
-          name: file.name,
-          type: file.type,
-        });
-      }
-
       const progressId = await reporter.toolStart(
         "deleteFiles",
-        `${filesToDelete.length} item(s)`,
+        `${fileIds.length} item(s)`,
       );
 
       try {
         const out = await toolStep?.run("delete-files", async () => {
-          const results: string[] = [];
-
-          for (const file of filesToDelete) {
-            await convex.mutation(api.system.deleteFile, {
-              internalKey,
-              projectId,
-              fileId: file.id,
-            });
-
-            results.push(`Deleted ${file.type} "${file.name}" successfully`);
-          }
-
-          return results.join("\n");
+          const results = await convex.mutation(api.system.agentDeleteFiles, {
+            internalKey,
+            projectId,
+            rawIds: fileIds,
+          });
+          return results
+            .map((result) =>
+              result.alreadyMissing
+                ? `File with ID "${result.fileId}" is already deleted`
+                : `Deleted ${result.type} "${result.name}" successfully`,
+            )
+            .join("\n");
         });
         await reporter.toolEnd(progressId, true);
         return out ?? "";

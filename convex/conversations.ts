@@ -1,6 +1,86 @@
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
-import { verifyAuth } from "./auth";
+import { Id } from "./_generated/dataModel";
+import { mutation, MutationCtx, query } from "./_generated/server";
+import { getOwnedProject, verifyAuth } from "./auth";
+
+const cancelProcessingMessagesInProject = async (
+  ctx: MutationCtx,
+  projectId: Id<"projects">,
+) => {
+  const processing = await ctx.db
+    .query("messages")
+    .withIndex("by_project_status", (q) =>
+      q.eq("projectId", projectId).eq("status", "processing"),
+    )
+    .collect();
+  for (const message of processing) {
+    await ctx.db.patch("messages", message._id, {
+      status: "cancelled",
+      progressLabel: undefined,
+      progressSteps: undefined,
+    });
+  }
+  return processing.map((message) => message._id);
+};
+
+/**
+ * Cancels any running assistant turn in the project and creates the next
+ * user/assistant message pair in one transaction, so concurrent submissions
+ * cannot both end up processing.
+ */
+export const startMessage = mutation({
+  args: {
+    conversationId: v.id("conversations"),
+    message: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const conversation = await ctx.db.get("conversations", args.conversationId);
+    if (!conversation) {
+      throw new Error("Conversation not found");
+    }
+    const { projectId } = conversation;
+    await getOwnedProject(ctx, projectId);
+
+    const cancelledMessageIds = await cancelProcessingMessagesInProject(
+      ctx,
+      projectId,
+    );
+
+    const userMessageId = await ctx.db.insert("messages", {
+      conversationId: args.conversationId,
+      projectId,
+      role: "user",
+      content: args.message,
+    });
+    const assistantMessageId = await ctx.db.insert("messages", {
+      conversationId: args.conversationId,
+      projectId,
+      role: "assistant",
+      content: "",
+      status: "processing",
+    });
+    await ctx.db.patch("conversations", args.conversationId, {
+      updatedAt: Date.now(),
+    });
+
+    return {
+      projectId,
+      userMessageId,
+      assistantMessageId,
+      cancelledMessageIds,
+    };
+  },
+});
+
+export const cancelProcessingMessages = mutation({
+  args: {
+    projectId: v.id("projects"),
+  },
+  handler: async (ctx, args) => {
+    await getOwnedProject(ctx, args.projectId);
+    return await cancelProcessingMessagesInProject(ctx, args.projectId);
+  },
+});
 
 export const create = mutation({
   args: {

@@ -1,7 +1,9 @@
 import { MAX_AGENT_CREATE_FILES_PER_MUTATION } from "./agentLimits";
 import type { Doc, Id } from "./_generated/dataModel";
-import { mutation, query } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import * as projectFiles from "./lib/project-files";
+import { normalizeWorkspacePathToSegments } from "./lib/project-files";
 import { v } from "convex/values";
 
 const projectFileWithPathRow = v.object({
@@ -95,40 +97,6 @@ const validateInternalKey = (key: string) => {
     throw new Error("Invalid internal key");
   }
 };
-
-/** Workspace-relative path: forward slashes, no leading slash, no `.` / `..` segments. */
-function normalizeWorkspacePathToSegments(raw: string): string[] {
-  const trimmed = raw.trim().replace(/\\/g, "/");
-  if (!trimmed) {
-    throw new Error("Path cannot be empty");
-  }
-  if (trimmed.startsWith("/")) {
-    throw new Error("Path must be workspace-relative (no leading slash)");
-  }
-  const segments = trimmed.split("/").filter((s) => s.length > 0);
-  for (const seg of segments) {
-    if (seg === "." || seg === "..") {
-      throw new Error(`Invalid path segment: ${seg}`);
-    }
-    if (seg.includes("/") || seg.includes("\\")) {
-      throw new Error("Invalid path segment");
-    }
-  }
-  return segments;
-}
-
-function splitFilePathForCreate(raw: string): {
-  dirSegments: string[];
-  fileName: string;
-} {
-  const segments = normalizeWorkspacePathToSegments(raw);
-  if (segments.length === 0) {
-    throw new Error("File path cannot be empty");
-  }
-  const fileName = segments[segments.length - 1]!;
-  const dirSegments = segments.slice(0, -1);
-  return { dirSegments, fileName };
-}
 
 /**
  * Computes workspace-relative paths for every file/folder in a project.
@@ -268,45 +236,6 @@ function applyReadSizeLimits(
   return { text, truncated: false, totalChars };
 }
 
-async function getOrCreateFolder(
-  ctx: MutationCtx,
-  projectId: Id<"projects">,
-  parentId: Id<"files"> | undefined,
-  segmentName: string,
-): Promise<{ id: Id<"files">; created: boolean }> {
-  const siblings = await ctx.db
-    .query("files")
-    .withIndex("by_project_parent", (q) =>
-      q.eq("projectId", projectId).eq("parentId", parentId),
-    )
-    .collect();
-
-  const existingFolder = siblings.find(
-    (f) => f.name === segmentName && f.type === "folder",
-  );
-  if (existingFolder) {
-    return { id: existingFolder._id, created: false };
-  }
-
-  const blockingFile = siblings.find(
-    (f) => f.name === segmentName && f.type === "file",
-  );
-  if (blockingFile) {
-    throw new Error(
-      `Cannot create folder "${segmentName}": a file exists at that path`,
-    );
-  }
-
-  const id = await ctx.db.insert("files", {
-    projectId,
-    name: segmentName,
-    type: "folder",
-    parentId,
-    updatedAt: Date.now(),
-  });
-  return { id, created: true };
-}
-
 export const getConversationById = query({
   args: {
     conversationId: v.id("conversations"),
@@ -392,6 +321,11 @@ export const updateMessageProgress = mutation({
     if (args.progressSteps !== undefined) {
       patch.progressSteps = args.progressSteps;
     }
+    const message = await ctx.db.get(args.messageId);
+    // A cancelled or finished turn must not get progress back from a late worker write.
+    if (message?.status !== "processing") {
+      return;
+    }
     await ctx.db.patch(args.messageId, patch);
   },
 });
@@ -404,52 +338,14 @@ export const updateMessageContent = mutation({
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
+    const message = await ctx.db.get(args.messageId);
+    if (message?.status !== "processing") {
+      return;
+    }
     await ctx.db.patch(args.messageId, {
       content: args.content,
       status: "completed" as const,
     });
-  },
-});
-
-export const getProcessingMessages = query({
-  args: {
-    internalKey: v.string(),
-    projectId: v.id("projects"),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-    return await ctx.db
-      .query("messages")
-      .withIndex("by_project_status", (q) =>
-        q.eq("projectId", args.projectId).eq("status", "processing"),
-      )
-      .collect();
-  },
-});
-
-export const updateMessageStatus = mutation({
-  args: {
-    internalKey: v.string(),
-    messageId: v.id("messages"),
-    status: v.union(
-      v.literal("processing"),
-      v.literal("completed"),
-      v.literal("cancelled"),
-    ),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-    if (args.status === "cancelled") {
-      await ctx.db.patch(args.messageId, {
-        status: args.status,
-        progressLabel: undefined,
-        progressSteps: undefined,
-      });
-    } else {
-      await ctx.db.patch(args.messageId, {
-        status: args.status,
-      });
-    }
   },
 });
 
@@ -763,23 +659,42 @@ export const updateFile = mutation({
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
-    const file = await ctx.db.get(args.fileId);
-    if (!file) {
-      throw new Error("File not found");
-    }
-    if (file.projectId !== args.projectId) {
-      throw new Error("File does not belong to this project");
-    }
-    await ctx.db.patch(args.fileId, {
+    return projectFiles.updateTextFile(ctx, {
+      projectId: args.projectId,
+      fileId: args.fileId,
       content: args.content,
-      updatedAt: Date.now(),
     });
-
-    return args.fileId;
   },
 });
 
-// "CreateSingleFile" tool used by the coding agent
+/** Internal batch entry: failed writes, including new parents, roll back together. */
+export const createBatchFile = internalMutation({
+  args: {
+    projectId: v.id("projects"),
+    location: v.union(
+      v.object({ path: v.string() }),
+      v.object({ parentId: v.optional(v.id("files")), name: v.string() }),
+    ),
+    content: v.string(),
+  },
+  returns: v.id("files"),
+  handler: async (ctx, args): Promise<Id<"files">> => {
+    if ("path" in args.location) {
+      return projectFiles.createFileAtPath(ctx, {
+        projectId: args.projectId,
+        path: args.location.path,
+        content: args.content,
+      });
+    }
+    return projectFiles.createFile(ctx, {
+      projectId: args.projectId,
+      ...args.location,
+      content: args.content,
+    });
+  },
+});
+
+// Text-file creation used by GitHub import
 export const createSingleFile = mutation({
   args: {
     internalKey: v.string(),
@@ -790,28 +705,12 @@ export const createSingleFile = mutation({
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
-
-    const files = await ctx.db
-      .query("files")
-      .withIndex("by_project_parent", (q) =>
-        q.eq("projectId", args.projectId).eq("parentId", args.parentId),
-      )
-      .collect();
-    const existing = files.find(
-      (file) => file.name === args.name && file.type !== "folder",
-    );
-    if (existing) {
-      throw new Error("File with this name already exists");
-    }
-    const fileId = await ctx.db.insert("files", {
+    return projectFiles.createFile(ctx, {
       projectId: args.projectId,
+      parentId: args.parentId,
       name: args.name,
       content: args.content,
-      type: "file",
-      parentId: args.parentId,
-      updatedAt: Date.now(),
     });
-    return fileId;
   },
 });
 
@@ -828,45 +727,43 @@ export const createFiles = mutation({
       }),
     ),
   },
-  handler: async (ctx, args) => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ name: string; fileId: string; error?: string }[]> => {
     validateInternalKey(args.internalKey);
-    const existingFiles = await ctx.db
-      .query("files")
-      .withIndex("by_project_parent", (q) =>
-        q.eq("projectId", args.projectId).eq("parentId", args.parentId),
-      )
-      .collect();
     const results: { name: string; fileId: string; error?: string }[] = [];
     for (const file of args.files) {
-      const existing = existingFiles.find(
-        (existing) => existing.name === file.name && existing.type !== "folder",
-      );
-      if (existing) {
+      try {
+        const fileId: Id<"files"> = await ctx.runMutation(
+          internal.system.createBatchFile,
+          {
+            projectId: args.projectId,
+            location: { parentId: args.parentId, name: file.name },
+            content: file.content,
+          },
+        );
+        results.push({ name: file.name, fileId });
+      } catch (error) {
+        const existing = await ctx.db
+          .query("files")
+          .withIndex("by_project_parent", (q) =>
+            q.eq("projectId", args.projectId).eq("parentId", args.parentId),
+          )
+          .filter((q) => q.eq(q.field("name"), file.name))
+          .first();
         results.push({
           name: file.name,
-          fileId: existing._id,
-          error: `File with this name already exists: ${existing.name}`,
+          fileId: existing?._id ?? "",
+          error: error instanceof Error ? error.message : String(error),
         });
-        continue;
       }
-      const fileId = await ctx.db.insert("files", {
-        projectId: args.projectId,
-        name: file.name,
-        content: file.content,
-        type: "file",
-        parentId: args.parentId,
-        updatedAt: Date.now(),
-      });
-      results.push({
-        name: file.name,
-        fileId,
-      });
     }
     return results;
   },
 });
 
-// "CreateFolder" tool used by the coding agent
+// Folder creation used by GitHub import
 export const createFolder = mutation({
   args: {
     internalKey: v.string(),
@@ -876,27 +773,11 @@ export const createFolder = mutation({
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
-
-    const files = await ctx.db
-      .query("files")
-      .withIndex("by_project_parent", (q) =>
-        q.eq("projectId", args.projectId).eq("parentId", args.parentId),
-      )
-      .collect();
-    const existing = files.find(
-      (file) => file.name === args.name && file.type === "folder",
-    );
-    if (existing) {
-      throw new Error("Folder with this name already exists");
-    }
-    const fileId = await ctx.db.insert("files", {
+    return projectFiles.createFolder(ctx, {
       projectId: args.projectId,
-      name: args.name,
-      type: "folder",
       parentId: args.parentId,
-      updatedAt: Date.now(),
+      name: args.name,
     });
-    return fileId;
   },
 });
 
@@ -913,29 +794,10 @@ export const agentEnsureFolderPath = mutation({
   returns: agentEnsureFolderPathResult,
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
-    const segments = normalizeWorkspacePathToSegments(args.path);
-    if (segments.length === 0) {
-      throw new Error("Folder path cannot be empty");
-    }
-    let parentId: Id<"files"> | undefined = undefined;
-    let createdNewFolders = false;
-    for (const seg of segments) {
-      const { id, created } = await getOrCreateFolder(
-        ctx,
-        args.projectId,
-        parentId,
-        seg,
-      );
-      if (created) {
-        createdNewFolders = true;
-      }
-      parentId = id;
-    }
-    return {
-      folderId: parentId!,
-      path: segments.join("/"),
-      createdNewFolders,
-    };
+    return projectFiles.ensureFolderPath(ctx, {
+      projectId: args.projectId,
+      path: args.path,
+    });
   },
 });
 
@@ -955,79 +817,36 @@ export const agentCreateFilesByPaths = mutation({
     ),
   },
   returns: v.array(agentCreateFileResultRow),
-  handler: async (ctx, args) => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ path: string; fileId?: Id<"files">; error?: string }[]> => {
     validateInternalKey(args.internalKey);
     if (args.files.length > MAX_AGENT_CREATE_FILES_PER_MUTATION) {
       throw new Error(
         `Too many files in one request (max ${MAX_AGENT_CREATE_FILES_PER_MUTATION})`,
       );
     }
-    const results: {
-      path: string;
-      fileId?: Id<"files">;
-      error?: string;
-    }[] = [];
-
+    const results: { path: string; fileId?: Id<"files">; error?: string }[] =
+      [];
     for (const file of args.files) {
       try {
-        const { dirSegments, fileName } = splitFilePathForCreate(file.path);
-        let parentId: Id<"files"> | undefined = undefined;
-        for (const seg of dirSegments) {
-          const { id } = await getOrCreateFolder(
-            ctx,
-            args.projectId,
-            parentId,
-            seg,
-          );
-          parentId = id;
-        }
-
-        const siblings = await ctx.db
-          .query("files")
-          .withIndex("by_project_parent", (q) =>
-            q.eq("projectId", args.projectId).eq("parentId", parentId),
-          )
-          .collect();
-
-        const existingFile = siblings.find(
-          (f) => f.name === fileName && f.type === "file",
+        const fileId: Id<"files"> = await ctx.runMutation(
+          internal.system.createBatchFile,
+          {
+            projectId: args.projectId,
+            location: { path: file.path },
+            content: file.content,
+          },
         );
-        if (existingFile) {
-          results.push({
-            path: file.path,
-            error: `File already exists: ${fileName}`,
-          });
-          continue;
-        }
-
-        const folderConflict = siblings.find(
-          (f) => f.name === fileName && f.type === "folder",
-        );
-        if (folderConflict) {
-          results.push({
-            path: file.path,
-            error: `A folder exists at that path: ${fileName}`,
-          });
-          continue;
-        }
-
-        const fileId = await ctx.db.insert("files", {
-          projectId: args.projectId,
-          name: fileName,
-          content: file.content,
-          type: "file",
-          parentId,
-          updatedAt: Date.now(),
-        });
         results.push({ path: file.path, fileId });
-      } catch (e) {
+      } catch (error) {
         results.push({
           path: file.path,
-          error: e instanceof Error ? e.message : String(e),
+          error: error instanceof Error ? error.message : String(error),
         });
       }
     }
-
     return results;
   },
 });
@@ -1042,35 +861,11 @@ export const renameFile = mutation({
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
-    const file = await ctx.db.get(args.fileId);
-    if (!file) {
-      throw new Error("File not found");
-    }
-    if (file.projectId !== args.projectId) {
-      throw new Error("File does not belong to this project");
-    }
-    const siblings = await ctx.db
-      .query("files")
-      .withIndex("by_project_parent", (q) =>
-        q.eq("projectId", file.projectId).eq("parentId", file.parentId),
-      )
-      .collect();
-    const existing = siblings.find(
-      (sibling) =>
-        sibling.name === args.newName &&
-        sibling._id !== args.fileId &&
-        sibling.type === file.type,
-    );
-    if (existing) {
-      throw new Error(
-        `A ${file.type} with this name "${args.newName}" already exists in this location`,
-      );
-    }
-    await ctx.db.patch(args.fileId, {
-      name: args.newName,
-      updatedAt: Date.now(),
+    return projectFiles.renameEntry(ctx, {
+      projectId: args.projectId,
+      fileId: args.fileId,
+      newName: args.newName,
     });
-    return args.fileId;
   },
 });
 
@@ -1083,42 +878,34 @@ export const deleteFile = mutation({
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
-    const file = await ctx.db.get(args.fileId);
-    if (!file) {
-      // Delete is intentionally idempotent because recursive batch deletes can
-      // invalidate later file ids in the same run.
-      return args.fileId;
-    }
-    if (file.projectId !== args.projectId) {
-      throw new Error("File does not belong to this project");
-    }
-
-    const deleteRecursive = async (fileId: typeof args.fileId) => {
-      const item = await ctx.db.get(fileId);
-      if (!item) {
-        return;
-      }
-
-      if (item.type === "folder") {
-        const children = await ctx.db
-          .query("files")
-          .withIndex("by_project_parent", (q) =>
-            q.eq("projectId", item.projectId).eq("parentId", fileId),
-          )
-          .collect();
-        for (const child of children) {
-          await deleteRecursive(child._id);
-        }
-      }
-      if (item.storageId) {
-        await ctx.storage.delete(item.storageId);
-      }
-      await ctx.db.delete(fileId);
-    };
-    await deleteRecursive(args.fileId);
-    return args.fileId;
+    return projectFiles.deleteEntry(ctx, {
+      projectId: args.projectId,
+      fileId: args.fileId,
+    });
   },
 });
+
+export const agentDeleteFiles = mutation({
+  args: {
+    internalKey: v.string(),
+    projectId: v.id("projects"),
+    rawIds: v.array(v.string()),
+  },
+  returns: v.array(v.object({
+    fileId: v.id("files"),
+    name: v.optional(v.string()),
+    type: v.optional(v.union(v.literal("file"), v.literal("folder"))),
+    alreadyMissing: v.boolean(),
+  })),
+  handler: async (ctx, args) => {
+    validateInternalKey(args.internalKey);
+    return projectFiles.deleteEntries(ctx, {
+      projectId: args.projectId,
+      rawIds: args.rawIds,
+    });
+  },
+});
+
 export const cleanup = mutation({
   args: {
     internalKey: v.string(),
@@ -1126,22 +913,7 @@ export const cleanup = mutation({
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
-
-    const files = await ctx.db
-      .query("files")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
-
-    for (const file of files) {
-      // Delete storage file if it exists
-      if (file.storageId) {
-        await ctx.storage.delete(file.storageId);
-      }
-
-      await ctx.db.delete(file._id);
-    }
-
-    return { deleted: files.length };
+    return projectFiles.clearProjectFiles(ctx, args.projectId);
   },
 });
 
@@ -1165,32 +937,12 @@ export const createBinaryFile = mutation({
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
-
-    const files = await ctx.db
-      .query("files")
-      .withIndex("by_project_parent", (q) =>
-        q.eq("projectId", args.projectId).eq("parentId", args.parentId),
-      )
-      .collect();
-
-    const existing = files.find(
-      (file) => file.name === args.name && file.type === "file",
-    );
-
-    if (existing) {
-      throw new Error("File already exists");
-    }
-
-    const fileId = await ctx.db.insert("files", {
+    return projectFiles.createFile(ctx, {
       projectId: args.projectId,
-      name: args.name,
-      type: "file",
-      storageId: args.storageId,
       parentId: args.parentId,
-      updatedAt: Date.now(),
+      name: args.name,
+      storageId: args.storageId,
     });
-
-    return fileId;
   },
 });
 
@@ -1216,26 +968,29 @@ export const updateImportStatus = mutation({
   },
 });
 
-export const updateExportStatus = mutation({
+/** Finishes an export run; ignored unless `jobId` is still the project's active export. */
+export const finishExport = mutation({
   args: {
     internalKey: v.string(),
     projectId: v.id("projects"),
-    status: v.optional(
-      v.union(
-        v.literal("exporting"),
-        v.literal("completed"),
-        v.literal("failed"),
-        v.literal("cancelled"),
-      ),
-    ),
+    jobId: v.string(),
+    status: v.union(v.literal("completed"), v.literal("failed")),
     repoUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
+    const project = await ctx.db.get("projects", args.projectId);
+    if (
+      project?.exportStatus !== "exporting" ||
+      project.exportJobId !== args.jobId
+    ) {
+      return;
+    }
     await ctx.db.patch("projects", args.projectId, {
       exportStatus: args.status,
       exportRepoUrl: args.repoUrl,
+      exportJobId: undefined,
       updatedAt: Date.now(),
     });
   },

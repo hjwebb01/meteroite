@@ -22,6 +22,8 @@ export default defineSchema({
       ),
     ),
     exportRepoUrl: v.optional(v.string()),
+    /** Identifies the active export run so stale runs cannot overwrite its status. */
+    exportJobId: v.optional(v.string()),
     settings: v.optional(
       v.object({
         installCommand: v.optional(v.string()),
