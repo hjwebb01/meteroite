@@ -25,6 +25,7 @@ type FileWithUrl = Doc<"files"> & {
 export const exportToGithub = inngest.createFunction(
   {
     id: "export-to-github",
+    triggers: { event: "github/export.repo" },
     cancelOn: [
       {
         event: "github/export.cancel",
@@ -46,9 +47,6 @@ export const exportToGithub = inngest.createFunction(
         });
       });
     },
-  },
-  {
-    event: "github/export.repo",
   },
   async ({ event, step }) => {
     const { projectId, jobId, userId, repoName, visibility, description } =

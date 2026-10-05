@@ -63,6 +63,7 @@ interface MessageEvent {
 export const processMessage = inngest.createFunction(
   {
     id: "process-message",
+    triggers: { event: "message/sent" },
     cancelOn: [
       {
         event: "message/cancel",
@@ -83,9 +84,6 @@ export const processMessage = inngest.createFunction(
         });
       }
     },
-  },
-  {
-    event: "message/sent",
   },
   async ({ event, step }) => {
     const { messageId, userMessageId, conversationId, projectId, message } =

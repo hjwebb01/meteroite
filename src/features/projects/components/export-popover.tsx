@@ -1,5 +1,6 @@
 import React from "react";
 import ky, { HTTPError } from "ky";
+import { getHttpErrorMessage } from "@/lib/http-error";
 import { z } from "zod";
 import { toast } from "sonner";
 import { useForm } from "@tanstack/react-form";
@@ -83,8 +84,8 @@ export const ExportPopover = ({ projectId }: ExportPopoverProps) => {
         toast.success("Export started...");
       } catch (error) {
         if (error instanceof HTTPError) {
-          const body = await error.response.json<{ error: string }>();
-          if (body.error?.includes("Pro plan required")) {
+          const errorMessage = getHttpErrorMessage(error);
+          if (errorMessage?.includes("Pro plan required")) {
             toast.error("Upgrade to import repositories", {
               action: {
                 label: "Upgrade",
@@ -95,7 +96,7 @@ export const ExportPopover = ({ projectId }: ExportPopoverProps) => {
             return;
           }
 
-          if (body.error?.includes("GitHub not connected")) {
+          if (errorMessage?.includes("GitHub not connected")) {
             toast.error("GitHub account not connected", {
               action: {
                 label: "Connect",

@@ -1,4 +1,5 @@
 import ky, { HTTPError } from "ky";
+import { getHttpErrorMessage } from "@/lib/http-error";
 import { z } from "zod";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
@@ -61,8 +62,8 @@ export const ImportGithubDialog = ({
         router.push(`/projects/${projectId}`);
       } catch (error) {
         if (error instanceof HTTPError) {
-          const body = await error.response.json<{ error: string }>();
-          if (body.error?.includes("Pro plan required")) {
+          const errorMessage = getHttpErrorMessage(error);
+          if (errorMessage?.includes("Pro plan required")) {
             toast.error("Upgrade to import repositories", {
               action: {
                 label: "Upgrade",
@@ -73,7 +74,7 @@ export const ImportGithubDialog = ({
             return;
           }
 
-          if (body.error?.includes("GitHub not connected")) {
+          if (errorMessage?.includes("GitHub not connected")) {
             toast.error("GitHub account not connected", {
               action: {
                 label: "Connect",
