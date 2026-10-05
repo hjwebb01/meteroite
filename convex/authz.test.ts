@@ -93,6 +93,83 @@ describe("messages", () => {
   });
 });
 
+describe("exports", () => {
+  test("users cannot start, cancel, or reset exports of projects they don't own", async () => {
+    const { bob, aliceProject } = await setup();
+
+    await expect(
+      bob.mutation(api.projects.startExport, {
+        projectId: aliceProject,
+        jobId: "job",
+      }),
+    ).rejects.toThrow(/Unauthorized/);
+    await expect(
+      bob.mutation(api.projects.cancelExport, { projectId: aliceProject }),
+    ).rejects.toThrow(/Unauthorized/);
+    await expect(
+      bob.mutation(api.projects.resetExport, { projectId: aliceProject }),
+    ).rejects.toThrow(/Unauthorized/);
+  });
+
+  test("only one export runs at a time", async () => {
+    const { alice, aliceProject } = await setup();
+
+    expect(
+      await alice.mutation(api.projects.startExport, {
+        projectId: aliceProject,
+        jobId: "job-1",
+      }),
+    ).toBe(true);
+    expect(
+      await alice.mutation(api.projects.startExport, {
+        projectId: aliceProject,
+        jobId: "job-2",
+      }),
+    ).toBe(false);
+  });
+
+  test("a stale export run cannot overwrite a newer export's status", async () => {
+    const { t, alice, aliceProject } = await setup();
+
+    await alice.mutation(api.projects.startExport, {
+      projectId: aliceProject,
+      jobId: "old",
+    });
+    expect(
+      await alice.mutation(api.projects.cancelExport, {
+        projectId: aliceProject,
+      }),
+    ).toBe("old");
+    await alice.mutation(api.projects.resetExport, { projectId: aliceProject });
+    await alice.mutation(api.projects.startExport, {
+      projectId: aliceProject,
+      jobId: "new",
+    });
+
+    await t.mutation(api.system.finishExport, {
+      internalKey,
+      projectId: aliceProject,
+      jobId: "old",
+      status: "completed",
+      repoUrl: "https://github.com/alice/old",
+    });
+    let project = await alice.query(api.projects.getById, { id: aliceProject });
+    expect(project.exportStatus).toBe("exporting");
+    expect(project.exportRepoUrl).toBeUndefined();
+
+    await t.mutation(api.system.finishExport, {
+      internalKey,
+      projectId: aliceProject,
+      jobId: "new",
+      status: "completed",
+      repoUrl: "https://github.com/alice/new",
+    });
+    project = await alice.query(api.projects.getById, { id: aliceProject });
+    expect(project.exportStatus).toBe("completed");
+    expect(project.exportRepoUrl).toBe("https://github.com/alice/new");
+  });
+});
+
 describe("files", () => {
   test("a parent folder from another project is rejected", async () => {
     const { t, bob, aliceProject, bobProject } = await setup();

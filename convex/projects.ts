@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
-import { verifyAuth } from "./auth";
+import { getOwnedProject, verifyAuth } from "./auth";
 
 export const updateSettings = mutation({
   args: {
@@ -105,6 +105,67 @@ export const rename = mutation({
 
     await ctx.db.patch("projects", args.id, {
       name: args.name,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+/** Returns false when an export is already running for the project. */
+export const startExport = mutation({
+  args: {
+    projectId: v.id("projects"),
+    jobId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const project = await getOwnedProject(ctx, args.projectId);
+    if (project.exportStatus === "exporting") {
+      return false;
+    }
+    await ctx.db.patch("projects", args.projectId, {
+      exportStatus: "exporting",
+      exportRepoUrl: undefined,
+      exportJobId: args.jobId,
+      updatedAt: Date.now(),
+    });
+    return true;
+  },
+});
+
+/**
+ * Returns the cancelled export's job id, or null if there is no run to signal
+ * (nothing running, or a legacy export started before job ids existed).
+ */
+export const cancelExport = mutation({
+  args: {
+    projectId: v.id("projects"),
+  },
+  handler: async (ctx, args) => {
+    const project = await getOwnedProject(ctx, args.projectId);
+    if (project.exportStatus !== "exporting") {
+      return null;
+    }
+    await ctx.db.patch("projects", args.projectId, {
+      exportStatus: "cancelled",
+      exportJobId: undefined,
+      updatedAt: Date.now(),
+    });
+    return project.exportJobId ?? null;
+  },
+});
+
+export const resetExport = mutation({
+  args: {
+    projectId: v.id("projects"),
+  },
+  handler: async (ctx, args) => {
+    const project = await getOwnedProject(ctx, args.projectId);
+    if (project.exportStatus === "exporting") {
+      throw new Error("Cannot reset an export that is still running");
+    }
+    await ctx.db.patch("projects", args.projectId, {
+      exportStatus: undefined,
+      exportRepoUrl: undefined,
+      exportJobId: undefined,
       updatedAt: Date.now(),
     });
   },

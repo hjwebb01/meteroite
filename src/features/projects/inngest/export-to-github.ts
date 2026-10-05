@@ -1,19 +1,21 @@
 import ky from "ky";
-import { Octokit } from "octokit";
 import { NonRetriableError } from "inngest";
 
 import { convex } from "@/lib/convex-client";
 import { inngest } from "@/inngest/client";
+import { createUserOctokit } from "@/lib/github";
 
 import { api } from "../../../../convex/_generated/api";
 import { Doc, Id } from "../../../../convex/_generated/dataModel";
 
 interface ExportToGithubEvent {
   projectId: Id<"projects">;
+  /** Matches `projects.exportJobId` while this run is the active export. */
+  jobId: string;
+  userId: string;
   repoName: string;
   visibility: "public" | "private";
   description?: string;
-  githubToken: string;
 }
 
 type FileWithUrl = Doc<"files"> & {
@@ -26,19 +28,20 @@ export const exportToGithub = inngest.createFunction(
     cancelOn: [
       {
         event: "github/export.cancel",
-        if: "event.data.projectId == async.data.projectId",
+        if: "event.data.jobId == async.data.jobId",
       },
     ],
     onFailure: async ({ event, step }) => {
       const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
       if (!internalKey) return;
 
-      const { projectId } = event.data.event.data as ExportToGithubEvent;
+      const { projectId, jobId } = event.data.event.data as ExportToGithubEvent;
 
       await step.run("set-failed-status", async () => {
-        await convex.mutation(api.system.updateExportStatus, {
+        await convex.mutation(api.system.finishExport, {
           internalKey,
           projectId,
+          jobId,
           status: "failed",
         });
       });
@@ -48,7 +51,7 @@ export const exportToGithub = inngest.createFunction(
     event: "github/export.repo",
   },
   async ({ event, step }) => {
-    const { projectId, repoName, visibility, description, githubToken } =
+    const { projectId, jobId, userId, repoName, visibility, description } =
       event.data as ExportToGithubEvent;
 
     const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
@@ -58,24 +61,15 @@ export const exportToGithub = inngest.createFunction(
       );
     }
 
-    // Set status to exporting
-    await step.run("set-exporting-status", async () => {
-      await convex.mutation(api.system.updateExportStatus, {
-        internalKey,
-        projectId,
-        status: "exporting",
-      });
-    });
-
-    const octokit = new Octokit({ auth: githubToken });
-
     // Get authenticated user
     const { data: user } = await step.run("get-github-user", async () => {
+      const octokit = await createUserOctokit(userId);
       return await octokit.rest.users.getAuthenticated();
     });
 
     // Create the new repository with auto_init to have an initial commit
     const { data: repo } = await step.run("create-repo", async () => {
+      const octokit = await createUserOctokit(userId);
       return await octokit.rest.repos.createForAuthenticatedUser({
         name: repoName,
         description: description || `Exported from Meteroite`,
@@ -89,6 +83,7 @@ export const exportToGithub = inngest.createFunction(
 
     // Get the initial commit SHA (we need this as parent for our commit)
     const initialCommitSha = await step.run("get-initial-commit", async () => {
+      const octokit = await createUserOctokit(userId);
       const { data: ref } = await octokit.rest.git.getRef({
         owner: user.login,
         repo: repoName,
@@ -145,6 +140,7 @@ export const exportToGithub = inngest.createFunction(
 
     // Create blobs for each file
     const treeItems = await step.run("create-blobs", async () => {
+      const octokit = await createUserOctokit(userId);
       const items: {
         path: string;
         mode: "100644";
@@ -194,6 +190,7 @@ export const exportToGithub = inngest.createFunction(
 
     // Create the tree
     const { data: tree } = await step.run("create-tree", async () => {
+      const octokit = await createUserOctokit(userId);
       return await octokit.rest.git.createTree({
         owner: user.login,
         repo: repoName,
@@ -203,6 +200,7 @@ export const exportToGithub = inngest.createFunction(
 
     // Create the commit with the initial commit as parent
     const { data: commit } = await step.run("create-commit", async () => {
+      const octokit = await createUserOctokit(userId);
       return await octokit.rest.git.createCommit({
         owner: user.login,
         repo: repoName,
@@ -214,6 +212,7 @@ export const exportToGithub = inngest.createFunction(
 
     // Update the main branch reference to point to our new commit
     await step.run("update-branch-ref", async () => {
+      const octokit = await createUserOctokit(userId);
       return await octokit.rest.git.updateRef({
         owner: user.login,
         repo: repoName,
@@ -225,9 +224,10 @@ export const exportToGithub = inngest.createFunction(
 
     // Set status to completed with repo URL
     await step.run("set-completed-status", async () => {
-      await convex.mutation(api.system.updateExportStatus, {
+      await convex.mutation(api.system.finishExport, {
         internalKey,
         projectId,
+        jobId,
         status: "completed",
         repoUrl: repo.html_url,
       });

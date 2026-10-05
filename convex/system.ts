@@ -968,26 +968,29 @@ export const updateImportStatus = mutation({
   },
 });
 
-export const updateExportStatus = mutation({
+/** Finishes an export run; ignored unless `jobId` is still the project's active export. */
+export const finishExport = mutation({
   args: {
     internalKey: v.string(),
     projectId: v.id("projects"),
-    status: v.optional(
-      v.union(
-        v.literal("exporting"),
-        v.literal("completed"),
-        v.literal("failed"),
-        v.literal("cancelled"),
-      ),
-    ),
+    jobId: v.string(),
+    status: v.union(v.literal("completed"), v.literal("failed")),
     repoUrl: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     validateInternalKey(args.internalKey);
 
+    const project = await ctx.db.get("projects", args.projectId);
+    if (
+      project?.exportStatus !== "exporting" ||
+      project.exportJobId !== args.jobId
+    ) {
+      return;
+    }
     await ctx.db.patch("projects", args.projectId, {
       exportStatus: args.status,
       exportRepoUrl: args.repoUrl,
+      exportJobId: undefined,
       updatedAt: Date.now(),
     });
   },

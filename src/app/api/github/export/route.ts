@@ -1,9 +1,12 @@
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { fetchMutation } from "convex/nextjs";
 
 import { inngest } from "@/inngest/client";
+import { getConvexAuth } from "@/lib/convex-auth";
+import { getGithubToken } from "@/lib/github";
 
+import { api } from "../../../../../convex/_generated/api";
 import { Id } from "../../../../../convex/_generated/dataModel";
 
 const requestSchema = z.object({
@@ -14,32 +17,34 @@ const requestSchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const { userId } = await auth();
+  const convexAuth = await getConvexAuth();
 
-  if (!userId) {
+  if (!convexAuth) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await request.json();
   const { projectId, repoName, visibility, description } = requestSchema.parse(body);
 
-  const client = await clerkClient();
-  const tokens = await client.users.getUserOauthAccessToken(userId, "github");
-  const githubToken = tokens.data[0]?.token;
-
-  if (!githubToken) {
+  // Checked here only for a friendly error; the worker fetches its own token.
+  if (!(await getGithubToken(convexAuth.userId))) {
     return NextResponse.json(
       { error: "GitHub not connected. Please reconnect your GitHub account." },
       { status: 400 }
     );
   }
 
-  const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
-
-  if (!internalKey) {
+  const jobId = crypto.randomUUID();
+  // Runs as the user, so Convex rejects projects they don't own.
+  const started = await fetchMutation(
+    api.projects.startExport,
+    { projectId: projectId as Id<"projects">, jobId },
+    { token: convexAuth.token },
+  );
+  if (!started) {
     return NextResponse.json(
-      { error: "Server configuration error" },
-      { status: 500 }
+      { error: "An export is already in progress" },
+      { status: 409 }
     );
   }
 
@@ -47,17 +52,17 @@ export async function POST(request: Request) {
     name: "github/export.repo",
     data: {
       projectId,
+      jobId,
+      userId: convexAuth.userId,
       repoName,
       visibility,
       description,
-      githubToken,
-      internalKey,
     },
   });
 
-  return NextResponse.json({ 
-    success: true, 
-    projectId, 
+  return NextResponse.json({
+    success: true,
+    projectId,
     eventId: event.ids[0]
   });
 };
