@@ -1,15 +1,13 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
-import { beforeEach, describe, expect, test, vi } from "vitest";
-import { api } from "./_generated/api";
+import { describe, expect, expectTypeOf, test } from "vitest";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
+import * as agentFiles from "./agentFiles";
+import * as systemMessages from "./systemMessages";
+import * as importExport from "./importExport";
 
 const modules = import.meta.glob("./**/*.ts");
-const internalKey = "test-internal-key";
-
-beforeEach(() => {
-  vi.stubEnv("METEROITE_CONVEX_INTERNAL_KEY", internalKey);
-});
 
 const setup = async () => {
   const t = convexTest(schema, modules);
@@ -75,13 +73,11 @@ describe("messages", () => {
       projectId: aliceProject,
     });
 
-    await t.mutation(api.system.updateMessageProgress, {
-      internalKey,
+    await t.mutation(internal.systemMessages.updateMessageProgress, {
       messageId: assistantMessageId,
       progressLabel: "Late progress",
     });
-    await t.mutation(api.system.updateMessageContent, {
-      internalKey,
+    await t.mutation(internal.systemMessages.updateMessageContent, {
       messageId: assistantMessageId,
       content: "late answer",
     });
@@ -146,8 +142,7 @@ describe("exports", () => {
       jobId: "new",
     });
 
-    await t.mutation(api.system.finishExport, {
-      internalKey,
+    await t.mutation(internal.importExport.finishExport, {
       projectId: aliceProject,
       jobId: "old",
       status: "completed",
@@ -157,8 +152,7 @@ describe("exports", () => {
     expect(project.exportStatus).toBe("exporting");
     expect(project.exportRepoUrl).toBeUndefined();
 
-    await t.mutation(api.system.finishExport, {
-      internalKey,
+    await t.mutation(internal.importExport.finishExport, {
       projectId: aliceProject,
       jobId: "new",
       status: "completed",
@@ -259,7 +253,33 @@ describe("files", () => {
     });
     const indexFile = files.find((f) => f.name === "index.ts")!;
     await expect(
-      alice.mutation(api.files.renameFile, { id: indexFile._id, newName: "src" }),
+      alice.mutation(api.files.renameFile, {
+        id: indexFile._id,
+        newName: "src",
+      }),
     ).rejects.toThrow(/already exists/);
+  });
+});
+
+describe("server-only function boundary", () => {
+  test.each([
+    ["agentFiles", agentFiles],
+    ["systemMessages", systemMessages],
+    ["importExport", importExport],
+  ])("registers every %s function as internal", (_name, functions) => {
+    expect(Object.keys(functions).length).toBeGreaterThan(0);
+    for (const fn of Object.values(functions)) {
+      expect(fn).toHaveProperty("isInternal", true);
+      expect(fn).not.toHaveProperty("isPublic");
+    }
+  });
+
+  test("excludes server-only modules from the generated public API", () => {
+    expectTypeOf<
+      Extract<
+        keyof typeof api,
+        "agentFiles" | "systemMessages" | "importExport" | "system"
+      >
+    >().toEqualTypeOf<never>();
   });
 });

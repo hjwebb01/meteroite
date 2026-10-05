@@ -1,10 +1,10 @@
 import { MAX_AGENT_CREATE_FILES_PER_MUTATION } from "./agentLimits";
 import type { Doc, Id } from "./_generated/dataModel";
-import { internalMutation, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { projectPaths } from "./lib/project-paths";
 import * as projectFiles from "./lib/project-files";
 import { normalizeWorkspacePathToSegments } from "./lib/project-files";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
 const projectFileWithPathRow = v.object({
@@ -69,9 +69,7 @@ const agentReadFileResultRow = v.union(
 const agentListCompactPayload = v.object({
   v: v.literal(2),
   cols: v.array(v.string()),
-  rows: v.array(
-    v.array(v.union(v.string(), v.null())),
-  ),
+  rows: v.array(v.array(v.union(v.string(), v.null()))),
   truncated: v.boolean(),
   nextCursor: v.union(v.number(), v.null()),
   totalCount: v.number(),
@@ -89,15 +87,6 @@ const agentResolveFileIdRow = v.union(
   }),
 );
 
-const validateInternalKey = (key: string) => {
-  const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
-  if (!internalKey) {
-    throw new Error("METEROITE_CONVEX_INTERNAL_KEY key is not set");
-  }
-  if (key !== internalKey) {
-    throw new Error("Invalid internal key");
-  }
-};
 
 function fileDocToAgentReadResult(
   doc: Doc<"files">,
@@ -177,163 +166,12 @@ function applyReadSizeLimits(
   return { text, truncated: false, totalChars };
 }
 
-export const getConversationById = query({
-  args: {
-    conversationId: v.id("conversations"),
-    internalKey: v.string(),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-
-    return await ctx.db.get(args.conversationId);
-  },
-});
-
-const progressStepValidator = v.object({
-  id: v.optional(v.string()),
-  label: v.string(),
-  description: v.optional(v.string()),
-  status: v.optional(
-    v.union(
-      v.literal("pending"),
-      v.literal("active"),
-      v.literal("complete"),
-      v.literal("error"),
-    ),
-  ),
-  kind: v.optional(v.union(v.literal("phase"), v.literal("tool"))),
-  toolName: v.optional(v.string()),
-});
-
-export const createMessage = mutation({
-  args: {
-    internalKey: v.string(),
-    conversationId: v.id("conversations"),
-    projectId: v.id("projects"),
-    role: v.union(v.literal("user"), v.literal("assistant")),
-    content: v.string(),
-    status: v.optional(
-      v.union(
-        v.literal("processing"),
-        v.literal("completed"),
-        v.literal("cancelled"),
-      ),
-    ),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-    const messageId = await ctx.db.insert("messages", {
-      conversationId: args.conversationId,
-      projectId: args.projectId,
-      role: args.role,
-      content: args.content,
-      status: args.status,
-    });
-    await ctx.db.patch("conversations", args.conversationId, {
-      updatedAt: Date.now(),
-    });
-    return messageId;
-  },
-});
-
-export const updateMessageProgress = mutation({
-  args: {
-    internalKey: v.string(),
-    messageId: v.id("messages"),
-    progressLabel: v.optional(v.string()),
-    progressSteps: v.optional(v.array(progressStepValidator)),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-    const patch: {
-      progressLabel?: string;
-      progressSteps?: Array<{
-        id?: string;
-        label: string;
-        description?: string;
-        status?: "pending" | "active" | "complete" | "error";
-        kind?: "phase" | "tool";
-        toolName?: string;
-      }>;
-    } = {};
-    if (args.progressLabel !== undefined) {
-      patch.progressLabel = args.progressLabel;
-    }
-    if (args.progressSteps !== undefined) {
-      patch.progressSteps = args.progressSteps;
-    }
-    const message = await ctx.db.get(args.messageId);
-    // A cancelled or finished turn must not get progress back from a late worker write.
-    if (message?.status !== "processing") {
-      return;
-    }
-    await ctx.db.patch(args.messageId, patch);
-  },
-});
-
-export const updateMessageContent = mutation({
-  args: {
-    internalKey: v.string(),
-    messageId: v.id("messages"),
-    content: v.string(),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-    const message = await ctx.db.get(args.messageId);
-    if (message?.status !== "processing") {
-      return;
-    }
-    await ctx.db.patch(args.messageId, {
-      content: args.content,
-      status: "completed" as const,
-    });
-  },
-});
-
-export const getRecentMessages = query({
-  args: {
-    internalKey: v.string(),
-    conversationId: v.id("conversations"),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-    const messages = await ctx.db
-      .query("messages")
-      .withIndex("by_conversation", (q) =>
-        q.eq("conversationId", args.conversationId),
-      )
-      .order("asc")
-      .collect();
-    const limit = args.limit ?? 10;
-
-    return messages.slice(-limit);
-  },
-});
-
-export const updateConversationTitle = mutation({
-  args: {
-    internalKey: v.string(),
-    conversationId: v.id("conversations"),
-    title: v.string(),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-    await ctx.db.patch(args.conversationId, {
-      title: args.title,
-      updatedAt: Date.now(),
-    });
-  },
-});
-
 // "ListFiles" tool used by the coding agent
-export const getProjectFiles = query({
+export const getProjectFiles = internalQuery({
   args: {
-    internalKey: v.string(),
     projectId: v.id("projects"),
   },
   handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
     return await ctx.db
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -342,14 +180,12 @@ export const getProjectFiles = query({
 });
 
 /** Same as getProjectFiles but each item includes a resolved workspace-relative `path`. */
-export const getProjectFilesWithPaths = query({
+export const getProjectFilesWithPaths = internalQuery({
   args: {
-    internalKey: v.string(),
     projectId: v.id("projects"),
   },
   returns: v.array(projectFileWithPathRow),
   handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
     const files = await ctx.db
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -369,9 +205,8 @@ export const getProjectFilesWithPaths = query({
 /**
  * Coding agent: list project files with optional compact format, path prefix, and pagination.
  */
-export const agentListProjectFiles = query({
+export const agentListProjectFiles = internalQuery({
   args: {
-    internalKey: v.string(),
     projectId: v.id("projects"),
     format: v.optional(v.union(v.literal("full"), v.literal("compact"))),
     pathPrefix: v.optional(v.string()),
@@ -380,7 +215,6 @@ export const agentListProjectFiles = query({
   },
   returns: v.union(v.array(projectFileWithPathRow), agentListCompactPayload),
   handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
     const format = args.format ?? "compact";
     const limit = Math.min(Math.max(args.limit ?? 500, 1), 5000);
     const cursor = Math.max(args.cursor ?? 0, 0);
@@ -439,9 +273,8 @@ export const agentListProjectFiles = query({
  * Coding agent: read files by workspace-relative path and/or by file id.
  * Paths and ids are scoped to projectId. Invalid ids never reach v.id validation.
  */
-export const agentReadFiles = query({
+export const agentReadFiles = internalQuery({
   args: {
-    internalKey: v.string(),
     projectId: v.id("projects"),
     paths: v.optional(v.array(v.string())),
     fileIds: v.optional(v.array(v.string())),
@@ -451,7 +284,6 @@ export const agentReadFiles = query({
   },
   returns: v.array(agentReadFileResultRow),
   handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
     const pathInputs = args.paths ?? [];
     const idInputs = args.fileIds ?? [];
     if (pathInputs.length === 0 && idInputs.length === 0) {
@@ -552,15 +384,13 @@ export const agentReadFiles = query({
 });
 
 /** Coding agent: resolve raw file id strings against a project (for mutations). */
-export const agentResolveFileIdsInProject = query({
+export const agentResolveFileIdsInProject = internalQuery({
   args: {
-    internalKey: v.string(),
     projectId: v.id("projects"),
     rawIds: v.array(v.string()),
   },
   returns: v.array(agentResolveFileIdRow),
   handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
     const files = await ctx.db
       .query("files")
       .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
@@ -579,27 +409,23 @@ export const agentResolveFileIdsInProject = query({
   },
 });
 // "ReadFile" tool used by the coding agent
-export const getFileById = query({
+export const getFileById = internalQuery({
   args: {
-    internalKey: v.string(),
     fileId: v.id("files"),
   },
   handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
     return await ctx.db.get(args.fileId);
   },
 });
 
 // "UpdateFile" tool used by the coding agent
-export const updateFile = mutation({
+export const updateFile = internalMutation({
   args: {
-    internalKey: v.string(),
     projectId: v.id("projects"),
     fileId: v.id("files"),
     content: v.string(),
   },
   handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
     return projectFiles.updateTextFile(ctx, {
       projectId: args.projectId,
       fileId: args.fileId,
@@ -635,30 +461,9 @@ export const createBatchFile = internalMutation({
   },
 });
 
-// Text-file creation used by GitHub import
-export const createSingleFile = mutation({
-  args: {
-    internalKey: v.string(),
-    projectId: v.id("projects"),
-    parentId: v.optional(v.id("files")),
-    name: v.string(),
-    content: v.string(),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-    return projectFiles.createFile(ctx, {
-      projectId: args.projectId,
-      parentId: args.parentId,
-      name: args.name,
-      content: args.content,
-    });
-  },
-});
-
 // "CreateFiles" tool used by the coding agent (bulk create files)
-export const createFiles = mutation({
+export const createFiles = internalMutation({
   args: {
-    internalKey: v.string(),
     projectId: v.id("projects"),
     parentId: v.optional(v.id("files")),
     files: v.array(
@@ -672,12 +477,11 @@ export const createFiles = mutation({
     ctx,
     args,
   ): Promise<{ name: string; fileId: string; error?: string }[]> => {
-    validateInternalKey(args.internalKey);
     const results: { name: string; fileId: string; error?: string }[] = [];
     for (const file of args.files) {
       try {
         const fileId: Id<"files"> = await ctx.runMutation(
-          internal.system.createBatchFile,
+          internal.agentFiles.createBatchFile,
           {
             projectId: args.projectId,
             location: { parentId: args.parentId, name: file.name },
@@ -704,37 +508,17 @@ export const createFiles = mutation({
   },
 });
 
-// Folder creation used by GitHub import
-export const createFolder = mutation({
-  args: {
-    internalKey: v.string(),
-    projectId: v.id("projects"),
-    parentId: v.optional(v.id("files")),
-    name: v.string(),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-    return projectFiles.createFolder(ctx, {
-      projectId: args.projectId,
-      parentId: args.parentId,
-      name: args.name,
-    });
-  },
-});
-
 /**
  * Coding agent: ensure a folder exists at a workspace-relative path (creates missing segments).
  * Prefer this over createFolder + parent IDs.
  */
-export const agentEnsureFolderPath = mutation({
+export const agentEnsureFolderPath = internalMutation({
   args: {
-    internalKey: v.string(),
     projectId: v.id("projects"),
     path: v.string(),
   },
   returns: agentEnsureFolderPathResult,
   handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
     return projectFiles.ensureFolderPath(ctx, {
       projectId: args.projectId,
       path: args.path,
@@ -746,9 +530,8 @@ export const agentEnsureFolderPath = mutation({
  * Coding agent: create files at workspace-relative paths; auto-creates parent folders.
  * Each entry is `{ path, content }` (e.g. `package.json` and `src/app.tsx` in one call).
  */
-export const agentCreateFilesByPaths = mutation({
+export const agentCreateFilesByPaths = internalMutation({
   args: {
-    internalKey: v.string(),
     projectId: v.id("projects"),
     files: v.array(
       v.object({
@@ -762,7 +545,6 @@ export const agentCreateFilesByPaths = mutation({
     ctx,
     args,
   ): Promise<{ path: string; fileId?: Id<"files">; error?: string }[]> => {
-    validateInternalKey(args.internalKey);
     if (args.files.length > MAX_AGENT_CREATE_FILES_PER_MUTATION) {
       throw new Error(
         `Too many files in one request (max ${MAX_AGENT_CREATE_FILES_PER_MUTATION})`,
@@ -773,7 +555,7 @@ export const agentCreateFilesByPaths = mutation({
     for (const file of args.files) {
       try {
         const fileId: Id<"files"> = await ctx.runMutation(
-          internal.system.createBatchFile,
+          internal.agentFiles.createBatchFile,
           {
             projectId: args.projectId,
             location: { path: file.path },
@@ -793,15 +575,13 @@ export const agentCreateFilesByPaths = mutation({
 });
 
 // "RenameFile" tool used by the coding agent
-export const renameFile = mutation({
+export const renameFile = internalMutation({
   args: {
-    internalKey: v.string(),
     projectId: v.id("projects"),
     fileId: v.id("files"),
     newName: v.string(),
   },
   handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
     return projectFiles.renameEntry(ctx, {
       projectId: args.projectId,
       fileId: args.fileId,
@@ -811,14 +591,12 @@ export const renameFile = mutation({
 });
 
 // "DeleteFile" tool used by the coding agent
-export const deleteFile = mutation({
+export const deleteFile = internalMutation({
   args: {
-    internalKey: v.string(),
     projectId: v.id("projects"),
     fileId: v.id("files"),
   },
   handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
     return projectFiles.deleteEntry(ctx, {
       projectId: args.projectId,
       fileId: args.fileId,
@@ -826,187 +604,23 @@ export const deleteFile = mutation({
   },
 });
 
-export const agentDeleteFiles = mutation({
+export const agentDeleteFiles = internalMutation({
   args: {
-    internalKey: v.string(),
     projectId: v.id("projects"),
     rawIds: v.array(v.string()),
   },
-  returns: v.array(v.object({
-    fileId: v.id("files"),
-    name: v.optional(v.string()),
-    type: v.optional(v.union(v.literal("file"), v.literal("folder"))),
-    alreadyMissing: v.boolean(),
-  })),
+  returns: v.array(
+    v.object({
+      fileId: v.id("files"),
+      name: v.optional(v.string()),
+      type: v.optional(v.union(v.literal("file"), v.literal("folder"))),
+      alreadyMissing: v.boolean(),
+    }),
+  ),
   handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
     return projectFiles.deleteEntries(ctx, {
       projectId: args.projectId,
       rawIds: args.rawIds,
     });
   },
 });
-
-export const cleanup = mutation({
-  args: {
-    internalKey: v.string(),
-    projectId: v.id("projects"),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-    return projectFiles.clearProjectFiles(ctx, args.projectId);
-  },
-});
-
-export const generateUploadUrl = mutation({
-  args: {
-    internalKey: v.string(),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-    return await ctx.storage.generateUploadUrl();
-  },
-});
-
-export const createBinaryFile = mutation({
-  args: {
-    internalKey: v.string(),
-    projectId: v.id("projects"),
-    name: v.string(),
-    storageId: v.id("_storage"),
-    parentId: v.optional(v.id("files")),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-    return projectFiles.createFile(ctx, {
-      projectId: args.projectId,
-      parentId: args.parentId,
-      name: args.name,
-      storageId: args.storageId,
-    });
-  },
-});
-
-export const updateImportStatus = mutation({
-  args: {
-    internalKey: v.string(),
-    projectId: v.id("projects"),
-    status: v.optional(
-      v.union(
-        v.literal("importing"),
-        v.literal("completed"),
-        v.literal("failed"),
-      ),
-    ),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-
-    await ctx.db.patch("projects", args.projectId, {
-      importStatus: args.status,
-      updatedAt: Date.now(),
-    });
-  },
-});
-
-/** Finishes an export run; ignored unless `jobId` is still the project's active export. */
-export const finishExport = mutation({
-  args: {
-    internalKey: v.string(),
-    projectId: v.id("projects"),
-    jobId: v.string(),
-    status: v.union(v.literal("completed"), v.literal("failed")),
-    repoUrl: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-
-    const project = await ctx.db.get("projects", args.projectId);
-    if (
-      project?.exportStatus !== "exporting" ||
-      project.exportJobId !== args.jobId
-    ) {
-      return;
-    }
-    await ctx.db.patch("projects", args.projectId, {
-      exportStatus: args.status,
-      exportRepoUrl: args.repoUrl,
-      exportJobId: undefined,
-      updatedAt: Date.now(),
-    });
-  },
-});
-
-export const getProjectFilesWithUrls = query({
-  args: {
-    internalKey: v.string(),
-    projectId: v.id("projects"),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-
-    const files = await ctx.db
-      .query("files")
-      .withIndex("by_project", (q) => q.eq("projectId", args.projectId))
-      .collect();
-
-    return await Promise.all(
-      files.map(async (file) => {
-        if (file.storageId) {
-          const url = await ctx.storage.getUrl(file.storageId);
-          return { ...file, storageUrl: url };
-        }
-        return { ...file, storageUrl: null };
-      }),
-    );
-  },
-});
-
-export const createProject = mutation({
-  args: {
-    internalKey: v.string(),
-    name: v.string(),
-    ownerId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-
-    const projectId = await ctx.db.insert("projects", {
-      name: args.name,
-      ownerId: args.ownerId,
-      updatedAt: Date.now(),
-      importStatus: "importing",
-    });
-
-    return projectId;
-  },
-});
-
-export const createProjectWithConversation = mutation({
-  args: {
-    internalKey: v.string(),
-    projectName: v.string(),
-    conversationTitle: v.string(),
-    ownerId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    validateInternalKey(args.internalKey);
-
-    const now = Date.now();
-
-    const projectId = await ctx.db.insert("projects", {
-      name: args.projectName,
-      ownerId: args.ownerId,
-      updatedAt: now,
-    });
-
-    const conversationId = await ctx.db.insert("conversations", {
-      projectId,
-      title: args.conversationTitle,
-      updatedAt: now,
-    });
-
-    return { projectId, conversationId };
-  },
-});
-// TODO: Add more tools

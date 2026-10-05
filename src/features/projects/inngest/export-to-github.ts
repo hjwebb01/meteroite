@@ -1,11 +1,11 @@
 import ky from "ky";
 import { NonRetriableError } from "inngest";
 
-import { convex } from "@/lib/convex-client";
+import { getConvexAdminClient } from "@/lib/convex-client";
 import { inngest } from "@/inngest/client";
 import { createUserOctokit } from "@/lib/github";
 
-import { api } from "../../../../convex/_generated/api";
+import { internal } from "../../../../convex/_generated/api";
 import { Doc, Id } from "../../../../convex/_generated/dataModel";
 import { projectPaths } from "../../../../convex/lib/project-paths";
 
@@ -34,18 +34,20 @@ export const exportToGithub = inngest.createFunction(
       },
     ],
     onFailure: async ({ event, step }) => {
-      const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
-      if (!internalKey) return;
+      const deployKey = process.env.CONVEX_DEPLOY_KEY;
+      if (!deployKey) return;
 
       const { projectId, jobId } = event.data.event.data as ExportToGithubEvent;
 
       await step.run("set-failed-status", async () => {
-        await convex.mutation(api.system.finishExport, {
-          internalKey,
-          projectId,
-          jobId,
-          status: "failed",
-        });
+        await getConvexAdminClient().mutation(
+          internal.importExport.finishExport,
+          {
+            projectId,
+            jobId,
+            status: "failed",
+          },
+        );
       });
     },
   },
@@ -53,11 +55,9 @@ export const exportToGithub = inngest.createFunction(
     const { projectId, jobId, userId, repoName, visibility, description } =
       event.data as ExportToGithubEvent;
 
-    const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
-    if (!internalKey) {
-      throw new NonRetriableError(
-        "METEROITE_CONVEX_INTERNAL_KEY is not configured",
-      );
+    const deployKey = process.env.CONVEX_DEPLOY_KEY;
+    if (!deployKey) {
+      throw new NonRetriableError("CONVEX_DEPLOY_KEY is not configured");
     }
 
     // Get authenticated user
@@ -93,10 +93,12 @@ export const exportToGithub = inngest.createFunction(
 
     // Fetch all project files with storage URLs
     const files = await step.run("fetch-project-files", async () => {
-      return (await convex.query(api.system.getProjectFilesWithUrls, {
-        internalKey,
-        projectId,
-      })) as FileWithUrl[];
+      return (await getConvexAdminClient().query(
+        internal.importExport.getProjectFilesWithUrls,
+        {
+          projectId,
+        },
+      )) as FileWithUrl[];
     });
 
     const { fileByPath } = projectPaths(files);
@@ -196,13 +198,15 @@ export const exportToGithub = inngest.createFunction(
 
     // Set status to completed with repo URL
     await step.run("set-completed-status", async () => {
-      await convex.mutation(api.system.finishExport, {
-        internalKey,
-        projectId,
-        jobId,
-        status: "completed",
-        repoUrl: repo.html_url,
-      });
+      await getConvexAdminClient().mutation(
+        internal.importExport.finishExport,
+        {
+          projectId,
+          jobId,
+          status: "completed",
+          repoUrl: repo.html_url,
+        },
+      );
     });
 
     return {

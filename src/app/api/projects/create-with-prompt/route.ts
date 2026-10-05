@@ -11,9 +11,9 @@ import {
 import { DEFAULT_CONVERSATION_TITLE } from "../../../../../convex/constants";
 
 import { inngest } from "@/inngest/client";
-import { convex } from "@/lib/convex-client";
+import { getConvexAdminClient } from "@/lib/convex-client";
 
-import { api } from "../../../../../convex/_generated/api";
+import { internal } from "../../../../../convex/_generated/api";
 
 const requestSchema = z.object({
   prompt: z.string().min(1),
@@ -26,11 +26,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
+  const deployKey = process.env.CONVEX_DEPLOY_KEY;
 
-  if (!internalKey) {
+  if (!deployKey) {
     return NextResponse.json(
-      { error: "Internal key not configured" },
+      { error: "CONVEX_DEPLOY_KEY not configured" },
       { status: 500 },
     );
   }
@@ -46,33 +46,36 @@ export async function POST(request: Request) {
   });
 
   // Create project and conversation together
-  const { projectId, conversationId } = await convex.mutation(
-    api.system.createProjectWithConversation,
+  const { projectId, conversationId } = await getConvexAdminClient().mutation(
+    internal.importExport.createProjectWithConversation,
     {
-      internalKey,
       projectName,
       conversationTitle: DEFAULT_CONVERSATION_TITLE,
       ownerId: userId,
     },
   );
 
-  const userMessageId = await convex.mutation(api.system.createMessage, {
-    internalKey,
-    conversationId,
-    projectId,
-    role: "user",
-    content: prompt,
-  });
+  const userMessageId = await getConvexAdminClient().mutation(
+    internal.systemMessages.createMessage,
+    {
+      conversationId,
+      projectId,
+      role: "user",
+      content: prompt,
+    },
+  );
 
   // Create assistant message placeholder with processing status
-  const assistantMessageId = await convex.mutation(api.system.createMessage, {
-    internalKey,
-    conversationId,
-    projectId,
-    role: "assistant",
-    content: "",
-    status: "processing",
-  });
+  const assistantMessageId = await getConvexAdminClient().mutation(
+    internal.systemMessages.createMessage,
+    {
+      conversationId,
+      projectId,
+      role: "assistant",
+      content: "",
+      status: "processing",
+    },
+  );
 
   // Trigger Inngest to process the message
   await inngest.send({

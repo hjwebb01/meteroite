@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { defineProjectTool } from "./define-project-tool";
 
-import { convex } from "@/lib/convex-client";
+import { getConvexAdminClient } from "@/lib/convex-client";
 
 import { MAX_AGENT_CREATE_FILES_PER_MUTATION } from "../../../../../convex/agentLimits";
-import { api } from "../../../../../convex/_generated/api";
+import { internal } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 
 import { normalizeGeneratedFileContent } from "../normalize-generated-file-content";
@@ -12,7 +12,6 @@ import type { MessageProgressReporter } from "../message-progress";
 
 interface CreateFilesToolOptions {
   projectId: Id<"projects">;
-  internalKey: string;
   reporter: MessageProgressReporter;
 }
 
@@ -42,7 +41,6 @@ const paramsSchema = z.object({
 
 export const createCreateFilesTool = ({
   projectId,
-  internalKey,
   reporter,
 }: CreateFilesToolOptions) => {
   return defineProjectTool({
@@ -71,10 +69,9 @@ export const createCreateFilesTool = ({
     },
     errorPrefix: "Error creating files",
     run: async ({ files }) => {
-      const results = await convex.mutation(
-        api.system.agentCreateFilesByPaths,
+      const results = await getConvexAdminClient().mutation(
+        internal.agentFiles.agentCreateFilesByPaths,
         {
-          internalKey,
           projectId,
           files,
         },

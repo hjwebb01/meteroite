@@ -1,15 +1,14 @@
 import { z } from "zod";
 import { defineProjectTool } from "./define-project-tool";
 
-import { convex } from "@/lib/convex-client";
+import { getConvexAdminClient } from "@/lib/convex-client";
 
-import { api } from "../../../../../convex/_generated/api";
+import { internal } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import type { MessageProgressReporter } from "../message-progress";
 
 interface DeleteFilesToolOptions {
   projectId: Id<"projects">;
-  internalKey: string;
   reporter: MessageProgressReporter;
 }
 
@@ -21,7 +20,6 @@ const paramsSchema = z.object({
 
 export const createDeleteFilesTool = ({
   projectId,
-  internalKey,
   reporter,
 }: DeleteFilesToolOptions) => {
   return defineProjectTool({
@@ -38,8 +36,7 @@ export const createDeleteFilesTool = ({
     label: ({ fileIds }) => `${fileIds.length} item(s)`,
     errorPrefix: "Error deleting files",
     run: async ({ fileIds }) => {
-      const results = await convex.mutation(api.system.agentDeleteFiles, {
-        internalKey,
+      const results = await getConvexAdminClient().mutation(internal.agentFiles.agentDeleteFiles, {
         projectId,
         rawIds: fileIds,
       });

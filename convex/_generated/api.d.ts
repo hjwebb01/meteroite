@@ -8,13 +8,15 @@
  * @module
  */
 
+import type * as agentFiles from "../agentFiles.js";
 import type * as agentLimits from "../agentLimits.js";
 import type * as auth from "../auth.js";
 import type * as constants from "../constants.js";
 import type * as conversations from "../conversations.js";
 import type * as files from "../files.js";
+import type * as importExport from "../importExport.js";
 import type * as projects from "../projects.js";
-import type * as system from "../system.js";
+import type * as systemMessages from "../systemMessages.js";
 
 import type {
   ApiFromModules,
@@ -23,13 +25,15 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  agentFiles: typeof agentFiles;
   agentLimits: typeof agentLimits;
   auth: typeof auth;
   constants: typeof constants;
   conversations: typeof conversations;
   files: typeof files;
+  importExport: typeof importExport;
   projects: typeof projects;
-  system: typeof system;
+  systemMessages: typeof systemMessages;
 }>;
 
 /**

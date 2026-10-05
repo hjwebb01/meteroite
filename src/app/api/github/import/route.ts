@@ -2,11 +2,11 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 
-import { convex } from "@/lib/convex-client";
+import { getConvexAdminClient } from "@/lib/convex-client";
 import { inngest } from "@/inngest/client";
 import { getGithubToken } from "@/lib/github";
 
-import { api } from "../../../../../convex/_generated/api";
+import { internal } from "../../../../../convex/_generated/api";
 
 const requestSchema = z.object({
   url: z.url(),
@@ -39,24 +39,26 @@ export async function POST(request: Request) {
   if (!(await getGithubToken(userId))) {
     return NextResponse.json(
       { error: "GitHub not connected. Please reconnect your GitHub account." },
-      { status: 400 }
+      { status: 400 },
     );
   }
 
-  const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
+  const deployKey = process.env.CONVEX_DEPLOY_KEY;
 
-  if (!internalKey) {
+  if (!deployKey) {
     return NextResponse.json(
       { error: "Server configuration error" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 
-  const projectId = await convex.mutation(api.system.createProject, {
-    internalKey,
-    name: repo,
-    ownerId: userId,
-  });
+  const projectId = await getConvexAdminClient().mutation(
+    internal.importExport.createProject,
+    {
+      name: repo,
+      ownerId: userId,
+    },
+  );
 
   const event = await inngest.send({
     name: "github/import.repo",
@@ -68,9 +70,9 @@ export async function POST(request: Request) {
     },
   });
 
-  return NextResponse.json({ 
-    success: true, 
-    projectId, 
-    eventId: event.ids[0]
+  return NextResponse.json({
+    success: true,
+    projectId,
+    eventId: event.ids[0],
   });
-};
+}

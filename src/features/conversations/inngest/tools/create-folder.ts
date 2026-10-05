@@ -1,15 +1,14 @@
 import { z } from "zod";
 import { defineProjectTool } from "./define-project-tool";
 
-import { convex } from "@/lib/convex-client";
+import { getConvexAdminClient } from "@/lib/convex-client";
 
-import { api } from "../../../../../convex/_generated/api";
+import { internal } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import type { MessageProgressReporter } from "../message-progress";
 
 interface CreateFolderToolOptions {
   projectId: Id<"projects">;
-  internalKey: string;
   reporter: MessageProgressReporter;
 }
 
@@ -24,7 +23,6 @@ const paramsSchema = z.object({
 
 export const createCreateFolderTool = ({
   projectId,
-  internalKey,
   reporter,
 }: CreateFolderToolOptions) => {
   return defineProjectTool({
@@ -37,8 +35,7 @@ export const createCreateFolderTool = ({
     label: ({ path }) => path,
     errorPrefix: "Error creating folder",
     run: async ({ path }) => {
-      const result = await convex.mutation(api.system.agentEnsureFolderPath, {
-        internalKey,
+      const result = await getConvexAdminClient().mutation(internal.agentFiles.agentEnsureFolderPath, {
         projectId,
         path,
       });

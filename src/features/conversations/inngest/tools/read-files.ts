@@ -1,13 +1,12 @@
 import { z } from "zod";
 import { defineProjectTool } from "./define-project-tool";
-import { convex } from "@/lib/convex-client";
-import { api } from "../../../../../convex/_generated/api";
+import { getConvexAdminClient } from "@/lib/convex-client";
+import { internal } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import type { MessageProgressReporter } from "../message-progress";
 
 interface ReadFilesToolArgs {
   projectId: Id<"projects">;
-  internalKey: string;
   reporter: MessageProgressReporter;
 }
 
@@ -110,7 +109,6 @@ function toCompactRow(row: AgentReadRow): unknown[] {
 
 export const createReadFilesTool = ({
   projectId,
-  internalKey,
   reporter,
 }: ReadFilesToolArgs) => {
   return defineProjectTool({
@@ -154,8 +152,7 @@ export const createReadFilesTool = ({
       return hintParts.length > 0 ? hintParts.join(" · ") : undefined;
     },
     run: async ({ paths, fileIds, format, maxChars, lineStart, lineEnd }) => {
-      const rows = (await convex.query(api.system.agentReadFiles, {
-        internalKey,
+      const rows = (await getConvexAdminClient().query(internal.agentFiles.agentReadFiles, {
         projectId,
         paths,
         fileIds,

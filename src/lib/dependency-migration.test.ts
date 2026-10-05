@@ -7,7 +7,7 @@ import { NextRequest } from "next/server";
 import { z } from "zod";
 import { getHttpErrorMessage } from "./http-error";
 
-vi.mock("@/lib/convex-client", () => ({ convex: {} }));
+vi.mock("@/lib/convex-client", () => ({ getConvexAdminClient: () => ({}) }));
 
 afterEach(() => {
   vi.unstubAllGlobals();

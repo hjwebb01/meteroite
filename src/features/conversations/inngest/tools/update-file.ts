@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineProjectTool } from "./define-project-tool";
-import { convex } from "@/lib/convex-client";
-import { api } from "../../../../../convex/_generated/api";
+import { getConvexAdminClient } from "@/lib/convex-client";
+import { internal } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 
 import { normalizeGeneratedFileContent } from "../normalize-generated-file-content";
@@ -9,7 +9,6 @@ import type { MessageProgressReporter } from "../message-progress";
 
 interface UpdateFileToolArgs {
   projectId: Id<"projects">;
-  internalKey: string;
   reporter: MessageProgressReporter;
 }
 
@@ -20,7 +19,6 @@ const paramsSchema = z.object({
 
 export const createUpdateFileTool = ({
   projectId,
-  internalKey,
   reporter,
 }: UpdateFileToolArgs) => {
   return defineProjectTool({
@@ -41,10 +39,9 @@ export const createUpdateFileTool = ({
       const { fileId } = params;
       const content = normalizeGeneratedFileContent(params.content);
 
-      const resolved = await convex.query(
-        api.system.agentResolveFileIdsInProject,
+      const resolved = await getConvexAdminClient().query(
+        internal.agentFiles.agentResolveFileIdsInProject,
         {
-          internalKey,
           projectId,
           rawIds: [fileId],
         },
@@ -54,8 +51,7 @@ export const createUpdateFileTool = ({
         return `Error: No file found with ID "${fileId}" in this project. Use listFiles to get valid file IDs.`;
       }
 
-      const file = await convex.query(api.system.getFileById, {
-        internalKey,
+      const file = await getConvexAdminClient().query(internal.agentFiles.getFileById, {
         fileId: first.fileId,
       });
 
@@ -73,8 +69,7 @@ export const createUpdateFileTool = ({
     formatError: (message, { file }) =>
       `Error: ${message} while updating file "${file.name}".`,
     run: async ({ file, fileId, content }) => {
-      await convex.mutation(api.system.updateFile, {
-        internalKey,
+      await getConvexAdminClient().mutation(internal.agentFiles.updateFile, {
         projectId,
         fileId,
         content,

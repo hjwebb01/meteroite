@@ -2,11 +2,11 @@ import ky from "ky";
 import { isBinaryFile } from "isbinaryfile";
 import { NonRetriableError } from "inngest";
 
-import { convex } from "@/lib/convex-client";
+import { getConvexAdminClient } from "@/lib/convex-client";
 import { inngest } from "@/inngest/client";
 import { createUserOctokit } from "@/lib/github";
 
-import { api } from "../../../../convex/_generated/api";
+import { internal } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
 
 interface ImportGithubRepoEvent {
@@ -21,17 +21,19 @@ export const importGithubRepo = inngest.createFunction(
     id: "import-github-repo",
     triggers: { event: "github/import.repo" },
     onFailure: async ({ event, step }) => {
-      const internalKey = process.env.POLARIS_CONVEX_INTERNAL_KEY;
-      if (!internalKey) return;
+      const deployKey = process.env.CONVEX_DEPLOY_KEY;
+      if (!deployKey) return;
 
       const { projectId } = event.data.event.data as ImportGithubRepoEvent;
 
       await step.run("set-failed-status", async () => {
-        await convex.mutation(api.system.updateImportStatus, {
-          internalKey,
-          projectId,
-          status: "failed",
-        });
+        await getConvexAdminClient().mutation(
+          internal.importExport.updateImportStatus,
+          {
+            projectId,
+            status: "failed",
+          },
+        );
       });
     },
   },
@@ -39,17 +41,14 @@ export const importGithubRepo = inngest.createFunction(
     const { owner, repo, projectId, userId } =
       event.data as ImportGithubRepoEvent;
 
-    const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
-    if (!internalKey) {
-      throw new NonRetriableError(
-        "METEROITE_CONVEX_INTERNAL_KEY is not configured",
-      );
+    const deployKey = process.env.CONVEX_DEPLOY_KEY;
+    if (!deployKey) {
+      throw new NonRetriableError("CONVEX_DEPLOY_KEY is not configured");
     }
 
     // Cleanup any existing files in the project
     await step.run("cleanup-project", async () => {
-      await convex.mutation(api.system.cleanup, {
-        internalKey,
+      await getConvexAdminClient().mutation(internal.importExport.cleanup, {
         projectId,
       });
     });
@@ -105,12 +104,14 @@ export const importGithubRepo = inngest.createFunction(
         const parentPath = pathParts.join("/");
         const parentId = parentPath ? map[parentPath] : undefined;
 
-        const folderId = await convex.mutation(api.system.createFolder, {
-          internalKey,
-          projectId,
-          name,
-          parentId,
-        });
+        const folderId = await getConvexAdminClient().mutation(
+          internal.importExport.createFolder,
+          {
+            projectId,
+            name,
+            parentId,
+          },
+        );
 
         map[folder.path] = folderId;
       }
@@ -146,9 +147,9 @@ export const importGithubRepo = inngest.createFunction(
           const parentId = parentPath ? folderIdMap[parentPath] : undefined;
 
           if (isBinary) {
-            const uploadUrl = await convex.mutation(
-              api.system.generateUploadUrl,
-              { internalKey },
+            const uploadUrl = await getConvexAdminClient().mutation(
+              internal.importExport.generateUploadUrl,
+              {},
             );
 
             const { storageId } = await ky
@@ -158,23 +159,27 @@ export const importGithubRepo = inngest.createFunction(
               })
               .json<{ storageId: Id<"_storage"> }>();
 
-            await convex.mutation(api.system.createBinaryFile, {
-              internalKey,
-              projectId,
-              name,
-              storageId,
-              parentId,
-            });
+            await getConvexAdminClient().mutation(
+              internal.importExport.createBinaryFile,
+              {
+                projectId,
+                name,
+                storageId,
+                parentId,
+              },
+            );
           } else {
             const content = buffer.toString("utf-8");
 
-            await convex.mutation(api.system.createSingleFile, {
-              internalKey,
-              projectId,
-              parentId,
-              name,
-              content,
-            });
+            await getConvexAdminClient().mutation(
+              internal.importExport.createSingleFile,
+              {
+                projectId,
+                parentId,
+                name,
+                content,
+              },
+            );
           }
         } catch {
           console.error(`Failed to import file: ${file.path}`);
@@ -183,11 +188,13 @@ export const importGithubRepo = inngest.createFunction(
     });
 
     await step.run("set-completed-status", async () => {
-      await convex.mutation(api.system.updateImportStatus, {
-        internalKey,
-        projectId,
-        status: "completed",
-      });
+      await getConvexAdminClient().mutation(
+        internal.importExport.updateImportStatus,
+        {
+          projectId,
+          status: "completed",
+        },
+      );
     });
 
     return { success: true, projectId };

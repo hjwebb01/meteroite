@@ -1,13 +1,12 @@
 import { z } from "zod";
 import { defineProjectTool } from "./define-project-tool";
-import { convex } from "@/lib/convex-client";
-import { api } from "../../../../../convex/_generated/api";
+import { getConvexAdminClient } from "@/lib/convex-client";
+import { internal } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import type { MessageProgressReporter } from "../message-progress";
 
 interface ListFilesToolArgs {
   projectId: Id<"projects">;
-  internalKey: string;
   reporter: MessageProgressReporter;
 }
 
@@ -20,7 +19,6 @@ const paramsSchema = z.object({
 
 export const createListFilesTool = ({
   projectId,
-  internalKey,
   reporter,
 }: ListFilesToolArgs) => {
   return defineProjectTool({
@@ -54,8 +52,7 @@ export const createListFilesTool = ({
         : undefined;
     },
     run: async ({ format, pathPrefix, limit, cursor }) => {
-      const queryResult = await convex.query(api.system.agentListProjectFiles, {
-        internalKey,
+      const queryResult = await getConvexAdminClient().query(internal.agentFiles.agentListProjectFiles, {
         projectId,
         format,
         pathPrefix: pathPrefix || undefined,

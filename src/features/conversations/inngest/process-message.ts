@@ -2,8 +2,8 @@ import { inngest } from "@/inngest/client";
 import { Id } from "../../../../convex/_generated/dataModel";
 import { NonRetriableError } from "inngest";
 import { createAgent, createNetwork, openai } from "@inngest/agent-kit";
-import { convex } from "@/lib/convex-client";
-import { api } from "../../../../convex/_generated/api";
+import { getConvexAdminClient } from "@/lib/convex-client";
+import { internal } from "../../../../convex/_generated/api";
 import {
   CODING_AGENT_SYSTEM_PROMPT,
   OPENROUTER_GPT_5_4_MINI,
@@ -73,14 +73,16 @@ export const processMessage = inngest.createFunction(
     onFailure: async ({ event, step }) => {
       const { messageId } = event.data.event.data as MessageEvent;
 
-      const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
-      if (internalKey) {
+      const deployKey = process.env.CONVEX_DEPLOY_KEY;
+      if (deployKey) {
         await step.run("update-message-on-failure", async () => {
-          await convex.mutation(api.system.updateMessageContent, {
-            internalKey,
-            messageId,
-            content: "Failed to generate assistant message",
-          });
+          await getConvexAdminClient().mutation(
+            internal.systemMessages.updateMessageContent,
+            {
+              messageId,
+              content: "Failed to generate assistant message",
+            },
+          );
         });
       }
     },
@@ -88,15 +90,17 @@ export const processMessage = inngest.createFunction(
   async ({ event, step }) => {
     const { messageId, userMessageId, conversationId, projectId, message } =
       event.data as MessageEvent;
-    const internalKey = process.env.METEROITE_CONVEX_INTERNAL_KEY;
-    if (!internalKey) {
-      throw new NonRetriableError("METEROITE_CONVEX_INTERNAL_KEY is not set");
+    const deployKey = process.env.CONVEX_DEPLOY_KEY;
+    if (!deployKey) {
+      throw new NonRetriableError("CONVEX_DEPLOY_KEY is not set");
     }
     const conversation = await step.run("get-conversation", async () => {
-      return await convex.query(api.system.getConversationById, {
-        internalKey,
-        conversationId,
-      });
+      return await getConvexAdminClient().query(
+        internal.systemMessages.getConversationById,
+        {
+          conversationId,
+        },
+      );
     });
     if (!conversation) {
       throw new NonRetriableError("Conversation not found");
@@ -104,28 +108,35 @@ export const processMessage = inngest.createFunction(
 
     // Load messages + first progress update in one step (single Convex round-trip;
     // a separate step here was prone to stalling between query and progress mutation).
-    const recentMessages = await step.run("load-conversation-context", async () => {
-      const messages = await convex.query(api.system.getRecentMessages, {
-        internalKey,
-        conversationId,
-        /** Slightly above MAX_HISTORY_MESSAGES to allow filtering placeholders / current user. */
-        limit: 8,
-      });
-      await convex.mutation(api.system.updateMessageProgress, {
-        internalKey,
-        messageId,
-        progressLabel: "Loaded context",
-        progressSteps: [
+    const recentMessages = await step.run(
+      "load-conversation-context",
+      async () => {
+        const messages = await getConvexAdminClient().query(
+          internal.systemMessages.getRecentMessages,
           {
-            id: "phase-loaded",
-            label: "Loaded context",
-            status: "complete",
-            kind: "phase",
+            conversationId,
+            /** Slightly above MAX_HISTORY_MESSAGES to allow filtering placeholders / current user. */
+            limit: 8,
           },
-        ],
-      });
-      return messages;
-    });
+        );
+        await getConvexAdminClient().mutation(
+          internal.systemMessages.updateMessageProgress,
+          {
+            messageId,
+            progressLabel: "Loaded context",
+            progressSteps: [
+              {
+                id: "phase-loaded",
+                label: "Loaded context",
+                status: "complete",
+                kind: "phase",
+              },
+            ],
+          },
+        );
+        return messages;
+      },
+    );
 
     /** Keep recent history small to limit prompt tokens (last N non-empty turns only). */
     const MAX_HISTORY_MESSAGES = 4;
@@ -154,7 +165,6 @@ export const processMessage = inngest.createFunction(
     }
 
     const reporter = createMessageProgressReporter({
-      internalKey,
       messageId,
     });
     reporter.seedLoadedContextState();
@@ -183,11 +193,13 @@ export const processMessage = inngest.createFunction(
                   .trim();
           if (title) {
             await step.run("update-conversation-title", async () => {
-              await convex.mutation(api.system.updateConversationTitle, {
-                internalKey,
-                conversationId,
-                title,
-              });
+              await getConvexAdminClient().mutation(
+                internal.systemMessages.updateConversationTitle,
+                {
+                  conversationId,
+                  title,
+                },
+              );
             });
           }
         }
@@ -208,13 +220,13 @@ export const processMessage = inngest.createFunction(
       system: systemPrompt,
       model: baseModel,
       tools: [
-        createListFilesTool({ projectId, internalKey, reporter }),
-        createReadFilesTool({ projectId, internalKey, reporter }),
-        createUpdateFileTool({ projectId, internalKey, reporter }),
-        createCreateFilesTool({ projectId, internalKey, reporter }),
-        createCreateFolderTool({ projectId, internalKey, reporter }),
-        createDeleteFilesTool({ projectId, internalKey, reporter }),
-        createRenameFileTool({ projectId, internalKey, reporter }),
+        createListFilesTool({ projectId, reporter }),
+        createReadFilesTool({ projectId, reporter }),
+        createUpdateFileTool({ projectId, reporter }),
+        createCreateFilesTool({ projectId, reporter }),
+        createCreateFolderTool({ projectId, reporter }),
+        createDeleteFilesTool({ projectId, reporter }),
+        createRenameFileTool({ projectId, reporter }),
         createScrapeUrlsTool({ reporter }),
       ],
     });
@@ -282,11 +294,13 @@ export const processMessage = inngest.createFunction(
     });
 
     await step.run("update-assistant-message", async () => {
-      await convex.mutation(api.system.updateMessageContent, {
-        internalKey,
-        messageId,
-        content: assistantResponse,
-      });
+      await getConvexAdminClient().mutation(
+        internal.systemMessages.updateMessageContent,
+        {
+          messageId,
+          content: assistantResponse,
+        },
+      );
     });
     return { success: true, messageId, conversationId };
   },

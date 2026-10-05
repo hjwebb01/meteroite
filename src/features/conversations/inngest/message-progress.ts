@@ -1,5 +1,5 @@
-import { convex } from "@/lib/convex-client";
-import { api } from "../../../../convex/_generated/api";
+import { getConvexAdminClient } from "@/lib/convex-client";
+import { internal } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 
 export type ProgressStepStatus = "pending" | "active" | "complete" | "error";
@@ -80,10 +80,9 @@ export interface MessageProgressReporter {
 }
 
 export function createMessageProgressReporter(options: {
-  internalKey: string;
   messageId: Id<"messages">;
 }): MessageProgressReporter {
-  const { internalKey, messageId } = options;
+  const { messageId } = options;
 
   let steps: ProgressStep[] = [];
   let lastFingerprint = "";
@@ -109,12 +108,14 @@ export function createMessageProgressReporter(options: {
       lastFingerprint = fp;
       steps = clampSteps(steps);
       const progressLabel = computeProgressLabel(steps);
-      await convex.mutation(api.system.updateMessageProgress, {
-        internalKey,
-        messageId,
-        progressLabel,
-        progressSteps: steps,
-      });
+      await getConvexAdminClient().mutation(
+        internal.systemMessages.updateMessageProgress,
+        {
+          messageId,
+          progressLabel,
+          progressSteps: steps,
+        },
+      );
     });
     flushChain = next.catch(() => {});
     return next;

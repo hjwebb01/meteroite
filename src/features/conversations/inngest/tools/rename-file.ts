@@ -1,15 +1,14 @@
 import { z } from "zod";
 import { defineProjectTool } from "./define-project-tool";
 
-import { convex } from "@/lib/convex-client";
+import { getConvexAdminClient } from "@/lib/convex-client";
 
-import { api } from "../../../../../convex/_generated/api";
+import { internal } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import type { MessageProgressReporter } from "../message-progress";
 
 interface RenameFileToolOptions {
   projectId: Id<"projects">;
-  internalKey: string;
   reporter: MessageProgressReporter;
 }
 
@@ -20,7 +19,6 @@ const paramsSchema = z.object({
 
 export const createRenameFileTool = ({
   projectId,
-  internalKey,
   reporter,
 }: RenameFileToolOptions) => {
   return defineProjectTool({
@@ -35,10 +33,9 @@ export const createRenameFileTool = ({
     prepare: async (params) => {
       const { fileId, newName } = params;
 
-      const resolved = await convex.query(
-        api.system.agentResolveFileIdsInProject,
+      const resolved = await getConvexAdminClient().query(
+        internal.agentFiles.agentResolveFileIdsInProject,
         {
-          internalKey,
           projectId,
           rawIds: [fileId],
         },
@@ -48,8 +45,7 @@ export const createRenameFileTool = ({
         return `Error: File with ID "${fileId}" not found in this project. Use listFiles to get valid file IDs.`;
       }
 
-      const file = await convex.query(api.system.getFileById, {
-        internalKey,
+      const file = await getConvexAdminClient().query(internal.agentFiles.getFileById, {
         fileId: first.fileId,
       });
 
@@ -62,8 +58,7 @@ export const createRenameFileTool = ({
     label: ({ file, newName }) => `“${file.name}” → “${newName}”`,
     errorPrefix: "Error renaming file",
     run: async ({ file, fileId, newName }) => {
-      await convex.mutation(api.system.renameFile, {
-        internalKey,
+      await getConvexAdminClient().mutation(internal.agentFiles.renameFile, {
         projectId,
         fileId,
         newName,

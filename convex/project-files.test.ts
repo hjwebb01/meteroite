@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
-import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { api } from "./_generated/api";
+import { afterEach, describe, expect, test, vi } from "vitest";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
 import { createFileAtPath } from "./lib/project-files";
@@ -9,11 +9,9 @@ import schema from "./schema";
 import { buildFileTree } from "../src/features/preview/utils/file-tree";
 
 const modules = import.meta.glob("./**/*.ts");
-const internalKey = "project-files-test-key";
 const callers = ["editor", "agent", "import"] as const;
 type Caller = (typeof callers)[number];
 
-beforeEach(() => vi.stubEnv("METEROITE_CONVEX_INTERNAL_KEY", internalKey));
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
@@ -44,15 +42,16 @@ async function create(w: Workspace, caller: Caller, name: string) {
       content: "original",
     });
   } else if (caller === "agent") {
-    const [result] = await w.t.mutation(api.system.agentCreateFilesByPaths, {
-      internalKey,
-      projectId: w.projectId,
-      files: [{ path: name, content: "original" }],
-    });
+    const [result] = await w.t.mutation(
+      internal.agentFiles.agentCreateFilesByPaths,
+      {
+        projectId: w.projectId,
+        files: [{ path: name, content: "original" }],
+      },
+    );
     expect(result.error).toBeUndefined();
   } else {
-    await w.t.mutation(api.system.createSingleFile, {
-      internalKey,
+    await w.t.mutation(internal.importExport.createSingleFile, {
       projectId: w.projectId,
       name,
       content: "original",
@@ -92,9 +91,8 @@ describe("shared Project file rules", () => {
       const args = { projectId: w.projectId, name: "src", content: "" };
       if (caller === "agent") {
         const [result] = await w.t.mutation(
-          api.system.agentCreateFilesByPaths,
+          internal.agentFiles.agentCreateFilesByPaths,
           {
-            internalKey,
             projectId: w.projectId,
             files: [{ path: "src", content: "" }],
           },
@@ -104,8 +102,7 @@ describe("shared Project file rules", () => {
         await expect(
           caller === "editor"
             ? w.owner.mutation(api.files.createFile, args)
-            : w.t.mutation(api.system.createSingleFile, {
-                internalKey,
+            : w.t.mutation(internal.importExport.createSingleFile, {
                 ...args,
               }),
         ).rejects.toThrow(/already exists/);
@@ -119,8 +116,7 @@ describe("shared Project file rules", () => {
     async (name) => {
       const w = await setup();
       await expect(
-        w.t.mutation(api.system.createSingleFile, {
-          internalKey,
+        w.t.mutation(internal.importExport.createSingleFile, {
           projectId: w.projectId,
           name,
           content: "",
@@ -134,13 +130,11 @@ describe("shared Project file rules", () => {
     "import %s rejects another Project's parent",
     async (operation) => {
       const w = await setup();
-      const parentId = await w.t.mutation(api.system.createFolder, {
-        internalKey,
+      const parentId = await w.t.mutation(internal.importExport.createFolder, {
         projectId: w.otherProjectId,
         name: "private",
       });
       const args = {
-        internalKey,
         projectId: w.projectId,
         parentId,
         name: "child",
@@ -150,10 +144,16 @@ describe("shared Project file rules", () => {
       );
       await expect(
         operation === "createSingleFile"
-          ? w.t.mutation(api.system.createSingleFile, { ...args, content: "" })
+          ? w.t.mutation(internal.importExport.createSingleFile, {
+              ...args,
+              content: "",
+            })
           : operation === "createFolder"
-            ? w.t.mutation(api.system.createFolder, args)
-            : w.t.mutation(api.system.createBinaryFile, { ...args, storageId }),
+            ? w.t.mutation(internal.importExport.createFolder, args)
+            : w.t.mutation(internal.importExport.createBinaryFile, {
+                ...args,
+                storageId,
+              }),
       ).rejects.toThrow(/Parent folder not found/);
       expect(await files(w)).toHaveLength(0);
     },
@@ -163,8 +163,7 @@ describe("shared Project file rules", () => {
     const w = await setup();
     const file = await create(w, "import", "a.txt");
     await expect(
-      w.t.mutation(api.system.createFolder, {
-        internalKey,
+      w.t.mutation(internal.importExport.createFolder, {
         projectId: w.projectId,
         parentId: file._id,
         name: "child",
@@ -172,8 +171,7 @@ describe("shared Project file rules", () => {
     ).rejects.toThrow(/Parent must be a folder/);
     await w.t.run((ctx) => ctx.db.delete("projects", w.otherProjectId));
     await expect(
-      w.t.mutation(api.system.createSingleFile, {
-        internalKey,
+      w.t.mutation(internal.importExport.createSingleFile, {
         projectId: w.otherProjectId,
         name: "orphan",
         content: "",
@@ -194,8 +192,7 @@ describe("shared Project file rules", () => {
         await expect(
           caller === "editor"
             ? w.owner.mutation(api.files.renameFile, { id: file._id, newName })
-            : w.t.mutation(api.system.renameFile, {
-                internalKey,
+            : w.t.mutation(internal.agentFiles.renameFile, {
                 projectId: w.projectId,
                 fileId: file._id,
                 newName,
@@ -209,8 +206,7 @@ describe("shared Project file rules", () => {
             id: file._id,
             newName: "renamed.txt",
           })
-        : w.t.mutation(api.system.renameFile, {
-            internalKey,
+        : w.t.mutation(internal.agentFiles.renameFile, {
             projectId: w.projectId,
             fileId: file._id,
             newName: "renamed.txt",
@@ -227,28 +223,28 @@ describe("shared Project file rules", () => {
     async (caller) => {
       const w = await setup();
       const text = await create(w, "import", "a.txt");
-      const folderId = await w.t.mutation(api.system.createFolder, {
-        internalKey,
+      const folderId = await w.t.mutation(internal.importExport.createFolder, {
         projectId: w.projectId,
         name: "folder",
       });
       const storageId = await w.t.run((ctx) =>
         ctx.storage.store(new Blob(["binary"])),
       );
-      const binaryId = await w.t.mutation(api.system.createBinaryFile, {
-        internalKey,
-        projectId: w.projectId,
-        name: "image",
-        storageId,
-      });
+      const binaryId = await w.t.mutation(
+        internal.importExport.createBinaryFile,
+        {
+          projectId: w.projectId,
+          name: "image",
+          storageId,
+        },
+      );
       const update = (fileId: Id<"files">) =>
         caller === "editor"
           ? w.owner.mutation(api.files.updateFile, {
               id: fileId,
               content: "changed",
             })
-          : w.t.mutation(api.system.updateFile, {
-              internalKey,
+          : w.t.mutation(internal.agentFiles.updateFile, {
               projectId: w.projectId,
               fileId,
               content: "changed",
@@ -271,22 +267,30 @@ describe("shared Project file rules", () => {
 
   test("agent writes reject an existing identifier from another Project", async () => {
     const w = await setup();
-    const foreignId = await w.t.mutation(api.system.createSingleFile, {
-      internalKey,
-      projectId: w.otherProjectId,
-      name: "private",
-      content: "secret",
-    });
-    const args = { internalKey, projectId: w.projectId, fileId: foreignId };
-    await expect(
-      w.t.mutation(api.system.updateFile, { ...args, content: "changed" }),
-    ).rejects.toThrow(/does not belong/);
-    await expect(
-      w.t.mutation(api.system.renameFile, { ...args, newName: "changed" }),
-    ).rejects.toThrow(/does not belong/);
-    await expect(w.t.mutation(api.system.deleteFile, args)).rejects.toThrow(
-      /does not belong/,
+    const foreignId = await w.t.mutation(
+      internal.importExport.createSingleFile,
+      {
+        projectId: w.otherProjectId,
+        name: "private",
+        content: "secret",
+      },
     );
+    const args = { projectId: w.projectId, fileId: foreignId };
+    await expect(
+      w.t.mutation(internal.agentFiles.updateFile, {
+        ...args,
+        content: "changed",
+      }),
+    ).rejects.toThrow(/does not belong/);
+    await expect(
+      w.t.mutation(internal.agentFiles.renameFile, {
+        ...args,
+        newName: "changed",
+      }),
+    ).rejects.toThrow(/does not belong/);
+    await expect(
+      w.t.mutation(internal.agentFiles.deleteFile, args),
+    ).rejects.toThrow(/does not belong/);
     expect(
       (
         await w.other.query(api.files.getFiles, { projectId: w.otherProjectId })
@@ -312,30 +316,24 @@ describe("shared Project file rules", () => {
     await expect(
       w.other.mutation(api.files.deleteFile, { id: file._id }),
     ).rejects.toThrow(/Unauthorized/);
-    await expect(
-      w.t.mutation(api.system.createSingleFile, {
-        internalKey: "wrong",
-        projectId: w.projectId,
-        name: "a",
-        content: "",
-      }),
-    ).rejects.toThrow(/Invalid internal key/);
   });
 });
 
 describe("batch creation and Folder paths", () => {
   test("a batch keeps successful entries, rejects duplicates, and creates parents", async () => {
     const w = await setup();
-    const results = await w.t.mutation(api.system.agentCreateFilesByPaths, {
-      internalKey,
-      projectId: w.projectId,
-      files: [
-        { path: "src/a.ts", content: "a" },
-        { path: "new/ /bad.ts", content: "bad" },
-        { path: "src/a.ts", content: "duplicate" },
-        { path: "src/b.ts", content: "b" },
-      ],
-    });
+    const results = await w.t.mutation(
+      internal.agentFiles.agentCreateFilesByPaths,
+      {
+        projectId: w.projectId,
+        files: [
+          { path: "src/a.ts", content: "a" },
+          { path: "new/ /bad.ts", content: "bad" },
+          { path: "src/a.ts", content: "duplicate" },
+          { path: "src/b.ts", content: "b" },
+        ],
+      },
+    );
     expect(results.map((r) => !!r.fileId)).toEqual([true, false, false, true]);
     const records = await files(w);
     expect(records.map((f) => f.name).sort()).toEqual(["a.ts", "b.ts", "src"]);
@@ -344,12 +342,12 @@ describe("batch creation and Folder paths", () => {
   });
 
   test("an error after writes rolls back that entry and its parent Folders", async () => {
-    const system = await import("./system");
+    const agentFiles = await import("./agentFiles");
     // A controllable internal mutation adapter fails after performing real writes.
     const faultingModules = {
       ...modules,
-      "./system.ts": async () => ({
-        ...system,
+      "./agentFiles.ts": async () => ({
+        ...agentFiles,
         createBatchFile: internalMutation(
           async (
             ctx,
@@ -372,15 +370,17 @@ describe("batch creation and Folder paths", () => {
       }),
     };
     const w = await setup(faultingModules);
-    const results = await w.t.mutation(api.system.agentCreateFilesByPaths, {
-      internalKey,
-      projectId: w.projectId,
-      files: [
-        { path: "before.ts", content: "before" },
-        { path: "failed/nested/a.ts", content: "failed" },
-        { path: "after.ts", content: "after" },
-      ],
-    });
+    const results = await w.t.mutation(
+      internal.agentFiles.agentCreateFilesByPaths,
+      {
+        projectId: w.projectId,
+        files: [
+          { path: "before.ts", content: "before" },
+          { path: "failed/nested/a.ts", content: "failed" },
+          { path: "after.ts", content: "after" },
+        ],
+      },
+    );
     expect(results[1].error).toMatch(/Write failed/);
     expect(results[0].fileId).toBeDefined();
     expect(results[2].fileId).toBeDefined();
@@ -392,8 +392,7 @@ describe("batch creation and Folder paths", () => {
 
   test("legacy batches detect duplicates inserted earlier in the same batch", async () => {
     const w = await setup();
-    const result = await w.t.mutation(api.system.createFiles, {
-      internalKey,
+    const result = await w.t.mutation(internal.agentFiles.createFiles, {
       projectId: w.projectId,
       files: [
         { name: "a", content: "first" },
@@ -410,27 +409,30 @@ describe("batch creation and Folder paths", () => {
     const w = await setup();
     await resetTimestamp(w);
     vi.spyOn(Date, "now").mockReturnValue(5000);
-    const first = await w.t.mutation(api.system.agentEnsureFolderPath, {
-      internalKey,
-      projectId: w.projectId,
-      path: " src\\nested// ",
-    });
+    const first = await w.t.mutation(
+      internal.agentFiles.agentEnsureFolderPath,
+      {
+        projectId: w.projectId,
+        path: " src\\nested// ",
+      },
+    );
     expect(first.path).toBe("src/nested");
     expect(first.createdNewFolders).toBe(true);
     expect(await projectTimestamp(w)).toBe(5000);
     await resetTimestamp(w);
-    const again = await w.t.mutation(api.system.agentEnsureFolderPath, {
-      internalKey,
-      projectId: w.projectId,
-      path: "src/nested",
-    });
+    const again = await w.t.mutation(
+      internal.agentFiles.agentEnsureFolderPath,
+      {
+        projectId: w.projectId,
+        path: "src/nested",
+      },
+    );
     expect(again.folderId).toBe(first.folderId);
     expect(again.createdNewFolders).toBe(false);
     expect(await projectTimestamp(w)).toBe(1);
     for (const path of ["/root", "src/../a", "src/ /a"]) {
       await expect(
-        w.t.mutation(api.system.agentEnsureFolderPath, {
-          internalKey,
+        w.t.mutation(internal.agentFiles.agentEnsureFolderPath, {
           projectId: w.projectId,
           path,
         }),
@@ -443,29 +445,29 @@ describe("batch creation and Folder paths", () => {
 describe("deletion and import cleanup", () => {
   test("agent batch deletion tolerates ancestor, descendant, duplicate, and repeated IDs", async () => {
     const w = await setup();
-    const folderId = await w.t.mutation(api.system.createFolder, {
-      internalKey,
+    const folderId = await w.t.mutation(internal.importExport.createFolder, {
       projectId: w.projectId,
       name: "folder",
     });
-    const childId = await w.t.mutation(api.system.createSingleFile, {
-      internalKey,
+    const childId = await w.t.mutation(internal.importExport.createSingleFile, {
       projectId: w.projectId,
       parentId: folderId,
       name: "a",
       content: "a",
     });
     const request = {
-      internalKey,
       projectId: w.projectId,
       rawIds: [folderId, childId, childId],
     };
     expect(
-      await w.t.mutation(api.system.agentDeleteFiles, request),
+      await w.t.mutation(internal.agentFiles.agentDeleteFiles, request),
     ).toHaveLength(3);
     expect(await files(w)).toEqual([]);
     await resetTimestamp(w);
-    const repeated = await w.t.mutation(api.system.agentDeleteFiles, request);
+    const repeated = await w.t.mutation(
+      internal.agentFiles.agentDeleteFiles,
+      request,
+    );
     expect(repeated.every((result) => result.alreadyMissing)).toBe(true);
     expect(await projectTimestamp(w)).toBe(1);
   });
@@ -473,16 +475,17 @@ describe("deletion and import cleanup", () => {
   test("agent batch deletion validates malformed and foreign IDs before any deletion", async () => {
     const w = await setup();
     const keep = await create(w, "editor", "keep.txt");
-    const foreignId = await w.t.mutation(api.system.createSingleFile, {
-      internalKey,
-      projectId: w.otherProjectId,
-      name: "foreign",
-      content: "foreign",
-    });
+    const foreignId = await w.t.mutation(
+      internal.importExport.createSingleFile,
+      {
+        projectId: w.otherProjectId,
+        name: "foreign",
+        content: "foreign",
+      },
+    );
     for (const invalid of ["not-an-id", foreignId, w.projectId]) {
       await expect(
-        w.t.mutation(api.system.agentDeleteFiles, {
-          internalKey,
+        w.t.mutation(internal.agentFiles.agentDeleteFiles, {
           projectId: w.projectId,
           rawIds: [keep._id, invalid],
         }),
@@ -495,13 +498,11 @@ describe("deletion and import cleanup", () => {
     "%s deletes descendants and binary storage, then tolerates repeats",
     async (caller) => {
       const w = await setup();
-      const rootId = await w.t.mutation(api.system.createFolder, {
-        internalKey,
+      const rootId = await w.t.mutation(internal.importExport.createFolder, {
         projectId: w.projectId,
         name: "root",
       });
-      const childId = await w.t.mutation(api.system.createFolder, {
-        internalKey,
+      const childId = await w.t.mutation(internal.importExport.createFolder, {
         projectId: w.projectId,
         parentId: rootId,
         name: "nested",
@@ -509,16 +510,17 @@ describe("deletion and import cleanup", () => {
       const storageId = await w.t.run((ctx) =>
         ctx.storage.store(new Blob(["binary"])),
       );
-      const binaryId = await w.t.mutation(api.system.createBinaryFile, {
-        internalKey,
-        projectId: w.projectId,
-        parentId: childId,
-        name: "image",
-        storageId,
-      });
+      const binaryId = await w.t.mutation(
+        internal.importExport.createBinaryFile,
+        {
+          projectId: w.projectId,
+          parentId: childId,
+          name: "image",
+          storageId,
+        },
+      );
       await create(w, "editor", "keep.txt");
-      await w.t.mutation(api.system.createSingleFile, {
-        internalKey,
+      await w.t.mutation(internal.importExport.createSingleFile, {
         projectId: w.otherProjectId,
         name: "foreign.txt",
         content: "keep",
@@ -526,8 +528,7 @@ describe("deletion and import cleanup", () => {
       const remove = (fileId: Id<"files">) =>
         caller === "editor"
           ? w.owner.mutation(api.files.deleteFile, { id: fileId })
-          : w.t.mutation(api.system.deleteFile, {
-              internalKey,
+          : w.t.mutation(internal.agentFiles.deleteFile, {
               projectId: w.projectId,
               fileId,
             });
@@ -554,15 +555,13 @@ describe("deletion and import cleanup", () => {
     const storageId = await w.t.run((ctx) =>
       ctx.storage.store(new Blob(["binary"])),
     );
-    await w.t.mutation(api.system.createBinaryFile, {
-      internalKey,
+    await w.t.mutation(internal.importExport.createBinaryFile, {
       projectId: w.projectId,
       name: "image",
       storageId,
     });
     await create(w, "editor", "a.txt");
-    await w.t.mutation(api.system.createSingleFile, {
-      internalKey,
+    await w.t.mutation(internal.importExport.createSingleFile, {
       projectId: w.otherProjectId,
       name: "foreign",
       content: "keep",
@@ -570,8 +569,7 @@ describe("deletion and import cleanup", () => {
     await resetTimestamp(w);
     vi.spyOn(Date, "now").mockReturnValue(7000);
     expect(
-      await w.t.mutation(api.system.cleanup, {
-        internalKey,
+      await w.t.mutation(internal.importExport.cleanup, {
         projectId: w.projectId,
       }),
     ).toEqual({ deleted: 2 });
@@ -610,8 +608,8 @@ describe("project path consumers", () => {
       { _id: folderId, name: "src" },
       { _id: fileId, name: "app.ts" },
     ]);
-    const paths = await w.t.query(api.system.getProjectFilesWithPaths, {
-      internalKey, projectId: w.projectId,
+    const paths = await w.t.query(internal.agentFiles.getProjectFilesWithPaths, {
+      projectId: w.projectId,
     });
     expect(paths.find((file) => file.id === fileId)?.path).toBe("src/app.ts");
     expect(buildFileTree(await files(w))).toEqual({
