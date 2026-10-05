@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTool } from "@inngest/agent-kit";
+import { defineProjectTool } from "./define-project-tool";
 import { convex } from "@/lib/convex-client";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
@@ -113,7 +113,7 @@ export const createReadFilesTool = ({
   internalKey,
   reporter,
 }: ReadFilesToolArgs) => {
-  return createTool({
+  return defineProjectTool({
     name: "readFiles",
     description:
       "Read text files by path (preferred) or file id. Default: compact output + per-file maxChars; total content per call is also capped. Use lineStart/lineEnd for partial reads.",
@@ -137,14 +137,9 @@ export const createReadFilesTool = ({
         .number()
         .describe("1-based end line inclusive (optional)."),
     }),
-    handler: async (params, { step: toolStep }) => {
-      const parsed = paramsSchema.safeParse(params);
-      if (!parsed.success) {
-        return `Error: ${parsed.error.issues[0]?.message ?? "Invalid parameters"}`;
-      }
-      const { paths, fileIds, format, maxChars, lineStart, lineEnd } =
-        parsed.data;
-
+    validation: paramsSchema,
+    reporter,
+    label: ({ paths, fileIds }) => {
       const hintParts: string[] = [];
       if (paths.length > 0) {
         hintParts.push(
@@ -156,109 +151,96 @@ export const createReadFilesTool = ({
       if (fileIds.length > 0 && paths.length === 0) {
         hintParts.push(`${fileIds.length} id(s)`);
       }
-      const detail = hintParts.length > 0 ? hintParts.join(" · ") : undefined;
-      const progressId = await reporter.toolStart("readFiles", detail);
+      return hintParts.length > 0 ? hintParts.join(" · ") : undefined;
+    },
+    run: async ({ paths, fileIds, format, maxChars, lineStart, lineEnd }) => {
+      const rows = (await convex.query(api.system.agentReadFiles, {
+        internalKey,
+        projectId,
+        paths,
+        fileIds,
+        maxChars,
+        lineStart,
+        lineEnd,
+      })) as AgentReadRow[];
 
-      try {
-        const out = await toolStep?.run("read-files", async () => {
-          const rows = (await convex.query(api.system.agentReadFiles, {
-            internalKey,
-            projectId,
-            paths,
-            fileIds,
-            maxChars,
-            lineStart,
-            lineEnd,
-          })) as AgentReadRow[];
+      const cappedRows = applyAggregateContentCap(rows);
 
-          const cappedRows = applyAggregateContentCap(rows);
-
-          if (format === "compact") {
-            return JSON.stringify({
-              v: 2,
-              legend:
-                "o=ok(path,id,name,content,truncated,totalChars), m=missing, f=folder, b=binary, ii=invalid_id, ip=invalid_path",
-              rows: cappedRows.map(toCompactRow),
-            });
-          }
-
-          const lines: string[] = [];
-          for (const row of cappedRows) {
-            switch (row.status) {
-              case "ok":
-                lines.push(
-                  JSON.stringify({
-                    status: "ok",
-                    path: row.path,
-                    id: row.id,
-                    name: row.name,
-                    content: row.content,
-                    ...(row.truncated
-                      ? { truncated: true, totalChars: row.totalChars }
-                      : {}),
-                  }),
-                );
-                break;
-              case "missing":
-                lines.push(
-                  JSON.stringify({
-                    status: "missing",
-                    path: row.path,
-                  }),
-                );
-                break;
-              case "folder":
-                lines.push(
-                  JSON.stringify({
-                    status: "folder",
-                    path: row.path,
-                    id: row.id,
-                    name: row.name,
-                  }),
-                );
-                break;
-              case "binary":
-                lines.push(
-                  JSON.stringify({
-                    status: "binary",
-                    path: row.path,
-                    id: row.id,
-                    name: row.name,
-                  }),
-                );
-                break;
-              case "invalid_id":
-                lines.push(
-                  JSON.stringify({
-                    status: "invalid_id",
-                    requestedId: row.requestedId,
-                  }),
-                );
-                break;
-              case "invalid_path":
-                lines.push(
-                  JSON.stringify({
-                    status: "invalid_path",
-                    input: row.input,
-                    message: row.message,
-                  }),
-                );
-                break;
-            }
-          }
-
-          return lines.join("\n");
+      if (format === "compact") {
+        return JSON.stringify({
+          v: 2,
+          legend:
+            "o=ok(path,id,name,content,truncated,totalChars), m=missing, f=folder, b=binary, ii=invalid_id, ip=invalid_path",
+          rows: cappedRows.map(toCompactRow),
         });
-        await reporter.toolEnd(progressId, true);
-        return out ?? "";
-      } catch (error) {
-        await reporter.toolEnd(
-          progressId,
-          false,
-          error instanceof Error ? error.message : "Unknown error",
-        );
-        return `Error: ${error instanceof Error ? error.message : "Unknown error"}`;
       }
+
+      const lines: string[] = [];
+      for (const row of cappedRows) {
+        switch (row.status) {
+          case "ok":
+            lines.push(
+              JSON.stringify({
+                status: "ok",
+                path: row.path,
+                id: row.id,
+                name: row.name,
+                content: row.content,
+                ...(row.truncated
+                  ? { truncated: true, totalChars: row.totalChars }
+                  : {}),
+              }),
+            );
+            break;
+          case "missing":
+            lines.push(
+              JSON.stringify({
+                status: "missing",
+                path: row.path,
+              }),
+            );
+            break;
+          case "folder":
+            lines.push(
+              JSON.stringify({
+                status: "folder",
+                path: row.path,
+                id: row.id,
+                name: row.name,
+              }),
+            );
+            break;
+          case "binary":
+            lines.push(
+              JSON.stringify({
+                status: "binary",
+                path: row.path,
+                id: row.id,
+                name: row.name,
+              }),
+            );
+            break;
+          case "invalid_id":
+            lines.push(
+              JSON.stringify({
+                status: "invalid_id",
+                requestedId: row.requestedId,
+              }),
+            );
+            break;
+          case "invalid_path":
+            lines.push(
+              JSON.stringify({
+                status: "invalid_path",
+                input: row.input,
+                message: row.message,
+              }),
+            );
+            break;
+        }
+      }
+
+      return lines.join("\n");
     },
   });
 };

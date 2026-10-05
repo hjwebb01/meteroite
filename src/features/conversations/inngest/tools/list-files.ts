@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTool } from "@inngest/agent-kit";
+import { defineProjectTool } from "./define-project-tool";
 import { convex } from "@/lib/convex-client";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
@@ -23,7 +23,7 @@ export const createListFilesTool = ({
   internalKey,
   reporter,
 }: ListFilesToolArgs) => {
-  return createTool({
+  return defineProjectTool({
     name: "listFiles",
     description:
       "List files/folders (paginated). Default: compact table + optional pathPrefix. Use pathPrefix (e.g. src) to avoid listing the whole repo.",
@@ -45,42 +45,24 @@ export const createListFilesTool = ({
         .number()
         .describe("Offset for pagination. Default 0."),
     }),
-    handler: async (params, { step: toolStep }) => {
-      const parsed = paramsSchema.safeParse(params);
-      if (!parsed.success) {
-        return `Error: ${parsed.error.issues[0]?.message ?? "Invalid parameters"}`;
-      }
-      const { format, pathPrefix, limit, cursor } = parsed.data;
-
+    validation: paramsSchema,
+    reporter,
+    label: ({ pathPrefix }) => {
       const prefix = pathPrefix.trim();
-      const detail =
-        prefix.length > 0
-          ? `Under “${prefix.length > 80 ? `${prefix.slice(0, 40)}…` : prefix}”`
-          : undefined;
-      const progressId = await reporter.toolStart("listFiles", detail);
-
-      try {
-        const result = await toolStep?.run("list-files", async () => {
-          const queryResult = await convex.query(api.system.agentListProjectFiles, {
-            internalKey,
-            projectId,
-            format,
-            pathPrefix: pathPrefix || undefined,
-            limit,
-            cursor,
-          });
-          return JSON.stringify(queryResult);
-        });
-        await reporter.toolEnd(progressId, true);
-        return result ?? "";
-      } catch (error) {
-        await reporter.toolEnd(
-          progressId,
-          false,
-          error instanceof Error ? error.message : "Unknown error",
-        );
-        return `Error: ${error instanceof Error ? error.message : "Unknown error"}`;
-      }
+      return prefix.length > 0
+        ? `Under “${prefix.length > 80 ? `${prefix.slice(0, 40)}…` : prefix}”`
+        : undefined;
+    },
+    run: async ({ format, pathPrefix, limit, cursor }) => {
+      const queryResult = await convex.query(api.system.agentListProjectFiles, {
+        internalKey,
+        projectId,
+        format,
+        pathPrefix: pathPrefix || undefined,
+        limit,
+        cursor,
+      });
+      return JSON.stringify(queryResult);
     },
   });
 };

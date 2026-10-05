@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTool } from "@inngest/agent-kit";
+import { defineProjectTool } from "./define-project-tool";
 
 import { convex } from "@/lib/convex-client";
 
@@ -27,40 +27,22 @@ export const createCreateFolderTool = ({
   internalKey,
   reporter,
 }: CreateFolderToolOptions) => {
-  return createTool({
+  return defineProjectTool({
     name: "createFolder",
     description:
       "Create a folder at a workspace-relative path. Missing parent folders are created automatically. Prefer this over guessing parent folder IDs. Returns JSON with folderId, path, and createdNewFolders.",
     parameters: paramsSchema,
-    handler: async (params, { step: toolStep }) => {
-      const parsed = paramsSchema.safeParse(params);
-      if (!parsed.success) {
-        return `Error: ${parsed.error.issues[0]?.message ?? "Invalid parameters"}`;
-      }
-
-      const { path } = parsed.data;
-
-      const progressId = await reporter.toolStart("createFolder", path);
-
-      try {
-        const out = await toolStep?.run("create-folder", async () => {
-          const result = await convex.mutation(api.system.agentEnsureFolderPath, {
-            internalKey,
-            projectId,
-            path,
-          });
-          return JSON.stringify(result);
-        });
-        await reporter.toolEnd(progressId, true);
-        return out ?? "";
-      } catch (error) {
-        await reporter.toolEnd(
-          progressId,
-          false,
-          error instanceof Error ? error.message : "Unknown error",
-        );
-        return `Error creating folder: ${error instanceof Error ? error.message : "Unknown error"}`;
-      }
+    validation: paramsSchema,
+    reporter,
+    label: ({ path }) => path,
+    errorPrefix: "Error creating folder",
+    run: async ({ path }) => {
+      const result = await convex.mutation(api.system.agentEnsureFolderPath, {
+        internalKey,
+        projectId,
+        path,
+      });
+      return JSON.stringify(result);
     },
   });
 };

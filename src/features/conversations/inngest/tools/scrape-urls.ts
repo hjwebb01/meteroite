@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTool } from "@inngest/agent-kit";
+import { defineProjectTool } from "./define-project-tool";
 import { firecrawl } from "@/lib/firecrawl";
 import type { MessageProgressReporter } from "../message-progress";
 
@@ -24,85 +24,67 @@ function truncateMarkdownChunk(text: string, maxLen: number): string {
 }
 
 export const createScrapeUrlsTool = ({ reporter }: ScrapeUrlsToolOptions) => {
-  return createTool({
+  return defineProjectTool({
     name: "scrapeUrls",
     description:
       "Scrape content from URLs to get documentation or reference material. Use this when the user provides URLs or references external documentation. Returns markdown content from the scraped pages.",
     parameters: z.object({
       urls: z.array(z.string()).describe("Array of URLs to scrape for content"),
     }),
-    handler: async (params, { step: toolStep }) => {
-      const parsed = paramsSchema.safeParse(params);
-      if (!parsed.success) {
-        return `Error: ${parsed.error.issues[0].message}`;
-      }
+    validation: paramsSchema,
+    reporter,
+    label: ({ urls }) => {
+      return urls.length === 1
+        ? urls[0]
+        : `${urls.length} URLs (${urls[0] ?? ""}${urls.length > 1 ? ", …" : ""})`;
+    },
+    errorPrefix: "Error scraping URLs",
+    run: async ({ urls }) => {
+      const results: { url: string; content: string }[] = [];
+      let totalChars = 0;
 
-      const { urls } = parsed.data;
+      for (const url of urls) {
+        try {
+          const result = await firecrawl.scrape(url, {
+            formats: ["markdown"],
+          });
 
-      const detail =
-        urls.length === 1
-          ? urls[0]
-          : `${urls.length} URLs (${urls[0] ?? ""}${urls.length > 1 ? ", …" : ""})`;
-      const progressId = await reporter.toolStart("scrapeUrls", detail);
-
-      try {
-        const out = await toolStep?.run("scrape-urls", async () => {
-          const results: { url: string; content: string }[] = [];
-          let totalChars = 0;
-
-          for (const url of urls) {
-            try {
-              const result = await firecrawl.scrape(url, {
-                formats: ["markdown"],
-              });
-
-              if (result.markdown) {
-                let md = truncateMarkdownChunk(
-                  result.markdown,
-                  MAX_MARKDOWN_PER_URL,
-                );
-                const remaining = MAX_SCRAPED_TOTAL - totalChars;
-                if (remaining <= 0) {
-                  results.push({
-                    url,
-                    content:
-                      "[… omitted: per-response scrape budget already used by earlier URLs …]",
-                  });
-                  continue;
-                }
-                if (md.length > remaining) {
-                  md = `${md.slice(0, remaining)}\n\n[… truncated to fit scrape budget …]`;
-                }
-                totalChars += md.length;
-                results.push({
-                  url,
-                  content: md,
-                });
-              }
-            } catch {
+          if (result.markdown) {
+            let md = truncateMarkdownChunk(
+              result.markdown,
+              MAX_MARKDOWN_PER_URL,
+            );
+            const remaining = MAX_SCRAPED_TOTAL - totalChars;
+            if (remaining <= 0) {
               results.push({
                 url,
-                content: `Failed to scrape URL: ${url}`,
+                content:
+                  "[… omitted: per-response scrape budget already used by earlier URLs …]",
               });
+              continue;
             }
+            if (md.length > remaining) {
+              md = `${md.slice(0, remaining)}\n\n[… truncated to fit scrape budget …]`;
+            }
+            totalChars += md.length;
+            results.push({
+              url,
+              content: md,
+            });
           }
-
-          if (results.length === 0) {
-            return "No content could be scraped from the provided URLs.";
-          }
-
-          return JSON.stringify(results);
-        });
-        await reporter.toolEnd(progressId, true);
-        return out ?? "";
-      } catch (error) {
-        await reporter.toolEnd(
-          progressId,
-          false,
-          error instanceof Error ? error.message : "Unknown error",
-        );
-        return `Error scraping URLs: ${error instanceof Error ? error.message : "Unknown error"}`;
+        } catch {
+          results.push({
+            url,
+            content: `Failed to scrape URL: ${url}`,
+          });
+        }
       }
+
+      if (results.length === 0) {
+        return "No content could be scraped from the provided URLs.";
+      }
+
+      return JSON.stringify(results);
     },
   });
 };

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTool } from "@inngest/agent-kit";
+import { defineProjectTool } from "./define-project-tool";
 
 import { convex } from "@/lib/convex-client";
 
@@ -45,7 +45,7 @@ export const createCreateFilesTool = ({
   internalKey,
   reporter,
 }: CreateFilesToolOptions) => {
-  return createTool({
+  return defineProjectTool({
     name: "createFiles",
     description:
       "Create one or more files at workspace-relative paths in a single call. Each file has its own path, so you can mix root files (e.g. package.json) and nested files (e.g. src/app.tsx). Missing folders are created automatically. Returns JSON array with path, fileId, or error per entry.",
@@ -54,45 +54,32 @@ export const createCreateFilesTool = ({
         .array(fileEntrySchema)
         .describe("Files to create, each with path and content"),
     }),
-    handler: async (params, { step: toolStep }) => {
-      const parsed = paramsSchema.safeParse(params);
-      if (!parsed.success) {
-        return `Error: ${parsed.error.issues[0]?.message ?? "Invalid parameters"}`;
-      }
-
-      const files = parsed.data.files.map((file) => ({
+    validation: paramsSchema,
+    reporter,
+    prepare: async (params) => {
+      const files = params.files.map((file) => ({
         ...file,
         content: normalizeGeneratedFileContent(file.content),
       }));
 
-      const detail =
-        files.length === 1
-          ? files[0]!.path
-          : `${files.length} files (${files[0]!.path}${files.length > 1 ? ", …" : ""})`;
-      const progressId = await reporter.toolStart("createFiles", detail);
-
-      try {
-        const out = await toolStep?.run("create-files", async () => {
-          const results = await convex.mutation(
-            api.system.agentCreateFilesByPaths,
-            {
-              internalKey,
-              projectId,
-              files,
-            },
-          );
-          return JSON.stringify(results);
-        });
-        await reporter.toolEnd(progressId, true);
-        return out ?? "";
-      } catch (error) {
-        await reporter.toolEnd(
-          progressId,
-          false,
-          error instanceof Error ? error.message : "Unknown error",
-        );
-        return `Error creating files: ${error instanceof Error ? error.message : "Unknown error"}`;
-      }
+      return { files };
+    },
+    label: ({ files }) => {
+      return files.length === 1
+        ? files[0]!.path
+        : `${files.length} files (${files[0]!.path}${files.length > 1 ? ", …" : ""})`;
+    },
+    errorPrefix: "Error creating files",
+    run: async ({ files }) => {
+      const results = await convex.mutation(
+        api.system.agentCreateFilesByPaths,
+        {
+          internalKey,
+          projectId,
+          files,
+        },
+      );
+      return JSON.stringify(results);
     },
   });
 };
