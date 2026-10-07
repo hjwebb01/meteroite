@@ -1,4 +1,4 @@
-import { v } from "convex/values";
+import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
 import type { Doc } from "./_generated/dataModel";
@@ -117,13 +117,13 @@ export const discuss = mutation({
       review.status !== "completed" ||
       !review.result?.findings.some((f) => f.id === args.findingId)
     )
-      throw new Error("Finding not found");
+      throw new ConvexError("Finding not found");
     if (
       !args.body.trim() ||
       args.body.length > 4000 ||
       !/^[A-Za-z0-9_-]{8,100}$/.test(args.requestId)
     )
-      throw new Error("Invalid discussion");
+      throw new ConvexError("Invalid discussion");
     const duplicate = await ctx.db
       .query("reviewFindingWork")
       .withIndex("by_owner_request", (q) =>
@@ -136,7 +136,7 @@ export const discuss = mutation({
         duplicate.findingId !== args.findingId ||
         duplicate.body !== args.body.trim()
       )
-        throw new Error("Request identity already used");
+        throw new ConvexError("Request identity already used");
       return {
         workId: duplicate._id,
         created: false,
@@ -155,7 +155,7 @@ export const discuss = mutation({
       !review.sourceOwner ||
       !review.sourceRepo
     )
-      throw new Error(
+      throw new ConvexError(
         "This review has no pinned source. Run a new review first.",
       );
     assertCodingModelId(review.model);
@@ -197,7 +197,7 @@ export const cancel = mutation({
     const identity = await verifyAuth(ctx);
     const work = await ctx.db.get("reviewFindingWork", workId);
     if (!work || work.ownerId !== identity.subject)
-      throw new Error("Work not found");
+      throw new ConvexError("Work not found");
     await revokeFindingLease(ctx, work, {
       status: "cancelled",
       stopReason: "cancelled",
@@ -216,7 +216,7 @@ export const retry = mutation({
     const identity = await verifyAuth(ctx);
     const work = await ctx.db.get("reviewFindingWork", workId);
     if (!work || work.ownerId !== identity.subject)
-      throw new Error("Work not found");
+      throw new ConvexError("Work not found");
     await assertNoActiveFindingWork(
       ctx,
       work.reviewId,
@@ -225,7 +225,7 @@ export const retry = mutation({
       workId,
     );
     if (work.reservedCostMicros >= work.maxCostMicros)
-      throw new Error(
+      throw new ConvexError(
         "The saved spending cap is exhausted. Start a new investigation with an explicit cap.",
       );
     const { attempt, generation } = await requeueFindingWork(ctx, work);

@@ -58,6 +58,7 @@ export type ReferenceFile = {
   leftBlobSha?: string;
 };
 
+const MAX_HOTSPOTS = 12;
 export function validateHotspots(
   drafts: unknown[],
   files: ReferenceFile[],
@@ -103,7 +104,10 @@ export function validateHotspots(
     }
     return [{ ...parsed.data, id: `${runId}:hotspot:${index}`, references }];
   });
-  return { hotspots, rejected };
+  return {
+    hotspots: hotspots.slice(0, MAX_HOTSPOTS),
+    rejected: rejected + Math.max(0, hotspots.length - MAX_HOTSPOTS),
+  };
 }
 
 export function fileCoverageGaps(file: NavigationFile): FileCoverageGap[] {

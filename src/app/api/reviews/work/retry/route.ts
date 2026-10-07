@@ -3,6 +3,7 @@ import { fetchMutation } from "convex/nextjs";
 import { z } from "zod";
 import { getConvexAuth } from "@/lib/convex-auth";
 import { inngest } from "@/inngest/client";
+import { refusalResponse } from "@/features/reviews/lib/refusal";
 import { api } from "../../../../../../convex/_generated/api";
 import type { Id } from "../../../../../../convex/_generated/dataModel";
 export async function POST(request: Request) {
@@ -33,9 +34,6 @@ export async function POST(request: Request) {
     });
     return NextResponse.json({ workId: result.workId }, { status: 202 });
   } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Retry unavailable" },
-      { status: 409 },
-    );
+    return refusalResponse(error, "Retry unavailable. Try again.");
   }
 }

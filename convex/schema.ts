@@ -102,7 +102,7 @@ export default defineSchema({
 
   reviewProposals: defineTable(proposalFields)
     .index("by_finding", ["reviewId", "findingId"])
-    .index("by_work", ["workId"]),
+    .index("by_work_attempt", ["workId", "attempt"]),
 
   reviewApplications: defineTable(applicationFields)
     .index("by_proposal", ["proposalId"])

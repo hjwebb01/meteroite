@@ -159,13 +159,17 @@ export async function POST(request: Request) {
       data: { reviewId: started.id, ownerId: identity.userId },
     });
   } catch {
-    await fetchMutation(
-      api.reviews.failToQueue,
-      {
-        id: started.id as Id<"reviews">,
-      },
-      { token: identity.token },
-    );
+    try {
+      await fetchMutation(
+        api.reviews.failToQueue,
+        {
+          id: started.id as Id<"reviews">,
+        },
+        { token: identity.token },
+      );
+    } catch (error) {
+      console.error("Could not mark the unqueued review as failed", error);
+    }
     return NextResponse.json(
       { error: "Could not start the background review. Try again." },
       { status: 503 },

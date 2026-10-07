@@ -129,14 +129,16 @@ export const investigate = internalMutation({
       review.status !== "completed" ||
       !review.result?.findings.some((f) => f.id === args.findingId)
     )
-      throw new Error("Finding not found");
+      throw new ConvexError("Finding not found");
     if (
       !review.headSha ||
       !review.baseSha ||
       !review.sourceOwner ||
       !review.sourceRepo
     )
-      throw new Error("Run a new review to capture source identity first.");
+      throw new ConvexError(
+        "Run a new review to capture source identity first.",
+      );
     if (
       !/^[A-Za-z0-9_-]{8,100}$/.test(args.requestId) ||
       args.maxDurationMs < 30_000 ||
@@ -145,7 +147,7 @@ export const investigate = internalMutation({
       args.maxCostMicros > 10_000_000 ||
       ![args.maxDurationMs, args.maxCostMicros].every(Number.isSafeInteger)
     )
-      throw new Error("Invalid investigation limits");
+      throw new ConvexError("Invalid investigation limits");
     const duplicate = await ctx.db
       .query("reviewFindingWork")
       .withIndex("by_owner_request", (q) =>
@@ -161,7 +163,7 @@ export const investigate = internalMutation({
         duplicate.maxCostMicros !== args.maxCostMicros ||
         duplicate.maxDurationMs !== args.maxDurationMs
       )
-        throw new Error("Request identity already used");
+        throw new ConvexError("Request identity already used");
       return { workId: duplicate._id, dispatch: duplicate.status === "queued" };
     }
     await assertNoActiveFindingWork(

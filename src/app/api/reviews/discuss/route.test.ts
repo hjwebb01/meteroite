@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { ConvexError } from "convex/values";
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
   github: vi.fn(),
@@ -72,7 +73,7 @@ test("invalid, disconnected and unauthorized requests give actionable errors", a
     ).status,
   ).toBe(409);
   mocks.github.mockResolvedValue("secret");
-  mocks.mutation.mockRejectedValue(new Error("Finding not found"));
+  mocks.mutation.mockRejectedValue(new ConvexError("Finding not found"));
   const response = await post({
     reviewId: "other-review",
     findingId: "finding",
@@ -80,4 +81,18 @@ test("invalid, disconnected and unauthorized requests give actionable errors", a
     body: "Check",
   });
   expect(await response.json()).toEqual({ error: "Finding not found" });
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  mocks.mutation.mockRejectedValue(
+    new Error("[Request ID: 1] Server Error: deployment details"),
+  );
+  const failed = await post({
+    reviewId: "review",
+    findingId: "finding",
+    requestId: "request-123",
+    body: "Check",
+  });
+  expect(failed.status).toBe(503);
+  expect(await failed.json()).toEqual({
+    error: "Could not queue a response. Retry the same message.",
+  });
 });

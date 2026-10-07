@@ -1,3 +1,4 @@
+import { ConvexError } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 
@@ -9,6 +10,6 @@ export async function getOwnedReview(
 ) {
   const review = await ctx.db.get("reviews", reviewId);
   if (!review || review.ownerId !== ownerId)
-    throw new Error("Review not found");
+    throw new ConvexError("Review not found");
   return review;
 }

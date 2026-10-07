@@ -7,7 +7,11 @@ import { inngest } from "@/inngest/client";
 import { internal } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 import { executionCapability } from "@/features/reviews/lib/execution-provider";
-import { quoteFindingModel } from "@/features/reviews/lib/finding-budget";
+import {
+  FindingPriceError,
+  quoteFindingModel,
+} from "@/features/reviews/lib/finding-budget";
+import { refusalResponse } from "@/features/reviews/lib/refusal";
 import {
   isCodingModelId,
   DEFAULT_CODING_MODEL_ID,
@@ -71,14 +75,8 @@ export async function POST(request: Request) {
       });
     return NextResponse.json({ workId: result.workId }, { status: 202 });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Investigation could not start",
-      },
-      { status: 409 },
-    );
+    if (error instanceof FindingPriceError)
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    return refusalResponse(error, "Investigation could not start. Try again.");
   }
 }

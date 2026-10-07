@@ -112,6 +112,30 @@ describe("source evidence validation", () => {
       ).findings,
     ).toHaveLength(1);
   });
+  test("rejects a finding that breaks a bound on its own and keeps at most 20", () => {
+    const evidence = new Map([
+      ["caller.ts", new Map([[5, "return loadUser();"]])],
+    ]);
+    const files = [{ filename: "app.ts", status: "modified", patch }];
+    const output = validateFindings(
+      [
+        { ...finding, title: "x".repeat(181) },
+        { ...finding, evidence: [] },
+        ...Array.from({ length: 21 }, (_, i) => ({
+          ...finding,
+          title: `Finding ${i}`,
+        })),
+      ],
+      files,
+      evidence,
+      [],
+      "run",
+    );
+    expect(output.findings).toHaveLength(20);
+    expect(output.findings[0].id).toBe("run:2");
+    expect(output.rejected).toBe(3);
+  });
+
   test("links a repeat finding across an explicit rename without weakening current source evidence", () => {
     const evidence = new Map([
       ["caller.ts", new Map([[5, "return loadUser();"]])],

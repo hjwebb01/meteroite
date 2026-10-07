@@ -166,11 +166,11 @@ export const reviewPullRequest = inngest.createFunction(
       if (!active) throw new NonRetriableError("Review cancelled");
       const octokit = await createUserOctokit(ownerId);
       const checkActive = async () => {
-        const { review: current } = await getConvexAdminClient().query(
-          internal.reviewJobs.get,
+        const status = await getConvexAdminClient().query(
+          internal.reviewJobs.status,
           { id: reviewId, ownerId },
         );
-        if (current.status !== "running")
+        if (status !== "running")
           throw new NonRetriableError("Review cancelled");
       };
       const reader = createRepositoryReader(
@@ -357,7 +357,10 @@ export const reviewPullRequest = inngest.createFunction(
       const outdated =
         latest.head.sha !== snapshot.headSha ||
         latest.base.sha !== snapshot.baseSha;
-      const warnings = [...reader.warnings, ...output.limitations];
+      const warnings = [
+        ...reader.warnings,
+        ...output.limitations.slice(0, 10).map((l) => l.slice(0, 500)),
+      ];
       if (rejectedGroups)
         warnings.push(
           `${rejectedGroups} change group(s) were withheld because their hunk references did not match the saved snapshot.`,

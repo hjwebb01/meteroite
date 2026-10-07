@@ -75,7 +75,7 @@ test("owner can recover failed dispatch and cancelled/failed work without duplic
         body: JSON.stringify({ workId }),
       }),
     );
-  expect((await retry()).status).toBe(409);
+  expect((await retry()).status).toBe(503);
   expect((await retry()).status).toBe(202);
   expect(mocks.send.mock.calls[0][0].id).toBe(mocks.send.mock.calls[1][0].id);
   const first = await t.mutation(internal.reviewFindingJobs.claim, {

@@ -20,6 +20,9 @@ export type ProposalFile = {
   original: string | null;
   replacement: string | null;
 };
+// Code-unit order, so the digest does not depend on the runtime's locale.
+const byPath = (a: { path: string }, b: { path: string }) =>
+  a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 export function proposalDigest(sourceSha: string, files: ProposalFile[]) {
   return createHash("sha256")
     .update(
@@ -31,7 +34,7 @@ export function proposalDigest(sourceSha: string, files: ProposalFile[]) {
             expectedBlobSha,
             replacement,
           }))
-          .sort((a, b) => a.path.localeCompare(b.path)),
+          .sort((a, b) => byPath(a, b)),
       }),
     )
     .digest("hex");
@@ -115,6 +118,6 @@ export async function canonicalProposal(
       replacement: change.replacement,
     });
   }
-  files.sort((a, b) => a.path.localeCompare(b.path));
+  files.sort((a, b) => byPath(a, b));
   return { files, digest: proposalDigest(source.sourceSha, files) };
 }

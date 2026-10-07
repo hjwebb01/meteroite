@@ -95,7 +95,7 @@ export async function revokeFindingLease(
 // keeps its generation so the pending dispatch remains valid.
 export async function requeueFindingWork(ctx: MutationCtx, work: FindingWork) {
   if (work.status === "running" || work.status === "completed")
-    throw new Error("Work cannot be retried");
+    throw new ConvexError("Work cannot be retried");
   const queued = work.status === "queued";
   const attempt = queued ? work.attempt : work.attempt + 1;
   const generation = (work.dispatchGeneration ?? 0) + (queued ? 0 : 1);
@@ -160,5 +160,5 @@ export async function assertNoActiveFindingWork(
     .order("desc")
     .take(100);
   if (recent.some((w) => w._id !== except && isActiveWork(w.status)))
-    throw new Error(message);
+    throw new ConvexError(message);
 }

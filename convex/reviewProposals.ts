@@ -36,7 +36,9 @@ export const save = internalMutation({
       throw new Error("Invalid proposal provenance");
     const duplicate = await ctx.db
       .query("reviewProposals")
-      .withIndex("by_work", (q) => q.eq("workId", args.workId))
+      .withIndex("by_work_attempt", (q) =>
+        q.eq("workId", args.workId).eq("attempt", args.attempt),
+      )
       .unique();
     if (duplicate) {
       if (duplicate.digest !== args.digest)

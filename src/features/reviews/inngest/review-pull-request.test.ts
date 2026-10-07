@@ -43,7 +43,7 @@ test.each(["small-model", "large-model"])(
       base: { sha: "base" },
       head: { sha: "head", repo: { owner: { login: "owner" }, name: "app" } },
     };
-    mocks.query.mockResolvedValue({
+    const loaded = {
       review: {
         status: "running",
         repoOwner: "owner",
@@ -53,7 +53,10 @@ test.each(["small-model", "large-model"])(
         instructions: "",
       },
       previous: null,
-    });
+    };
+    mocks.query.mockImplementation((ref) =>
+      getFunctionName(ref) === "reviewJobs:status" ? "running" : loaded,
+    );
     mocks.mutation.mockResolvedValue(true);
     mocks.github.mockResolvedValue({
       rest: {

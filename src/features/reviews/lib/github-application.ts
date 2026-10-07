@@ -12,13 +12,16 @@ export async function githubApplicationClient(ownerId: string) {
       "disconnected",
       "GitHub is disconnected. Reconnect your GitHub account before applying.",
     );
-  return {
-    octokit: new Octokit({
-      auth: grant.token,
-      request: { signal: AbortSignal.timeout(20000) },
+  const octokit = new Octokit({ auth: grant.token });
+  // Each request gets its own 20-second limit; one shared signal would end
+  // a long application partway through.
+  octokit.hook.wrap("request", (request, options) =>
+    request({
+      ...options,
+      request: { ...options.request, signal: AbortSignal.timeout(20000) },
     }),
-    scopes: grant.scopes ?? [],
-  };
+  );
+  return { octokit, scopes: grant.scopes ?? [] };
 }
 export function applicationMarker(applicationId: string, digest: string) {
   return `Meteroite-Application: ${applicationId}\nMeteroite-Proposal: ${digest}`;
@@ -180,7 +183,9 @@ async function verifyAppliedCommit(
     }
   }
 }
-export async function commitApplication(
+// Read-only checks, run before the application is marked as writing so a
+// failure here is never reported as an uncertain remote write.
+export async function validateApplication(
   octokit: Octokit,
   application: Doc<"reviewApplications">,
   proposal: Doc<"reviewProposals">,
@@ -214,6 +219,12 @@ export async function commitApplication(
       "invalid_proposal",
       "Expected source blobs changed or proposal is invalid",
     );
+}
+export async function commitApplication(
+  octokit: Octokit,
+  application: Doc<"reviewApplications">,
+  proposal: Doc<"reviewProposals">,
+) {
   const marker = applicationMarker(application._id, proposal.digest);
   const result = await octokit.graphql<{
     createCommitOnBranch: { commit: { oid: string; url: string } };

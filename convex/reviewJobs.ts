@@ -47,6 +47,12 @@ export const get = internalQuery({
   },
 });
 
+export const status = internalQuery({
+  args: { id: v.id("reviews"), ownerId: v.string() },
+  handler: async (ctx, { id, ownerId }) =>
+    (await getOwnedReview(ctx, id, ownerId)).status,
+});
+
 export const progress = internalMutation({
   args: {
     id: v.id("reviews"),

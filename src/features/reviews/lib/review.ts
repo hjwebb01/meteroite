@@ -23,7 +23,9 @@ export function parsePullRequestUrl(value: string) {
     url.port ||
     url.username ||
     url.password ||
-    !match
+    !match ||
+    match[2] === "." ||
+    match[2] === ".."
   )
     throw new Error("Enter a URL like https://github.com/owner/repo/pull/123.");
   const pullNumber = Number(match[3]);
@@ -38,6 +40,8 @@ export function parsePullRequestUrl(value: string) {
     url: `https://github.com/${repoOwner}/${repoName}/pull/${pullNumber}`,
   };
 }
+
+const MAX_FINDINGS = 20;
 
 export const findingSchema = z.object({
   severity: z.enum(["high", "medium", "low"]),
@@ -60,13 +64,37 @@ export const findingSchema = z.object({
   previousFindingId: z.string().nullable(),
 });
 
+// The response shapes carry no length or count bounds, so one hotspot or
+// finding that breaks a bound is rejected on its own by validateHotspots or
+// validateFindings instead of failing the whole review.
+const side = z.enum(["LEFT", "RIGHT"]);
+const hotspotResponseSchema = z.object({
+  kind: hotspotDraftSchema.shape.kind,
+  title: z.string(),
+  reason: z.string(),
+  references: z.array(z.object({ path: z.string(), line: z.number(), side })),
+});
+const findingResponseSchema = z.object({
+  severity: findingSchema.shape.severity,
+  title: z.string(),
+  path: z.string(),
+  line: z.number(),
+  side,
+  explanation: z.string(),
+  suggestion: z.string(),
+  evidence: z.array(
+    z.object({ path: z.string(), line: z.number(), quote: z.string() }),
+  ),
+  previousFindingId: z.string().nullable(),
+});
+
 export const reviewOutputSchema = z.object({
   assessment: assessmentResponseSchema.nullable().catch(null),
-  hotspots: z.array(hotspotDraftSchema).max(12),
+  hotspots: z.array(hotspotResponseSchema),
   changeGroups: z.array(changeGroupDraftSchema).max(20).catch([]),
   summary: z.string().min(1).max(3000),
-  findings: z.array(findingSchema).max(20),
-  limitations: z.array(z.string().max(500)).max(10),
+  findings: z.array(findingResponseSchema),
+  limitations: z.array(z.string()),
 });
 
 export type FindingDraft = z.infer<typeof findingSchema>;
@@ -83,7 +111,7 @@ export type ChangedFile = {
 };
 
 export function validateFindings(
-  drafts: FindingDraft[],
+  drafts: unknown[],
   files: ChangedFile[],
   evidence: EvidenceLines,
   previous: { id: string; path: string }[],
@@ -91,7 +119,13 @@ export function validateFindings(
 ) {
   let rejected = 0;
   const seen = new Set<string>();
-  const findings = drafts.flatMap((draft, index) => {
+  const findings = drafts.flatMap((input, index) => {
+    const parsed = findingSchema.safeParse(input);
+    if (!parsed.success) {
+      rejected++;
+      return [];
+    }
+    const draft = parsed.data;
     const file = files.find((f) => f.filename === draft.path);
     const anchor = new Set(
       file?.anchors?.[draft.side] ??
@@ -131,7 +165,10 @@ export function validateFindings(
       },
     ];
   });
-  return { findings, rejected };
+  return {
+    findings: findings.slice(0, MAX_FINDINGS),
+    rejected: rejected + Math.max(0, findings.length - MAX_FINDINGS),
+  };
 }
 
 export function fileAtCommitUrl(

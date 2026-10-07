@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getConvexAuth } from "@/lib/convex-auth";
 import { getGithubToken } from "@/lib/github";
 import { inngest } from "@/inngest/client";
+import { refusalResponse } from "@/features/reviews/lib/refusal";
 import { api } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
 
@@ -56,14 +57,9 @@ export async function POST(request: Request) {
       });
     return NextResponse.json({ workId: result.workId }, { status: 202 });
   } catch (error) {
-    return NextResponse.json(
-      {
-        error:
-          error instanceof Error
-            ? error.message
-            : "Could not queue a response. Retry the same message.",
-      },
-      { status: 409 },
+    return refusalResponse(
+      error,
+      "Could not queue a response. Retry the same message.",
     );
   }
 }

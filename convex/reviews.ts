@@ -61,6 +61,8 @@ export const start = mutation({
     if (
       !/^[A-Za-z0-9-]{1,100}$/.test(args.repoOwner) ||
       !/^[A-Za-z0-9_.-]{1,100}$/.test(args.repoName) ||
+      args.repoName === "." ||
+      args.repoName === ".." ||
       !Number.isSafeInteger(args.pullNumber) ||
       args.pullNumber < 1 ||
       args.instructions.length > 4000

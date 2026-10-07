@@ -49,6 +49,16 @@ describe("private PR reviews", () => {
     await expect(
       t.query(internal.reviewJobs.get, { id, ownerId: "bob" }),
     ).rejects.toThrow("Review not found");
+    await expect(
+      t.query(internal.reviewJobs.status, { id, ownerId: "bob" }),
+    ).rejects.toThrow("Review not found");
+    expect(
+      await t.query(internal.reviewJobs.status, { id, ownerId: "alice" }),
+    ).toBe("queued");
+    for (const repoName of [".", ".."])
+      await expect(
+        alice.mutation(api.reviews.start, { ...request, repoName }),
+      ).rejects.toThrow("Invalid review request");
     expect((await alice.query(api.reviews.get, { id })).instructions).toBe(
       request.instructions,
     );

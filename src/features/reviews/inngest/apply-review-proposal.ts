@@ -8,6 +8,7 @@ import {
   inspectApplicationTarget,
   reconcileApplication,
   commitApplication,
+  validateApplication,
 } from "../lib/github-application";
 export const applyReviewProposal = inngest.createFunction(
   {
@@ -65,6 +66,7 @@ export const applyReviewProposal = inngest.createFunction(
               "stale",
               "The source branch advanced. This proposal is stale; start a new review and investigation. No newer work was overwritten.",
             );
+          await validateApplication(octokit, application, proposal);
           const writing = await getConvexAdminClient().mutation(
             internal.reviewApplications.writing,
             { applicationId, generation },

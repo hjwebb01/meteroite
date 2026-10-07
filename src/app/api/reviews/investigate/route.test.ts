@@ -17,10 +17,12 @@ vi.mock("@/inngest/client", () => ({ inngest: { send: mocks.send } }));
 vi.mock("@/features/reviews/lib/execution-provider", () => ({
   executionCapability: mocks.capability,
 }));
-vi.mock("@/features/reviews/lib/finding-budget", () => ({
+vi.mock("@/features/reviews/lib/finding-budget", async (importOriginal) => ({
+  ...(await importOriginal()),
   quoteFindingModel: mocks.price,
 }));
 import { GET, POST } from "./route";
+import { FindingPriceError } from "@/features/reviews/lib/finding-budget";
 const input = {
   reviewId: "review",
   findingId: "finding",
@@ -95,7 +97,7 @@ test("unavailable execution still starts a static investigation", async () => {
 });
 test("unknown pricing and invalid limits are explicit blocked states", async () => {
   expect((await post({ ...input, maxDurationMs: 1 })).status).toBe(400);
-  mocks.price.mockRejectedValue(new Error("No verified price"));
+  mocks.price.mockRejectedValue(new FindingPriceError("No verified price"));
   expect(await (await post(input)).json()).toEqual({
     error: "No verified price",
   });
