@@ -86,6 +86,10 @@ const flows = [
     services: [["Inngest dev server", "http://localhost:8288"]],
   },
   {
+    name: "Review finding triage (Decisions API)",
+    env: ["OPENAI_API_KEY"],
+  },
+  {
     name: "Live review of the fixture PR",
     env: ["CONVEX_DEPLOY_KEY", "OPENROUTER_API_KEY", "CLERK_SECRET_KEY"],
     services: [["Inngest dev server", "http://localhost:8288"]],
