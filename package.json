@@ -9,7 +9,10 @@
     "lint": "eslint",
     "format": "prettier --write .",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:convex": "node scripts/check-convex-modules.mjs",
+    "check:env": "node scripts/check-env.mjs",
+    "check:models": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-models.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
