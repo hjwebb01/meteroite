@@ -20,8 +20,18 @@ describe("Convex admin client", () => {
     );
   });
 
+  test("names a deploy key that belongs to a different deployment", () => {
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://example.convex.cloud");
+    vi.stubEnv("CONVEX_DEPLOY_KEY", "preview:team:project|secret");
+    expect(() => getConvexAdminClient()).toThrow(
+      'not a deploy key for example (it starts with "preview:team:project")',
+    );
+    vi.stubEnv("CONVEX_DEPLOY_KEY", "dev:other|secret");
+    expect(() => getConvexAdminClient()).toThrow("not a deploy key for example");
+  });
+
   test("authenticates internal calls without putting the key in arguments or other clients", async () => {
-    vi.stubEnv("CONVEX_DEPLOY_KEY", "test-deploy-key");
+    vi.stubEnv("CONVEX_DEPLOY_KEY", "dev:example|test-deploy-key");
     vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://example.convex.cloud");
     const fetch = vi.fn(async () =>
       Response.json({ status: "success", value: null }),
@@ -37,7 +47,7 @@ describe("Convex admin client", () => {
       RequestInit,
     ];
     expect(new Headers(adminRequest[1].headers).get("Authorization")).toBe(
-      "Convex test-deploy-key",
+      "Convex dev:example|test-deploy-key",
     );
     expect(JSON.parse(String(adminRequest[1].body))).toMatchObject({
       path: "systemMessages:getConversationById",
@@ -54,7 +64,7 @@ describe("Convex admin client", () => {
       RequestInit,
     ];
     expect(new Headers(mutationRequest[1].headers).get("Authorization")).toBe(
-      "Convex test-deploy-key",
+      "Convex dev:example|test-deploy-key",
     );
 
     const publicClient = new ConvexHttpClient(

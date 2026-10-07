@@ -133,7 +133,19 @@ describe("dependency migration integration", () => {
       }),
     ]);
     expect(functions.filter((fn) => fn.id.endsWith("-failure"))).toHaveLength(
-      3,
+      6,
     );
+    expect(
+      functions.find((fn) => fn.id === "meteroite-review-pull-request")
+        ?.triggers,
+    ).toEqual([{ event: "review/requested" }]);
+    expect(
+      functions.find((fn) => fn.id === "meteroite-review-pull-request")?.cancel,
+    ).toEqual([
+      expect.objectContaining({
+        event: "review/cancel",
+        if: "event.data.reviewId == async.data.reviewId",
+      }),
+    ]);
   });
 });

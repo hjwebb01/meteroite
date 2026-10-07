@@ -1,0 +1,38 @@
+import { v } from "convex/values";
+export const applicationBlockReason = v.union(
+  v.literal("stale"),
+  v.literal("permission"),
+  v.literal("scope"),
+  v.literal("disconnected"),
+  v.literal("transient"),
+  v.literal("uncertain"),
+  v.literal("invalid_proposal"),
+);
+export const applicationFields = {
+  blockReason: v.optional(applicationBlockReason),
+  ownerId: v.string(),
+  reviewId: v.id("reviews"),
+  proposalId: v.id("reviewProposals"),
+  requestId: v.string(),
+  proposalDigest: v.string(),
+  expectedHeadSha: v.string(),
+  sourceOwner: v.string(),
+  sourceRepo: v.string(),
+  sourceBranch: v.string(),
+  status: v.union(
+    v.literal("queued"),
+    v.literal("running"),
+    v.literal("writing"),
+    v.literal("uncertain"),
+    v.literal("blocked"),
+    v.literal("applied"),
+  ),
+  generation: v.number(),
+  createdAt: v.number(),
+  updatedAt: v.number(),
+  deadline: v.optional(v.number()),
+  remoteStartedAt: v.optional(v.number()),
+  error: v.optional(v.string()),
+  commitSha: v.optional(v.string()),
+  commitUrl: v.optional(v.string()),
+};

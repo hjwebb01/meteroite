@@ -11,6 +11,8 @@ import { useState, useEffect } from "react";
 import { ProjectsCommandDialog } from "./projects-command-dialog";
 import { ImportGithubDialog } from "./import-github-dialog";
 import { NewProjectDialog } from "./new-project-dialog";
+import Link from "next/link";
+import { SearchCode } from "lucide-react";
 const font = Poppins({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
@@ -74,6 +76,23 @@ export const ProjectsView = () => {
             </div>
           </div>
           <div className="flex flex-col gap-4 w-full">
+            <Button
+              asChild
+              variant="outline"
+              className="h-auto justify-start gap-3 bg-background p-4"
+            >
+              <Link href="/reviews">
+                <SearchCode className="size-5" />
+                <span className="text-left">
+                  <span className="block text-sm font-medium">
+                    Review a pull request
+                  </span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    Private findings with repository context
+                  </span>
+                </span>
+              </Link>
+            </Button>
             <div className="grid grid-cols-2 gap-2">
               <Button
                 variant="outline"
