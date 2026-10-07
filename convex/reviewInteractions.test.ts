@@ -158,13 +158,13 @@ test("cancel fences late finish and retry produces exactly one response", async 
     ownerId: "alice",
   });
   await alice.mutation(api.reviewInteractions.cancel, { workId: first.workId });
-  expect(
-    await t.mutation(internal.reviewFindingJobs.finish, {
+  await expect(
+    t.mutation(internal.reviewFindingJobs.finish, {
       workId: first.workId,
       attempt: attempt!,
       result: conclusion,
     }),
-  ).toBe(false);
+  ).rejects.toMatchObject({ data: { reason: "cancelled" } });
   const next = await alice.mutation(api.reviewInteractions.discuss, {
     ...request,
     requestId: "retry-request",
@@ -173,20 +173,18 @@ test("cancel fences late finish and retry produces exactly one response", async 
     workId: next.workId,
     ownerId: "alice",
   });
-  expect(
-    await t.mutation(internal.reviewFindingJobs.finish, {
+  await t.mutation(internal.reviewFindingJobs.finish, {
+    workId: next.workId,
+    attempt: nextAttempt!,
+    result: conclusion,
+  });
+  await expect(
+    t.mutation(internal.reviewFindingJobs.finish, {
       workId: next.workId,
       attempt: nextAttempt!,
       result: conclusion,
     }),
-  ).toBe(true);
-  expect(
-    await t.mutation(internal.reviewFindingJobs.finish, {
-      workId: next.workId,
-      attempt: nextAttempt!,
-      result: conclusion,
-    }),
-  ).toBe(false);
+  ).rejects.toMatchObject({ data: { reason: "cancelled" } });
   const thread = await alice.query(api.reviewInteractions.thread, {
     reviewId,
     findingId: "finding",
@@ -271,13 +269,13 @@ test("investigation has immutable limits, capped spending, owner fencing and dea
   ).work[0];
   expect(work.status).toBe("failed");
   expect(work.stopReason).toBe("time-limit");
-  expect(
-    await t.mutation(internal.reviewFindingJobs.finish, {
+  await expect(
+    t.mutation(internal.reviewFindingJobs.finish, {
       workId: started.workId,
       attempt: attempt!,
       result: conclusion,
     }),
-  ).toBe(false);
+  ).rejects.toMatchObject({ data: { reason: "time-limit" } });
 });
 test("retried work waits a full queue window before expiring, regardless of when it was created", async () => {
   const { t, alice, request } = await fixture();
@@ -360,19 +358,17 @@ test("retry archives previous attempt evidence and resets current checks and pro
     ownerId: "alice",
     generation: 1,
   });
-  expect(
-    await t.mutation(internal.reviewFindingJobs.saveCheck, {
-      workId,
-      attempt: next!,
-      check: {
-        command: ["node", "--test"],
-        status: "passed",
-        exitCode: 0,
-        output: "new result",
-        sourceSha: "head",
-      },
-    }),
-  ).toBe(true);
+  await t.mutation(internal.reviewFindingJobs.saveCheck, {
+    workId,
+    attempt: next!,
+    check: {
+      command: ["node", "--test"],
+      status: "passed",
+      exitCode: 0,
+      output: "new result",
+      sourceSha: "head",
+    },
+  });
   expect(
     (
       await alice.query(api.reviewInteractions.thread, {
@@ -408,8 +404,8 @@ test("expired attempt cannot reserve spending, append check results, or attach a
       amount: 1,
     }),
   ).rejects.toMatchObject({ data: { reason: "time-limit" } });
-  expect(
-    await t.mutation(internal.reviewFindingJobs.saveCheck, {
+  await expect(
+    t.mutation(internal.reviewFindingJobs.saveCheck, {
       workId,
       attempt: attempt!,
       check: {
@@ -419,14 +415,14 @@ test("expired attempt cannot reserve spending, append check results, or attach a
         sourceSha: "head",
       },
     }),
-  ).toBe(false);
-  expect(
-    await t.mutation(internal.reviewFindingJobs.attachExecution, {
+  ).rejects.toMatchObject({ data: { reason: "time-limit" } });
+  await expect(
+    t.mutation(internal.reviewFindingJobs.attachExecution, {
       workId,
       attempt: attempt!,
       unit: "meteroite-review-00000000-0000-0000-0000-000000000000.service",
     }),
-  ).toBe(false);
+  ).rejects.toMatchObject({ data: { reason: "time-limit" } });
 });
 test("latest reconsidered verdict per finding is visible only to the owner", async () => {
   const { t, alice, bob, reviewId, request } = await fixture();

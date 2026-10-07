@@ -4,7 +4,11 @@ import { verifyAuth } from "./auth";
 import type { Doc } from "./_generated/dataModel";
 import { getOwnedReview } from "./lib/owned_review";
 import { assertCodingModelId } from "./lib/coding_models";
-import { assertNoActiveFindingWork } from "./lib/active_finding_work";
+import {
+  assertNoActiveFindingWork,
+  requeueFindingWork,
+  revokeFindingLease,
+} from "./lib/finding_lease";
 
 export const thread = query({
   args: {
@@ -194,14 +198,11 @@ export const cancel = mutation({
     const work = await ctx.db.get("reviewFindingWork", workId);
     if (!work || work.ownerId !== identity.subject)
       throw new Error("Work not found");
-    if (work.status === "queued" || work.status === "running")
-      await ctx.db.patch("reviewFindingWork", workId, {
-        status: "cancelled",
-        stopReason: "cancelled",
-        attempt: work.attempt + 1,
-        updatedAt: Date.now(),
-        progress: "Cancelled",
-      });
+    await revokeFindingLease(ctx, work, {
+      status: "cancelled",
+      stopReason: "cancelled",
+      progress: "Cancelled",
+    });
     return {
       executionUnit: work.executionUnit ?? null,
       generation: work.dispatchGeneration ?? 0,
@@ -216,8 +217,6 @@ export const retry = mutation({
     const work = await ctx.db.get("reviewFindingWork", workId);
     if (!work || work.ownerId !== identity.subject)
       throw new Error("Work not found");
-    if (work.status === "running" || work.status === "completed")
-      throw new Error("Work cannot be retried");
     await assertNoActiveFindingWork(
       ctx,
       work.reviewId,
@@ -229,51 +228,7 @@ export const retry = mutation({
       throw new Error(
         "The saved spending cap is exhausted. Start a new investigation with an explicit cap.",
       );
-    const attempt = work.status === "queued" ? work.attempt : work.attempt + 1;
-    const generation =
-      work.status === "queued"
-        ? (work.dispatchGeneration ?? 0)
-        : (work.dispatchGeneration ?? 0) + 1;
-    const evidenceAttempt = work.evidenceAttempt ?? work.attempt;
-    if (work.status !== "queued") {
-      const saved = await ctx.db
-        .query("reviewFindingAttempts")
-        .withIndex("by_work_attempt", (q) =>
-          q.eq("workId", workId).eq("attempt", evidenceAttempt),
-        )
-        .unique();
-      if (!saved)
-        await ctx.db.insert("reviewFindingAttempts", {
-          ownerId: work.ownerId,
-          reviewId: work.reviewId,
-          findingId: work.findingId,
-          workId,
-          attempt: evidenceAttempt,
-          status: work.status,
-          checks: work.checks ?? [],
-          ...(work.result ? { result: work.result } : {}),
-          ...(work.proposalError ? { proposalError: work.proposalError } : {}),
-          ...(work.stopReason ? { stopReason: work.stopReason } : {}),
-          ...(work.deadline ? { deadline: work.deadline } : {}),
-          reservedCostMicros: work.reservedCostMicros,
-          createdAt: Date.now(),
-        });
-    }
-    await ctx.db.patch("reviewFindingWork", workId, {
-      status: "queued",
-      checks: [],
-      evidenceAttempt: undefined,
-      proposalError: undefined,
-      attempt,
-      dispatchGeneration: generation,
-      deadline: undefined,
-      error: undefined,
-      stopReason: undefined,
-      result: undefined,
-      executionUnit: undefined,
-      progress: "Waiting for dispatch",
-      updatedAt: Date.now(),
-    });
+    const { attempt, generation } = await requeueFindingWork(ctx, work);
     return { workId, attempt, generation };
   },
 });

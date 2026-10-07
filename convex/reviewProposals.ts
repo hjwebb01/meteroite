@@ -3,6 +3,8 @@ import { internalMutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
 import { proposalFields } from "./lib/review_proposal_fields";
 import { getOwnedReview } from "./lib/owned_review";
+import { requireFindingLease } from "./lib/finding_lease";
+import { clipCheckOutput } from "./lib/review_work_fields";
 export const list = query({
   args: { reviewId: v.id("reviews"), findingId: v.string() },
   handler: async (ctx, args) => {
@@ -20,18 +22,11 @@ export const list = query({
 export const save = internalMutation({
   args: proposalFields,
   handler: async (ctx, args) => {
-    const work = await ctx.db.get("reviewFindingWork", args.workId);
+    const work = await requireFindingLease(ctx, args.workId, args.attempt);
     if (
-      !work ||
       work.ownerId !== args.ownerId ||
       work.reviewId !== args.reviewId ||
       work.findingId !== args.findingId ||
-      work.attempt !== args.attempt ||
-      work.status !== "running" ||
-      (work.deadline ?? 0) <= Date.now()
-    )
-      return null;
-    if (
       work.kind !== "investigation" ||
       args.sourceSha !== work.headSha ||
       args.sourceOwner !== work.sourceOwner ||
@@ -48,6 +43,12 @@ export const save = internalMutation({
         throw new Error("Proposal is immutable");
       return duplicate._id;
     }
-    return ctx.db.insert("reviewProposals", args);
+    return ctx.db.insert("reviewProposals", {
+      ...args,
+      checks: args.checks.map((c) => ({
+        ...c,
+        output: clipCheckOutput(c.output),
+      })),
+    });
   },
 });

@@ -79,3 +79,10 @@ export const findingWorkFields = {
   executionUnit: v.optional(v.string()),
   stopReason: v.optional(workStopReason),
 };
+
+const CHECK_OUTPUT_LIMIT = 8000;
+export const clipCheckOutput = (output: string) =>
+  output.length > CHECK_OUTPUT_LIMIT
+    ? output.slice(0, CHECK_OUTPUT_LIMIT) +
+      "\nStored output clipped at 8,000 characters."
+    : output;

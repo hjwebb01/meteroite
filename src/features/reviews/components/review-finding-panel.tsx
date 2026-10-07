@@ -9,6 +9,7 @@ import { api } from "../../../../convex/_generated/api";
 import type { Doc } from "../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { CODING_MODELS } from "../../../../convex/lib/coding_models";
+import { isActiveWork } from "../../../../convex/lib/finding_lease";
 import { Textarea } from "@/components/ui/textarea";
 import { fileAtCommitUrl } from "../lib/review";
 
@@ -80,9 +81,7 @@ export function ReviewFindingPanel({
   const [cancellation, setCancellation] = useState("");
   const [sending, setSending] = useState(false);
   const pending = useRef<{ body: string; requestId: string } | null>(null);
-  const active = thread?.work.find(
-    (w) => w.status === "queued" || w.status === "running",
-  );
+  const active = thread?.work.find((w) => isActiveWork(w.status));
   return (
     <section
       aria-label="Finding discussion"

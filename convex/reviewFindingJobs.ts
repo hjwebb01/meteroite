@@ -1,6 +1,11 @@
 import { assertCodingModelId } from "./lib/coding_models";
 import { getOwnedReview } from "./lib/owned_review";
-import { assertNoActiveFindingWork } from "./lib/active_finding_work";
+import {
+  assertNoActiveFindingWork,
+  grantFindingLease,
+  requireFindingLease,
+  revokeFindingLease,
+} from "./lib/finding_lease";
 import { ConvexError, v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import {
@@ -8,6 +13,7 @@ import {
   workPrice,
   workCheck,
   workStopReason,
+  clipCheckOutput,
 } from "./lib/review_work_fields";
 
 export const get = internalQuery({
@@ -38,23 +44,8 @@ export const claim = internalMutation({
   },
   handler: async (ctx, { workId, ownerId, generation }) => {
     const work = await ctx.db.get("reviewFindingWork", workId);
-    if (
-      !work ||
-      work.ownerId !== ownerId ||
-      work.status !== "queued" ||
-      (work.dispatchGeneration ?? 0) !== (generation ?? 0)
-    )
-      return null;
-    const attempt = work.attempt + 1;
-    await ctx.db.patch("reviewFindingWork", workId, {
-      status: "running",
-      attempt,
-      evidenceAttempt: attempt,
-      deadline: Date.now() + work.maxDurationMs,
-      progress: "Inspecting pinned source",
-      updatedAt: Date.now(),
-    });
-    return attempt;
+    if (!work || work.ownerId !== ownerId) return null;
+    return grantFindingLease(ctx, work, generation ?? 0);
   },
 });
 export const progress = internalMutation({
@@ -64,19 +55,11 @@ export const progress = internalMutation({
     progress: v.string(),
   },
   handler: async (ctx, { workId, attempt, progress }) => {
-    const work = await ctx.db.get("reviewFindingWork", workId);
-    if (
-      !work ||
-      work.status !== "running" ||
-      work.attempt !== attempt ||
-      (work.deadline ?? 0) <= Date.now()
-    )
-      return false;
+    await requireFindingLease(ctx, workId, attempt);
     await ctx.db.patch("reviewFindingWork", workId, {
       progress,
       updatedAt: Date.now(),
     });
-    return true;
   },
 });
 export const finish = internalMutation({
@@ -86,14 +69,7 @@ export const finish = internalMutation({
     result: workConclusion,
   },
   handler: async (ctx, { workId, attempt, result }) => {
-    const work = await ctx.db.get("reviewFindingWork", workId);
-    if (
-      !work ||
-      work.status !== "running" ||
-      work.attempt !== attempt ||
-      (work.deadline ?? 0) <= Date.now()
-    )
-      return false;
+    const work = await requireFindingLease(ctx, workId, attempt);
     await ctx.db.insert("reviewMessages", {
       reviewId: work.reviewId,
       findingId: work.findingId,
@@ -110,7 +86,6 @@ export const finish = internalMutation({
       progress: "Response complete",
       updatedAt: Date.now(),
     });
-    return true;
   },
 });
 export const fail = internalMutation({
@@ -123,19 +98,13 @@ export const fail = internalMutation({
   },
   handler: async (ctx, { workId, attempt, generation, error, stopReason }) => {
     const work = await ctx.db.get("reviewFindingWork", workId);
-    if (
-      !work ||
-      !["queued", "running"].includes(work.status) ||
-      (work.dispatchGeneration ?? 0) !== generation ||
-      (attempt !== undefined && work.attempt !== attempt)
-    )
-      return;
-    await ctx.db.patch("reviewFindingWork", workId, {
+    if (!work || (work.dispatchGeneration ?? 0) !== generation) return;
+    await revokeFindingLease(ctx, work, {
       status: "failed",
-      error: error.slice(0, 500),
-      ...(stopReason ? { stopReason } : {}),
+      attempt,
+      error,
+      stopReason,
       progress: "Response failed",
-      updatedAt: Date.now(),
     });
   },
 });
@@ -228,17 +197,7 @@ export const reserve = internalMutation({
     amount: v.number(),
   },
   handler: async (ctx, { workId, attempt, amount }) => {
-    const work = await ctx.db.get("reviewFindingWork", workId);
-    if (!work || work.status !== "running" || work.attempt !== attempt)
-      throw new ConvexError({
-        reason: "cancelled",
-        message: "Finding work cancelled or superseded",
-      });
-    if ((work.deadline ?? 0) <= Date.now())
-      throw new ConvexError({
-        reason: "time-limit",
-        message: "Finding work exceeded its deadline",
-      });
+    const work = await requireFindingLease(ctx, workId, attempt);
     if (
       !Number.isSafeInteger(amount) ||
       amount < 0 ||
@@ -262,30 +221,15 @@ export const saveCheck = internalMutation({
     check: workCheck,
   },
   handler: async (ctx, { workId, attempt, check }) => {
-    const work = await ctx.db.get("reviewFindingWork", workId);
-    if (
-      !work ||
-      work.status !== "running" ||
-      work.attempt !== attempt ||
-      (work.deadline ?? 0) <= Date.now()
-    )
-      return false;
+    const work = await requireFindingLease(ctx, workId, attempt);
     if ((work.checks?.length ?? 0) >= 8) throw new Error("Check limit reached");
     await ctx.db.patch("reviewFindingWork", workId, {
       checks: [
         ...(work.checks ?? []),
-        {
-          ...check,
-          output:
-            check.output.slice(0, 8000) +
-            (check.output.length > 8000
-              ? "\nStored output clipped at 8,000 characters."
-              : ""),
-        },
+        { ...check, output: clipCheckOutput(check.output) },
       ],
       updatedAt: Date.now(),
     });
-    return true;
   },
 });
 const QUEUED_WORK_TTL_MS = 10 * 60_000;
@@ -309,14 +253,12 @@ export const expire = internalMutation({
         .take(100);
       for (const row of rows)
         if (status === "queued" || (row.deadline ?? 0) <= now)
-          await ctx.db.patch("reviewFindingWork", row._id, {
+          await revokeFindingLease(ctx, row, {
             status: "failed",
-            attempt: row.attempt + 1,
             stopReason: "time-limit",
             error:
               "Work exceeded its deadline or could not start. Retry with a new request.",
             progress: "Time limit reached",
-            updatedAt: now,
           });
     }
   },
@@ -329,18 +271,10 @@ export const attachExecution = internalMutation({
     unit: v.string(),
   },
   handler: async (ctx, { workId, attempt, unit }) => {
-    const work = await ctx.db.get("reviewFindingWork", workId);
-    if (
-      !work ||
-      work.status !== "running" ||
-      work.attempt !== attempt ||
-      (work.deadline ?? 0) <= Date.now()
-    )
-      return false;
+    await requireFindingLease(ctx, workId, attempt);
     if (!/^meteroite-review-[0-9a-f-]{36}\.service$/.test(unit))
       throw new Error("Invalid execution identity");
     await ctx.db.patch("reviewFindingWork", workId, { executionUnit: unit });
-    return true;
   },
 });
 
@@ -352,18 +286,10 @@ export const recordPremise = internalMutation({
     proposalError: v.optional(v.string()),
   },
   handler: async (ctx, { workId, attempt, result, proposalError }) => {
-    const work = await ctx.db.get("reviewFindingWork", workId);
-    if (
-      !work ||
-      work.status !== "running" ||
-      work.attempt !== attempt ||
-      (work.deadline ?? 0) <= Date.now()
-    )
-      return false;
+    await requireFindingLease(ctx, workId, attempt);
     await ctx.db.patch("reviewFindingWork", workId, {
       result,
       ...(proposalError ? { proposalError: proposalError.slice(0, 500) } : {}),
     });
-    return true;
   },
 });

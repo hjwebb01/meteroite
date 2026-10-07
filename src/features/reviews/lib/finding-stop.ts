@@ -30,9 +30,9 @@ export function findingStopReason(
       return reason;
   }
   if (signal?.aborted) {
-    if (signal.reason instanceof FindingStopped) return signal.reason.reason;
     if (signal.reason?.name === "TimeoutError") return "time-limit";
-    return "cancelled";
+    const reason = findingStopReason(signal.reason);
+    return reason === "infrastructure" ? "cancelled" : reason;
   }
   return "infrastructure";
 }
@@ -47,10 +47,4 @@ export function findingStopMessage(error: unknown) {
   )
     return error.data.message;
   return error instanceof Error ? error.message : "Finding work stopped";
-}
-
-export function workStopped(deadline: number | undefined) {
-  return (deadline ?? Infinity) <= Date.now()
-    ? new FindingStopped("time-limit", "Finding work exceeded its deadline")
-    : new FindingStopped("cancelled", "Finding work cancelled or superseded");
 }

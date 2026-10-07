@@ -11,6 +11,7 @@ import {
   findingWorkFields,
   workConclusion,
   workCheck,
+  workStatus,
   workStopReason,
 } from "./lib/review_work_fields";
 
@@ -87,7 +88,7 @@ export default defineSchema({
     findingId: v.string(),
     workId: v.id("reviewFindingWork"),
     attempt: v.number(),
-    status: v.string(),
+    status: workStatus,
     checks: v.array(workCheck),
     result: v.optional(workConclusion),
     proposalError: v.optional(v.string()),
