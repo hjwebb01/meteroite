@@ -8,6 +8,18 @@ Add documentation only when Hunter explicitly requests it or explicitly invokes 
 
 Periodically review permitted documentation while working on the related area. Update it to reflect current behavior and decisions, and remove stale details. Do not create additional documents as part of that review.
 
+## Verification in the app
+
+`npm run check:env` reports which flows can run locally and the secret each blocked flow needs. Sign in through the T3 preview as `meteroite-agent+clerk_test@example.com` with code `424242` (Clerk development test address; no inbox needed).
+
+The UI calls deployed Convex functions, so after changing `convex/` run `npx convex dev --once` to push them to the dev deployment.
+
+Live PR review acceptance runs against https://github.com/hjwebb01/meteroite-review-fixture/pull/1, which carries known defects. Push to its `discount-codes` branch to simulate an external update; reset it with `git push --force origin fixture-pr-base:refs/heads/discount-codes`.
+
+## Parallel work
+
+Commit in-progress work before creating worktrees for parallel agents: worktrees branch from `HEAD` and never see uncommitted changes.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 # This is NOT the Next.js you know

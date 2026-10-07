@@ -28,6 +28,22 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    files: ["src/**/*.tsx"],
+    // Page-level shells render once, so fixed ids there cannot collide.
+    ignores: ["src/features/reviews/components/reviews-workspace.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "JSXAttribute[name.name='id'] > Literal, JSXAttribute[name.name='id'] > JSXExpressionContainer > Literal",
+          message:
+            "A fixed id collides when the component renders twice; use useId() or derive it from the entity id.",
+        },
+      ],
+    },
+  },
+  {
     // Vendored AI Elements render blob and data URLs that next/image cannot load.
     files: ["src/components/ai-elements/**"],
     rules: { "@next/next/no-img-element": "off" },
