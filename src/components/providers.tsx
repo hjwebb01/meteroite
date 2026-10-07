@@ -1,5 +1,5 @@
 "use client";
-import { ClerkProvider, UserButton, useAuth } from "@clerk/nextjs";
+import { ClerkProvider, useAuth } from "@clerk/nextjs";
 import {
   Authenticated,
   AuthLoading,

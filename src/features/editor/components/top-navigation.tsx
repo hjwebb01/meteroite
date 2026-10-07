@@ -8,7 +8,6 @@ import { FileIcon } from "@react-symbols/icons/utils";
 import { XIcon } from "lucide-react";
 const Tab = ({
   fileId,
-  isFirst,
   projectId,
 }: {
   fileId: Id<"files">;

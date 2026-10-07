@@ -175,7 +175,7 @@ const quickEditKeymap = keymap.of([
 const captureViewExtension = EditorView.updateListener.of((update) => {
   editorView = update.view;
 });
-export const quickEdit = (fileName: string) => [
+export const quickEdit = () => [
   quickEditState,
   quickEditTooltipField,
   quickEditKeymap,

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Lints staged files and typechecks the project; CI runs the full suite.
+set -e
+files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.ts' '*.tsx' '*.js' '*.jsx' '*.mjs' '*.mts' '*.cjs')
+if [ -n "$files" ]; then
+  echo "$files" | xargs npx eslint --max-warnings 0 --no-warn-ignored
+fi
+npm run --silent typecheck

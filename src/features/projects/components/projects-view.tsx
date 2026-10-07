@@ -57,6 +57,7 @@ export const ProjectsView = () => {
         <div className="w-full max-w-sm mx-auto flex flex-col gap-4 items-center">
           <div className="flex justify-between gap-4 w-full items-center">
             <div className="flex items-center gap-2 w-full group/logo">
+              {/* eslint-disable-next-line @next/next/no-img-element -- static SVG gains nothing from next/image */}
               <img
                 src="/logo.svg"
                 alt="Meteroite"

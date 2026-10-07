@@ -61,7 +61,7 @@ export const CodeEditor = ({
           getPath: () => filePathRef.current,
           getProjectFiles: () => projectFilesRef.current,
         }),
-        quickEdit(fileName),
+        quickEdit(),
         selectionTooltip(),
         keymap.of([indentWithTab]),
         minimap(),

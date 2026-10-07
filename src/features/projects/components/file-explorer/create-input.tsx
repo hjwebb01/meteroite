@@ -1,8 +1,6 @@
 import { useState } from "react";
 
 export const CreateInput = ({
-  type,
-  level,
   onSubmit,
   onCancel,
 }: {

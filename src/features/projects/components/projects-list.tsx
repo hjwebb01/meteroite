@@ -5,7 +5,6 @@ import { Kbd } from "@/components/ui/kbd";
 import { Doc } from "../../../../convex/_generated/dataModel";
 import {
   ArrowRightIcon,
-  GlobeIcon,
   Loader2Icon,
   TriangleAlertIcon,
 } from "lucide-react";

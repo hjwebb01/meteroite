@@ -3,7 +3,6 @@
 import { cn } from "@/lib/utils";
 import { Allotment } from "allotment";
 import { useState } from "react";
-import { FaGithub } from "react-icons/fa";
 import { Id } from "../../../../convex/_generated/dataModel";
 import { FileExplorer } from "./file-explorer";
 import { EditorView } from "@/features/editor/components/editor-view";

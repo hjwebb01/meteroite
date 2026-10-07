@@ -52,8 +52,8 @@ export const PreviewTerminal = ({ output }: PreviewTerminalProps) => {
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-    // "output" does not need to be a dependency since it is not intended
-    // to update anything, just used on mount
+    // "output" is only read on mount; the effect below writes later output.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Write output
