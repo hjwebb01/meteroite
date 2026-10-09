@@ -4,6 +4,7 @@ import {
   reviewFileDiff,
   reviewResult,
   reviewFreshness,
+  githubReview,
 } from "./lib/review_fields";
 import { reassessmentSchema } from "./lib/review_reassessment";
 import { persistedAssessmentSchema } from "./lib/review_assessment";
@@ -261,6 +262,14 @@ export const fail = internalMutation({
       progress: "Review failed",
       updatedAt: Date.now(),
     });
+  },
+});
+
+export const recordGithubReview = internalMutation({
+  args: { id: v.id("reviews"), ownerId: v.string(), githubReview },
+  handler: async (ctx, { id, ownerId, githubReview }) => {
+    const review = await getOwnedReview(ctx, id, ownerId);
+    if (!review.githubReview) await ctx.db.patch("reviews", id, { githubReview });
   },
 });
 

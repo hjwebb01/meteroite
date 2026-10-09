@@ -6,6 +6,7 @@ import {
   reviewFileDiff,
   reviewResult,
   reviewFreshness,
+  githubReview,
 } from "./lib/review_fields";
 import {
   findingWorkFields,
@@ -44,6 +45,7 @@ export default defineSchema({
     previousReviewId: v.optional(v.id("reviews")),
     error: v.optional(v.string()),
     result: v.optional(v.object(reviewResult)),
+    githubReview: v.optional(githubReview),
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_url", ["ownerId", "url"]),

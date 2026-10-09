@@ -641,6 +641,8 @@ function ReviewDetail({
   });
   const [refreshing, setRefreshing] = useState(false);
   const [freshnessError, setFreshnessError] = useState("");
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState("");
   const files = useQuery(api.reviews.files, { id: review._id });
   const verdicts = useQuery(api.reviewInteractions.verdicts, {
     reviewId: review._id,
@@ -756,7 +758,7 @@ function ReviewDetail({
             {cancelling ? "Cancelling…" : "Cancel review"}
           </Button>
         ) : (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="ghost"
               disabled={refreshing}
@@ -778,6 +780,44 @@ function ReviewDetail({
             >
               {refreshing ? "Checking…" : "Check PR freshness"}
             </Button>
+            {review.githubReview ? (
+              <Button variant="ghost" asChild>
+                <a
+                  href={review.githubReview.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Check className="size-4" />
+                  Posted to GitHub
+                  <ArrowUpRight className="size-3.5" />
+                </a>
+              </Button>
+            ) : (
+              review.status === "completed" && (
+                <Button
+                  variant="outline"
+                  disabled={publishing}
+                  onClick={async () => {
+                    setPublishing(true);
+                    setPublishError("");
+                    try {
+                      await requestJson("/api/reviews/publish", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ reviewId: review._id }),
+                      });
+                    } catch (failure) {
+                      setPublishError((failure as Error).message);
+                    } finally {
+                      setPublishing(false);
+                    }
+                  }}
+                >
+                  <GitPullRequest className="size-4" />
+                  {publishing ? "Posting…" : "Post to GitHub"}
+                </Button>
+              )
+            )}
             <Button variant="outline" disabled={submitting} onClick={onRerun}>
               <RotateCcw
                 className={cn(
@@ -793,6 +833,11 @@ function ReviewDetail({
       {freshnessError && (
         <p role="alert" className="mb-4 text-sm text-destructive">
           {freshnessError}
+        </p>
+      )}
+      {publishError && (
+        <p role="alert" className="mb-4 text-sm text-destructive">
+          {publishError}
         </p>
       )}
       {review.freshness && (

@@ -201,6 +201,13 @@ export const reviewFreshness = v.union(
     reason: v.string(),
   }),
 );
+// The pull request review posted to GitHub from this saved review.
+export const githubReview = v.object({
+  id: v.number(),
+  url: v.string(),
+  headSha: v.string(),
+  postedAt: v.number(),
+});
 export const reviewResult = {
   reassessment: v.optional(reviewReassessment),
   changeGroups: v.optional(v.array(changeGroup)),
