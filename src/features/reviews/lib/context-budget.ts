@@ -1,10 +1,12 @@
-import type { ModelMessage } from "ai";
 import { chatGPTReviewSlug } from "../../../../convex/lib/review_models";
 
 const OUTPUT_TOKENS = 8_000;
 const SCHEMA_RESERVE_TOKENS = 4_000;
 const MAX_INPUT_TOKENS = 256_000;
 const FALLBACK_CONTEXT_TOKENS = 64_000;
+// One investigation turn's output plus tool results the repository reader
+// does not meter, such as file listings and changed-line anchors.
+const TURN_RESERVE_TOKENS = 16_000;
 
 export type ReviewBudget = {
   contextTokens: number;
@@ -54,6 +56,7 @@ export async function loadReviewBudget(modelId: string): Promise<ReviewBudget> {
       if (!Array.isArray(data)) throw new Error("Invalid model catalog");
       catalogCache = { expires: Date.now() + 3_600_000, models: data };
     }
+    // ChatGPT subscription slugs match OpenAI's catalog ids on OpenRouter.
     const slug = chatGPTReviewSlug(modelId);
     const catalogId = slug === undefined ? modelId : `openai/${slug}`;
     const model = catalogCache.models.find((entry) => entry.id === catalogId);
@@ -73,16 +76,48 @@ export async function loadReviewBudget(modelId: string): Promise<ReviewBudget> {
   }
 }
 
+/** Thrown when even the final review call cannot fit the model input budget. */
+export class ContextBudgetError extends Error {}
+
+export type CallUsage = { inputTokens?: number; outputTokens?: number };
+
+/**
+ * Size of the next request in a tool loop: the provider-reported size of the
+ * previous call plus its output and the tool results appended after it. Falls
+ * back to estimates for anything the provider does not report.
+ */
+export function nextRequestTokens(
+  previous: number,
+  usage: CallUsage | undefined,
+  output: unknown,
+  appended: unknown,
+) {
+  return (
+    (usage?.inputTokens ?? previous) +
+    (usage?.outputTokens ?? estimateTokens(JSON.stringify(output))) +
+    estimateTokens(JSON.stringify(appended))
+  );
+}
+
+/**
+ * Repository tokens the next investigation turn may add while leaving room
+ * for that turn's own output and the final review call. Zero or less means
+ * the investigation should stop.
+ */
+export function turnAllowance(budget: ReviewBudget, requestTokens: number) {
+  const reserve = Math.min(
+    TURN_RESERVE_TOKENS,
+    Math.floor(budget.inputTokens * 0.15),
+  );
+  return budget.inputTokens - requestTokens - reserve;
+}
+
 export function assertReviewContext(
   budget: ReviewBudget,
-  system: string,
-  messages: ModelMessage[],
+  requestTokens: number,
 ) {
-  if (
-    estimateTokens(system) + estimateTokens(JSON.stringify(messages)) >
-    budget.inputTokens
-  )
-    throw new Error(
+  if (requestTokens > budget.inputTokens)
+    throw new ContextBudgetError(
       "The review reached its model input budget. Narrow the review scope or select a model with a larger context window.",
     );
 }

@@ -4,6 +4,8 @@ import {
   assertReviewContext,
   createReviewBudget,
   estimateTokens,
+  nextRequestTokens,
+  turnAllowance,
 } from "./context-budget";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -16,11 +18,35 @@ test("smaller model windows reduce source budgets while large models have a cost
   expect(small.inputTokens + small.outputTokens + 4_000).toBeLessThan(32_000);
   expect(large.inputTokens).toBe(256_000);
   expect(estimateTokens("é")).toBe(2);
-  expect(() =>
-    assertReviewContext(small, "System", [
-      { role: "user", content: "x".repeat(32_000) },
-    ]),
-  ).toThrow("model input budget");
+  expect(() => assertReviewContext(small, small.inputTokens + 1)).toThrow(
+    "model input budget",
+  );
+});
+
+test("the next request uses reported usage and falls back to estimates", () => {
+  const output = [{ type: "text", text: "abcd" }];
+  const results = [{ lines: "1: x" }];
+  const appended = estimateTokens(JSON.stringify(results));
+  expect(
+    nextRequestTokens(
+      90_000,
+      { inputTokens: 1_000, outputTokens: 200 },
+      output,
+      results,
+    ),
+  ).toBe(1_200 + appended);
+  expect(nextRequestTokens(500, undefined, output, results)).toBe(
+    500 + estimateTokens(JSON.stringify(output)) + appended,
+  );
+});
+
+test("a turn is allowed only while it leaves room for its output and the final call", () => {
+  const large = createReviewBudget(1_050_000);
+  expect(turnAllowance(large, 100_000)).toBe(256_000 - 100_000 - 16_000);
+  expect(turnAllowance(large, 240_000)).toBeLessThanOrEqual(0);
+  const small = createReviewBudget(32_000);
+  // Small windows scale the reserve down so they can still investigate.
+  expect(turnAllowance(small, 5_000)).toBeGreaterThan(0);
 });
 
 test("loads the selected model's live context window and caches the catalog", async () => {

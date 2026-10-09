@@ -149,6 +149,23 @@ describe("pinned repository investigation", () => {
     expect(small.warnings[0]).toContain("diff token budget");
     expect(large.warnings).toEqual([]);
   });
+  test("a turn allowance caps reads until it is reset", async () => {
+    const g = github();
+    const snapshot = await loadPullRequest(g.client, "owner", "app", 7);
+    const reader = createRepositoryReader(g.client, snapshot, async () => {});
+    reader.limitTurn(estimateTokens(JSON.stringify("1: newAuth();\n")));
+    expect(await reader.readFile("src/auth.ts", 1, 2)).toMatchObject({
+      lastLine: 1,
+      partial: true,
+    });
+    expect(reader.warnings).toContain(
+      "Model input budget reached; investigation is partial.",
+    );
+    reader.limitTurn(Infinity);
+    expect(await reader.readFile("src/auth.ts", 2, 2)).toMatchObject({
+      content: "2: return user;",
+    });
+  });
   test("overlapping and repeated windows only consume budget for newly delivered lines", async () => {
     const g = github();
     g.getBlob.mockResolvedValue({

@@ -140,3 +140,35 @@ test("enforces context limits and cancellation before inference", async () => {
   await expect(runChatGPTReview(config)).rejects.toThrow("cancelled");
   expect(mocks.complete).not.toHaveBeenCalled();
 });
+
+test("stops investigating before tool results crowd out the final review", async () => {
+  const budget = createReviewBudget(1_050_000);
+  const readCall = (id: string) => ({
+    output: [
+      {
+        type: "function_call",
+        name: "readFile",
+        call_id: id,
+        arguments: JSON.stringify({ path: "src/auth.ts" }),
+      },
+    ],
+    usage: { input_tokens: 240_000, output_tokens: 1_000 },
+  });
+  mocks.complete
+    .mockResolvedValueOnce(readCall("read-1"))
+    .mockResolvedValueOnce(finalResponse);
+  const limitTurn = vi.fn();
+  const run = vi.fn().mockResolvedValue({ content: "1: authorize(user)" });
+  const result = await runChatGPTReview({
+    ...options(),
+    budget,
+    limitTurn,
+    tools: [readFileTool(run)],
+  });
+  expect(result).toEqual({ output: review, budgetStopped: true });
+  // One investigation turn, then the final call instead of a second turn.
+  expect(mocks.complete).toHaveBeenCalledTimes(2);
+  expect(mocks.complete.mock.calls[1][1].tool_choice).toBe("required");
+  expect(limitTurn).toHaveBeenCalledOnce();
+  expect(limitTurn.mock.calls[0][0]).toBeGreaterThan(0);
+});

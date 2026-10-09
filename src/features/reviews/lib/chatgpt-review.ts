@@ -3,6 +3,9 @@ import type { ChatGPTSelection } from "@/features/chatgpt/lib/types";
 import { reviewOutputSchema, type ReviewOutput } from "./review";
 import {
   assertReviewContext,
+  estimateTokens,
+  nextRequestTokens,
+  turnAllowance,
   type ReviewBudget,
 } from "./context-budget";
 import type { ReviewTool } from "./review-tools";
@@ -34,6 +37,7 @@ export async function runChatGPTReview({
   tools,
   budget,
   maxTurns = 8,
+  limitTurn,
   signal,
   checkActive,
   prepareFindings,
@@ -45,10 +49,12 @@ export async function runChatGPTReview({
   budget: ReviewBudget;
   maxTurns?: number;
   /** Caps repository tokens the coming turn's tools may deliver. */
+  limitTurn?: (tokens: number) => void;
   signal: AbortSignal;
   checkActive: () => Promise<void>;
   prepareFindings: () => Promise<void>;
 }) {
+  let requestTokens = estimateTokens(system) + estimateTokens(context);
   const instruction = `Call return_review with the final review. ${FINAL_INSTRUCTION}`;
   const { value, budgetStopped } = await runToolLoop<ReviewOutput>({
     selection,
@@ -62,6 +68,24 @@ export async function runChatGPTReview({
     maxTurns,
     signal,
     beforeCall: checkActive,
+    budget: {
+      allowance: () => {
+        const allowance = turnAllowance(budget, requestTokens);
+        if (allowance > 0) limitTurn?.(allowance);
+        return allowance;
+      },
+      record: (response, results) => {
+        requestTokens = nextRequestTokens(
+          requestTokens,
+          {
+            inputTokens: response.usage?.input_tokens,
+            outputTokens: response.usage?.output_tokens,
+          },
+          response.output,
+          results,
+        );
+      },
+    },
     finish: {
       kind: "structured",
       name: "return_review",
@@ -70,7 +94,10 @@ export async function runChatGPTReview({
       instruction,
       before: async () => {
         await prepareFindings();
-        assertReviewContext(budget, system, [{ role: "user", content: context + instruction }]);
+        assertReviewContext(
+          budget,
+          requestTokens + estimateTokens(instruction),
+        );
       },
     },
   });

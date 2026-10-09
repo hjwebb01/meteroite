@@ -357,7 +357,8 @@ export function createRepositoryReader(
   const warnings = new Set(snapshot.warnings);
   const contentCache = new Map<string, Promise<string | null>>();
   let reads = 0,
-    usedTokens = 0;
+    usedTokens = 0,
+    turnTokens = Infinity;
 
   for (const file of snapshot.files) {
     if (!file.patch) continue;
@@ -407,7 +408,12 @@ export function createRepositoryReader(
       );
       return "exhausted";
     }
+    if (tokens > turnTokens) {
+      warnings.add("Model input budget reached; investigation is partial.");
+      return "exhausted";
+    }
     usedTokens += tokens;
+    turnTokens -= tokens;
     quoted.set(line, text);
     evidence.set(path, quoted);
     filesRead.add(path);
@@ -508,5 +514,10 @@ export function createRepositoryReader(
     };
   }
 
-  return { evidence, filesRead, warnings, readFile, searchText };
+  /** Caps lines delivered until the next call so one turn cannot overflow the model input. */
+  function limitTurn(tokens: number) {
+    turnTokens = tokens;
+  }
+
+  return { evidence, filesRead, warnings, readFile, searchText, limitTurn };
 }

@@ -15,6 +15,9 @@ Group related changes by purpose, with a short title and purpose statement and o
 Identify a small set of hotspots with concrete reasons for human attention. Use human_judgment for sensitive behavior needing judgment even without a confirmed defect, and possible_issue for potential problems. These are separate from validated bug findings. Every hotspot reference must be an actual added RIGHT or removed LEFT line. Return hotspots even when the overall assessment is incomplete.
 Be explicit about unverified assumptions and review coverage. This is static analysis: you cannot run tests or claim runtime/browser verification. Do not declare a PR safe to merge.`;
 
+const BUDGET_WARNING =
+  "The investigation stopped early to keep the review within the model input budget; coverage is partial.";
+
 /**
  * Investigates the whole pull request, or one part of it when `part` is set.
  * A part sees its own patches; other changed files are listed without them.
@@ -48,17 +51,19 @@ export async function investigate(
     })),
     conventions,
   });
-  const { output } = await runReviewAgent({
+  const { output, budgetStopped } = await runReviewAgent({
     provider: run.provider,
     system: SYSTEM,
     context,
     budget: run.budget,
     tools: createRepositoryTools(run.snapshot, reader, run.checkActive),
+    limitTurn: reader.limitTurn,
     maxTurns: 8,
     signal: AbortSignal.timeout(300_000),
     checkActive: run.checkActive,
     prepareFindings: run.prepareFindings,
   });
+  if (budgetStopped) reader.warnings.add(BUDGET_WARNING);
   return {
     output,
     evidence: reader.evidence,

@@ -6,7 +6,6 @@ import {
   tool,
   type LanguageModel,
   type ToolSet,
-  type ModelMessage,
 } from "ai";
 import { NonRetriableError } from "inngest";
 import type { ChatGPTSelection } from "@/features/chatgpt/lib/types";
@@ -17,6 +16,10 @@ import {
 } from "../lib/chatgpt-review";
 import {
   assertReviewContext,
+  ContextBudgetError,
+  estimateTokens,
+  nextRequestTokens,
+  turnAllowance,
   type ReviewBudget,
 } from "../lib/context-budget";
 import { reviewOutputSchema, type ReviewOutput } from "../lib/review";
@@ -29,7 +32,9 @@ const FINAL_INSTRUCTION = `Return the final review. ${REVIEW_GUIDANCE}`;
 
 /**
  * Investigates with read-only tools for up to `maxTurns` turns, then returns
- * the structured review.
+ * the structured review. Each turn is metered from provider-reported usage;
+ * when another turn could crowd out the final call, investigation stops and
+ * the review proceeds with partial coverage instead of failing.
  */
 export async function runReviewAgent({
   provider,
@@ -37,6 +42,7 @@ export async function runReviewAgent({
   context,
   budget,
   tools,
+  limitTurn,
   maxTurns,
   signal,
   checkActive,
@@ -48,6 +54,8 @@ export async function runReviewAgent({
   budget: ReviewBudget;
   /** Empty for a tool-free call. */
   tools: ReviewTool[];
+  /** Caps repository tokens the coming turn's tools may deliver. */
+  limitTurn?: (tokens: number) => void;
   maxTurns: number;
   signal: AbortSignal;
   checkActive: () => Promise<void>;
@@ -61,6 +69,7 @@ export async function runReviewAgent({
           context,
           budget,
           maxTurns,
+          limitTurn,
           signal,
           checkActive,
           prepareFindings,
@@ -72,11 +81,14 @@ export async function runReviewAgent({
           context,
           budget,
           tools,
+          limitTurn,
           maxTurns,
           signal,
           prepareFindings,
         });
   } catch (error) {
+    if (error instanceof ContextBudgetError)
+      throw new NonRetriableError(error.message);
     throw error;
   }
 }
@@ -102,6 +114,7 @@ async function runOpenRouterReview({
   context,
   budget,
   tools,
+  limitTurn,
   maxTurns,
   signal,
   prepareFindings,
@@ -111,23 +124,44 @@ async function runOpenRouterReview({
   context: string;
   budget: ReviewBudget;
   tools: ReviewTool[];
+  limitTurn?: (tokens: number) => void;
   maxTurns: number;
   signal: AbortSignal;
   prepareFindings: () => Promise<void>;
 }) {
-  const checkContext = (messages: ModelMessage[]) => {
-    try { assertReviewContext(budget, system, messages); }
-    catch (error) { throw new NonRetriableError((error as Error).message); }
-  };
-  const investigation = maxTurns > 0
+  let requestTokens = estimateTokens(system) + estimateTokens(context);
+  let allowance = turnAllowance(budget, requestTokens);
+  const investigate = maxTurns > 0 && allowance > 0;
+  let budgetStopped = maxTurns > 0 && !investigate;
+  limitTurn?.(allowance);
+  const investigation = investigate
     ? await generateText({
-        model, system, prompt: context, maxOutputTokens: 6000,
-        abortSignal: signal, stopWhen: isStepCount(maxTurns),
-        prepareStep: ({ messages }) => { checkContext(messages); return {}; },
+        model,
+        system,
+        prompt: context,
+        maxOutputTokens: 6000,
+        abortSignal: signal,
+        stopWhen: [isStepCount(maxTurns), () => budgetStopped],
+        onStepEnd: (step) => {
+          requestTokens = nextRequestTokens(
+            requestTokens,
+            step.usage,
+            step.content,
+            step.toolResults,
+          );
+          allowance = turnAllowance(budget, requestTokens);
+          // A step without tool calls ends the investigation on its own.
+          budgetStopped = allowance <= 0 && step.toolCalls.length > 0;
+          limitTurn?.(allowance);
+        },
         tools: toAiSdkTools(tools, signal),
       })
     : { responseMessages: [] };
   await prepareFindings();
+  assertReviewContext(
+    budget,
+    requestTokens + estimateTokens(FINAL_INSTRUCTION),
+  );
   try {
     const { output } = await generateText({
       model,
@@ -135,16 +169,15 @@ async function runOpenRouterReview({
       maxOutputTokens: budget.outputTokens,
       abortSignal: signal,
       output: Output.object({ schema: reviewOutputSchema }),
-      prepareStep: ({ messages }) => { checkContext(messages); return {}; },
       messages: [
         { role: "user", content: context },
         ...investigation.responseMessages,
         { role: "user", content: FINAL_INSTRUCTION },
       ],
     });
-    return { output, budgetStopped: false };
+    return { output, budgetStopped };
   } catch (error) {
     if (!NoObjectGeneratedError.isInstance(error)) throw error;
-    return { output: malformedReview(), budgetStopped: false };
+    return { output: malformedReview(), budgetStopped };
   }
 }
