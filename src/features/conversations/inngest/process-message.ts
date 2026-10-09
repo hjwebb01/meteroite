@@ -1,44 +1,20 @@
 import { inngest } from "@/inngest/client";
 import { Id } from "../../../../convex/_generated/dataModel";
 import { NonRetriableError } from "inngest";
-import {
-  createAgent,
-  createNetwork,
-  type TextMessage,
-} from "@inngest/agent-kit";
 import { getConvexAdminClient } from "@/lib/convex-client";
 import { internal } from "../../../../convex/_generated/api";
-import {
-  CODING_AGENT_SYSTEM_PROMPT,
-  TITLE_GENERATOR_SYSTEM_PROMPT,
-} from "./constants";
 import { DEFAULT_CONVERSATION_TITLE } from "../../../../convex/constants";
-import { createReadFilesTool } from "./tools/read-files";
-import { createListFilesTool } from "./tools/list-files";
-import { createEditFileTool } from "./tools/edit-file";
-import { createUpdateFileTool } from "./tools/update-file";
-import { createCreateFilesTool } from "./tools/create-files";
-import { createCreateFolderTool } from "./tools/create-folder";
-import { createDeleteFilesTool } from "./tools/delete-files";
-import { createRenameFileTool } from "./tools/rename-file";
-import { createScrapeUrlsTool } from "./tools/scrape-urls";
 import { createMessageProgressReporter } from "./message-progress";
-import { createCodingModel, createTitleModel } from "./models";
+import type { ModelProvider } from "@/features/model-provider/model-provider";
+import { selectHistoryTurns } from "./conversation-history";
 import {
-  isEmptySummary,
-  selectHistoryTurns,
-  summarizeTurn,
-  withHistoryTurns,
-} from "./conversation-history";
+  CHATGPT_PROVIDER_ERROR_NAME,
+  createTurnExecutor,
+} from "./turn-executors";
+import { completeTurn } from "./complete-turn";
 
 /** Messages fetched per turn; the token budget decides how many actually reach the prompt. */
 const HISTORY_FETCH_LIMIT = 40;
-
-const titleAgent = createAgent({
-  name: "conversation-title",
-  system: TITLE_GENERATOR_SYSTEM_PROMPT,
-  model: createTitleModel(),
-});
 
 interface MessageEvent {
   /** Assistant placeholder message (processing → completed). */
@@ -50,6 +26,8 @@ interface MessageEvent {
   message: string;
   /** Snapshot of the conversation model at submission time. */
   model?: string;
+  /** Absent on events queued before Model providers; those use OpenRouter. */
+  provider?: ModelProvider;
 }
 
 export const processMessage = inngest.createFunction(
@@ -63,7 +41,7 @@ export const processMessage = inngest.createFunction(
       },
     ],
     onFailure: async ({ event, step }) => {
-      const { messageId } = event.data.event.data as MessageEvent;
+      const { messageId, provider } = event.data.event.data as MessageEvent;
 
       const deployKey = process.env.CONVEX_DEPLOY_KEY;
       if (deployKey) {
@@ -72,7 +50,12 @@ export const processMessage = inngest.createFunction(
             internal.systemMessages.updateMessageContent,
             {
               messageId,
-              content: "Failed to generate assistant message",
+              content:
+                provider?.kind !== "chatgpt"
+                  ? "Failed to generate assistant message"
+                  : event.data.error.name === CHATGPT_PROVIDER_ERROR_NAME
+                    ? `ChatGPT request failed: ${event.data.error.message}`
+                    : "ChatGPT could not finish this request. Try again.",
             },
           );
         });
@@ -87,6 +70,7 @@ export const processMessage = inngest.createFunction(
       projectId,
       message,
       model,
+      provider = { kind: "openrouter" },
     } = event.data as MessageEvent;
     const deployKey = process.env.CONVEX_DEPLOY_KEY;
     if (!deployKey) {
@@ -145,26 +129,29 @@ export const processMessage = inngest.createFunction(
 
     // Prior turns replay as real chat messages (assistant turns carry their tool
     // activity summary), chosen newest-first under a token budget.
-    const historyTurns: TextMessage[] = selectHistoryTurns(recentMessages, {
+    const historyTurns = selectHistoryTurns(recentMessages, {
       excludeIds: new Set(
         [messageId, userMessageIdToExclude].filter(
           (id): id is Id<"messages"> => id !== undefined,
         ),
       ),
-    }).map((turn) => ({
-      type: "text",
-      role: turn.role,
-      content: turn.content,
-    }));
+    });
 
     const reporter = createMessageProgressReporter({
       messageId,
     });
     reporter.seedLoadedContextState();
 
+    const executor = createTurnExecutor({
+      provider,
+      model: selectedModel,
+      step,
+      projectId,
+      reporter,
+      historyTurns,
+    });
+
     // Generate conversation title if it's still default.
-    // Do not call titleAgent.run inside step.run: agent-kit uses step.ai.infer, which
-    // nests step tooling and is unsupported (hangs / undefined completion).
     const shouldGenerateTitle =
       conversation.title === DEFAULT_CONVERSATION_TITLE;
     if (shouldGenerateTitle) {
@@ -172,29 +159,21 @@ export const processMessage = inngest.createFunction(
         await reporter.beginGeneratingTitle();
       });
       try {
-        const { output } = await titleAgent.run(message);
-        const textMessage = output.find(
-          (msg) => msg.type === "text" && msg.role === "assistant",
-        );
-        if (textMessage?.type === "text") {
-          const title =
-            typeof textMessage.content === "string"
-              ? textMessage.content.trim()
-              : textMessage.content
-                  .map((c) => c.text)
-                  .join("")
-                  .trim();
-          if (title) {
-            await step.run("update-conversation-title", async () => {
-              await getConvexAdminClient().mutation(
-                internal.systemMessages.updateConversationTitle,
-                {
-                  conversationId,
-                  title,
-                },
-              );
-            });
-          }
+        const title = (
+          await executor.generateTitle(message).catch((error) => {
+            throw executor.failure(error, "title");
+          })
+        ).trim();
+        if (title) {
+          await step.run("update-conversation-title", async () => {
+            await getConvexAdminClient().mutation(
+              internal.systemMessages.updateConversationTitle,
+              {
+                conversationId,
+                title,
+              },
+            );
+          });
         }
       } finally {
         await step.run("progress-end-title", async () => {
@@ -202,110 +181,14 @@ export const processMessage = inngest.createFunction(
         });
       }
     }
-    // Passing internal key directly, probably not best practice, works because its validated by previous checks
     await step.run("progress-agent-loop", async () => {
       await reporter.startAgentLoop({ shouldGenerateTitle });
     });
 
-    const codingAgent = createAgent({
-      name: "meteroite",
-      description: "Default Meteroite coding assistant (OpenRouter)",
-      system: CODING_AGENT_SYSTEM_PROMPT,
-      model: createCodingModel(selectedModel),
-      lifecycle: {
-        onStart: ({ prompt, history }) => ({
-          prompt: withHistoryTurns(prompt, historyTurns),
-          history: history ?? [],
-          stop: false,
-        }),
-      },
-      tools: [
-        createListFilesTool({ projectId, reporter }),
-        createReadFilesTool({ projectId, reporter }),
-        createUpdateFileTool({ projectId, reporter }),
-        createEditFileTool({ projectId, reporter }),
-        createCreateFilesTool({ projectId, reporter }),
-        createCreateFolderTool({ projectId, reporter }),
-        createDeleteFilesTool({ projectId, reporter }),
-        createRenameFileTool({ projectId, reporter }),
-        createScrapeUrlsTool({ reporter }),
-      ],
+    const turn = await executor.runTurn(message).catch((error) => {
+      throw executor.failure(error, "turn");
     });
-
-    /** Cap agent loop iterations to reduce token accumulation and latency. */
-    const CODING_AGENT_MAX_ITER = 7;
-
-    let lastToolCallFingerprint: string | undefined;
-    let duplicateToolCallStreak = 0;
-
-    const network = createNetwork({
-      name: "meteroite-network",
-      agents: [codingAgent],
-      maxIter: CODING_AGENT_MAX_ITER,
-      router: ({ network }) => {
-        const lastResult = network.state.results.at(-1);
-        const hasTextResponse = lastResult?.output.some(
-          (msg) => msg.type === "text" && msg.role === "assistant",
-        );
-        const hasToolCall = lastResult?.output.some(
-          (msg) => msg.type === "tool_call",
-        );
-
-        const toolCallMsg = lastResult?.output.find(
-          (msg) => msg.type === "tool_call",
-        );
-        if (toolCallMsg) {
-          const fp = JSON.stringify(toolCallMsg);
-          if (fp === lastToolCallFingerprint) {
-            duplicateToolCallStreak += 1;
-          } else {
-            lastToolCallFingerprint = fp;
-            duplicateToolCallStreak = 0;
-          }
-          if (duplicateToolCallStreak >= 2) {
-            return undefined;
-          }
-        } else {
-          lastToolCallFingerprint = undefined;
-          duplicateToolCallStreak = 0;
-        }
-
-        if (hasTextResponse && !hasToolCall) {
-          return undefined;
-        }
-        return codingAgent;
-      },
-    });
-
-    const result = await network.run(message);
-    const lastResult = result.state.results.at(-1);
-    const textMessage = lastResult?.output.find(
-      (msg) => msg.type === "text" && msg.role === "assistant",
-    );
-    let assistantResponse =
-      "I processed your request. Let me know if you need anything else.";
-    if (textMessage?.type === "text") {
-      assistantResponse =
-        typeof textMessage.content === "string"
-          ? textMessage.content
-          : textMessage.content.map((c) => c.text).join("");
-    }
-    await step.run("progress-finalizing", async () => {
-      await reporter.finalizeResponse();
-    });
-
-    const turnSummary = summarizeTurn(result.state.results);
-
-    await step.run("update-assistant-message", async () => {
-      await getConvexAdminClient().mutation(
-        internal.systemMessages.updateMessageContent,
-        {
-          messageId,
-          content: assistantResponse,
-          ...(isEmptySummary(turnSummary) ? {} : { turnSummary }),
-        },
-      );
-    });
+    await completeTurn({ step, reporter, messageId, turn });
     return { success: true, messageId, conversationId };
   },
 );

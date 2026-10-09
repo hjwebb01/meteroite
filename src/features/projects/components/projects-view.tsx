@@ -13,12 +13,15 @@ import { ImportGithubDialog } from "./import-github-dialog";
 import { NewProjectDialog } from "./new-project-dialog";
 import Link from "next/link";
 import { SearchCode } from "lucide-react";
+import { ChatGPTProvider } from "@/features/chatgpt/components/chatgpt-provider";
+import { useChatGPT } from "@/features/chatgpt/hooks/use-chatgpt";
 const font = Poppins({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
 
 export const ProjectsView = () => {
+  const chatGPT = useChatGPT();
   const [commandDialogOpen, setCommandDialogOpen] = useState(false);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
@@ -76,6 +79,7 @@ export const ProjectsView = () => {
             </div>
           </div>
           <div className="flex flex-col gap-4 w-full">
+            <ChatGPTProvider connection={chatGPT} />
             <Button
               asChild
               variant="outline"

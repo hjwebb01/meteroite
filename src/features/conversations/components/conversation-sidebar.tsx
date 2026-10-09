@@ -56,6 +56,8 @@ import {
 import type { MonotonicProgressStep } from "../hooks/use-monotonic-progress-steps";
 import { ConversationModelSelector } from "./conversation-model-selector";
 import { PastConversationsDialog } from "./past-conversations-dialog";
+import { ChatGPTProvider } from "@/features/chatgpt/components/chatgpt-provider";
+import { useChatGPT } from "@/features/chatgpt/hooks/use-chatgpt";
 
 /** Mirrors Convex `messages.progressSteps` items (client-safe, no worker imports). */
 type ProgressStepRow = MonotonicProgressStep;
@@ -303,6 +305,7 @@ interface ConversationSidebarProps {
 export const ConversationSideBar = ({
   projectId,
 }: ConversationSidebarProps) => {
+  const chatGPT = useChatGPT();
   const [input, setInput] = useState("");
   const [selectedConversationId, setSelectedConversationId] =
     useState<Id<"conversations"> | null>(null);
@@ -449,6 +452,7 @@ export const ConversationSideBar = ({
           <ConversationScrollButton />
         </Conversation>
         <div className="p-3">
+          <ChatGPTProvider connection={chatGPT} />
           <PromptInput onSubmit={handleSubmit} className="mt-2">
             <PromptInputBody>
               <PromptInputTextarea
@@ -460,10 +464,18 @@ export const ConversationSideBar = ({
             </PromptInputBody>
             <PromptInputFooter>
               <PromptInputTools>
-                <ConversationModelSelector
-                  value={selectedModel}
-                  onValueChange={handleModelChange}
-                />
+                {chatGPT.status?.enabled ? (
+                  <span className="truncate px-2 text-xs text-muted-foreground">
+                    {chatGPT.status.models.find(
+                      (m) => m.id === chatGPT.status?.model,
+                    )?.name ?? "ChatGPT"}
+                  </span>
+                ) : (
+                  <ConversationModelSelector
+                    value={selectedModel}
+                    onValueChange={handleModelChange}
+                  />
+                )}
               </PromptInputTools>
               <PromptInputSubmit
                 disabled={isProcessing ? false : !input}

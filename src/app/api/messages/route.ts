@@ -6,6 +6,7 @@ import { api } from "../../../../convex/_generated/api";
 import { getConvexAuth } from "@/lib/convex-auth";
 import { inngest } from "@/inngest/client";
 import { isCodingModelId } from "../../../../convex/lib/coding_models";
+import { resolveModelProvider } from "@/features/model-provider/model-provider";
 
 const requestSchema = z.object({
   conversationId: z.string(),
@@ -29,6 +30,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid request" }, { status: 400 });
   }
   const { conversationId, message, model: requestedModel } = parsed.data;
+  const resolved = await resolveModelProvider(convexAuth.userId, request);
+  if ("response" in resolved) return resolved.response;
+  const { provider } = resolved;
 
   // Runs as the user, so Convex rejects conversations they don't own.
   const {
@@ -65,6 +69,7 @@ export async function POST(request: Request) {
       projectId,
       message,
       model,
+      provider,
     },
   });
 

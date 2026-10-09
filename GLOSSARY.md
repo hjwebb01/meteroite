@@ -15,6 +15,12 @@ A text or binary file belonging to one Project and occupying a path in its file 
 **Folder**:
 A named container for Project files and nested Folders within one Project. A Folder and a Project file cannot share a name in the same location.
 
+### Models
+
+**Model provider**:
+The model service a Review or conversation turn runs on: the owner's ChatGPT subscription or OpenRouter.
+_Avoid_: execution provider (that is the Check sandbox)
+
 ### Pull request reviews
 
 **Review**:

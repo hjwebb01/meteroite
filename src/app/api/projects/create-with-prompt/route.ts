@@ -16,6 +16,7 @@ import { inngest } from "@/inngest/client";
 import { getConvexAdminClient } from "@/lib/convex-client";
 
 import { internal } from "../../../../../convex/_generated/api";
+import { resolveModelProvider } from "@/features/model-provider/model-provider";
 
 const requestSchema = z.object({
   prompt: z.string().min(1),
@@ -39,6 +40,9 @@ export async function POST(request: Request) {
 
   const body = await request.json();
   const { prompt } = requestSchema.parse(body);
+  const resolved = await resolveModelProvider(userId, request);
+  if ("response" in resolved) return resolved.response;
+  const { provider } = resolved;
 
   // Generate a random project name
   const projectName = uniqueNamesGenerator({
@@ -89,6 +93,7 @@ export async function POST(request: Request) {
       projectId,
       message: prompt,
       model: DEFAULT_CODING_MODEL_ID,
+      provider,
     },
   });
 
