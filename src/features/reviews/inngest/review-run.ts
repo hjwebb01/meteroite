@@ -31,3 +31,15 @@ export type PartReport = {
   filesRead: string[];
   warnings: string[];
 };
+
+/** A source line a part's findings or assessment cite, with its exact text. */
+export type CitedLine = { path: string; line: number; text: string };
+
+/** Serializable part result: findings validated against that part's evidence. */
+export type PartSummary = {
+  report: ReviewOutput;
+  rejected: number;
+  cited: CitedLine[];
+  filesRead: string[];
+  warnings: string[];
+};

@@ -17,9 +17,10 @@ export async function finalizeReview(
   octokit: Octokit,
   run: ReviewRun,
   { output, evidence, filesRead, warnings: coverageWarnings }: PartReport,
+  rejectedEarlier = 0,
 ) {
   const { snapshot, reviewId } = run;
-  const { findings: validatedFindings, rejected } =
+  const { findings: validatedFindings, rejected: rejectedNow } =
     validateFindings(
       output.findings,
       snapshot.files,
@@ -27,6 +28,7 @@ export async function finalizeReview(
       run.previousFindings,
       reviewId,
     );
+  const rejected = rejectedNow + rejectedEarlier;
   const triage = await triageFindings(validatedFindings);
   const findings = triage.findings.map((finding) => ({
     ...finding,

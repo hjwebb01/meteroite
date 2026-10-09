@@ -1,8 +1,9 @@
 import type { Octokit } from "octokit";
 import { createRepositoryReader } from "../lib/github-context";
+import { validateFindings, type ChangedFile } from "../lib/review";
 import { createRepositoryTools } from "../lib/review-tools";
 import { runReviewAgent } from "./review-agent";
-import type { PartReport, ReviewRun } from "./review-run";
+import type { PartReport, PartSummary, ReviewRun } from "./review-run";
 
 const SYSTEM = `You are a private code reviewer. Investigate the supplied pull request and its repository before producing a review.
 Find concrete bugs introduced by the change: correctness, security, data loss, broken contracts, and meaningful regressions. Do not report stylistic preferences or speculative issues. No finding is better than an unsupported finding.
@@ -26,8 +27,13 @@ const BUDGET_WARNING =
 export async function investigate(
   octokit: Octokit,
   run: ReviewRun,
+  part?: { index: number; count: number },
 ): Promise<PartReport> {
-  const files = run.snapshot.files;
+  const files: ChangedFile[] = part
+    ? run.snapshot.files.map((file) =>
+        file.part === part.index ? file : { ...file, patch: undefined },
+      )
+    : run.snapshot.files;
   const reader = createRepositoryReader(
     octokit,
     { ...run.snapshot, files },
@@ -41,6 +47,7 @@ export async function investigate(
       conventions.push(await reader.readFile(path));
   }
   const context = JSON.stringify({
+    ...(part ? { reviewScope: partScope(part) } : {}),
     ...run.sharedContext,
     changedFiles: files.map((file) => ({
       filename: file.filename,
@@ -69,5 +76,43 @@ export async function investigate(
     evidence: reader.evidence,
     filesRead: [...reader.filesRead],
     warnings: [...reader.warnings],
+  };
+}
+
+function partScope({ index, count }: { index: number; count: number }) {
+  return `This pull request is too large for one review, so it is reviewed in ${count} parts. You review part ${index + 1}: the changedFiles entries that include a patch. Other changed files are listed without patches and are reviewed separately; read them only where your part depends on them.`;
+}
+
+/**
+ * Serializable result of one part. Findings are validated against the lines
+ * this part delivered, and only cited lines cross into synthesis.
+ */
+export function summarizePart(
+  run: ReviewRun,
+  report: PartReport,
+  part: number,
+): PartSummary {
+  const { findings, rejected } = validateFindings(
+    report.output.findings,
+    run.snapshot.files,
+    report.evidence,
+    run.previousFindings,
+    `${run.reviewId}:part-${part + 1}`,
+  );
+  const cited = [
+    ...findings.flatMap((finding) => finding.evidence),
+    ...(report.output.assessment?.state === "complete"
+      ? report.output.assessment.evidence
+      : []),
+  ];
+  return {
+    report: { ...report.output, findings },
+    rejected,
+    cited: cited.flatMap(({ path, line }) => {
+      const text = report.evidence.get(path)?.get(line);
+      return text === undefined ? [] : [{ path, line, text }];
+    }),
+    filesRead: report.filesRead,
+    warnings: report.warnings,
   };
 }

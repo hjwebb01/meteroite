@@ -12,9 +12,13 @@ import {
 } from "@/features/model-provider/model-provider";
 import { loadReviewBudget } from "../lib/context-budget";
 import { SCRUTINY_RUBRIC } from "../../../../convex/lib/review_assessment";
-import { investigate } from "./review-investigation";
+import { investigate, summarizePart } from "./review-investigation";
+import { synthesizeParts } from "./review-synthesis";
 import { finalizeReview } from "./review-finalization";
-import type { ReviewRun } from "./review-run";
+import type { PartSummary, ReviewRun } from "./review-run";
+
+// A diff beyond one model context is reviewed in at most this many parts.
+const MAX_REVIEW_PARTS = 4;
 
 // Stays well under Convex's per-call argument size limit.
 const SAVE_FILES_BATCH_CHARS = 2_000_000;
@@ -96,6 +100,7 @@ export const reviewPullRequest = inngest.createFunction(
           review.repoName,
           review.pullNumber,
           budget.diffTokens,
+          MAX_REVIEW_PARTS,
         );
       } catch (error) {
         const known =
@@ -141,6 +146,10 @@ export const reviewPullRequest = inngest.createFunction(
       return pinned;
     });
 
+    const parts = Math.max(
+      1,
+      ...snapshot.files.map((file) => (file.part ?? 0) + 1),
+    );
     const previousFindings = previous?.result?.findings ?? [];
     const checkActive = async () => {
       const status = await getConvexAdminClient().query(
@@ -194,12 +203,57 @@ export const reviewPullRequest = inngest.createFunction(
       if (!active) throw new NonRetriableError("Review cancelled");
     };
 
-    const result = await step.run("investigate-and-review", async () => {
-      await reportProgress("Investigating changes and related code");
-      const octokit = await createUserOctokit(ownerId);
-      const report = await investigate(octokit, run);
-      return finalizeReview(octokit, run, report);
-    });
+    /**
+     * A diff too large for one model context is split into bounded parts,
+     * each investigated in its own step. A tool-free synthesis call then
+     * merges their summaries, citing only evidence the parts inspected.
+     */
+    let summaries: PartSummary[] = [];
+    if (parts > 1) {
+      summaries = await Promise.all(
+        Array.from({ length: parts }, (_, part) =>
+          step.run(`investigate-part-${part + 1}`, async () => {
+            await reportProgress(
+              `Investigating a large change in ${parts} parts`,
+            );
+            const octokit = await createUserOctokit(ownerId);
+            // Parts finish while others still investigate; only synthesis
+            // announces that findings are being prepared.
+            const partRun = { ...run, prepareFindings: checkActive };
+            return summarizePart(
+              run,
+              await investigate(octokit, partRun, {
+                index: part,
+                count: parts,
+              }),
+              part,
+            );
+          }),
+        ),
+      );
+    }
+
+    const result = await step.run(
+      parts === 1 ? "investigate-and-review" : "synthesize-review",
+      async () => {
+        await reportProgress(
+          parts === 1
+            ? "Investigating changes and related code"
+            : "Combining findings from every part",
+        );
+        const octokit = await createUserOctokit(ownerId);
+        const report =
+          parts === 1
+            ? await investigate(octokit, run)
+            : await synthesizeParts(run, summaries);
+        return finalizeReview(
+          octokit,
+          run,
+          report,
+          summaries.reduce((total, summary) => total + summary.rejected, 0),
+        );
+      },
+    );
     await step.run("save-review", () =>
       getConvexAdminClient().mutation(internal.reviewJobs.finish, {
         id: reviewId,

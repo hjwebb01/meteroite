@@ -105,6 +105,8 @@ export type ChangedFile = {
   previous_filename?: string;
   status: string;
   patch?: string;
+  /** Which review part's model context carries this patch. */
+  part?: number;
   anchors?: { LEFT: number[]; RIGHT: number[] };
   hunks?: ChangeHunk[];
   headBlobSha?: string;

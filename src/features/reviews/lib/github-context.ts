@@ -102,12 +102,39 @@ export async function loadReviewSignals(
   return { draft: draftSignal, checks };
 }
 
+/**
+ * Packs patch sizes into at most `maxParts` model contexts of `capacity`
+ * tokens each. Files stay in listing order, so neighbouring paths share a
+ * part; once every part is open, later files take any part with room.
+ * Returns each file's part, or undefined when its patch is left out.
+ */
+export function assignReviewParts(
+  sizes: (number | undefined)[],
+  capacity: number,
+  maxParts: number,
+) {
+  const used: number[] = [];
+  return sizes.map((tokens) => {
+    if (tokens === undefined || tokens > capacity) return undefined;
+    let part = used.length - 1;
+    if (part < 0 || used[part] + tokens > capacity)
+      part =
+        used.length < maxParts
+          ? used.push(0) - 1
+          : used.findIndex((total) => total + tokens <= capacity);
+    if (part < 0) return undefined;
+    used[part] += tokens;
+    return part;
+  });
+}
+
 export async function loadPullRequest(
   octokit: Octokit,
   owner: string,
   repo: string,
   pull_number: number,
   diffTokenBudget = createReviewBudget().diffTokens,
+  maxParts = 1,
 ) {
   const { data: pr } = await octokit.rest.pulls.get({
     owner,
@@ -125,7 +152,9 @@ export async function loadPullRequest(
   const diffs: ReviewFileDiff[] = [];
   const warnings: string[] = [];
   const patches = new Map<string, string | undefined>();
-  let remaining = diffTokenBudget;
+  const listed: Awaited<
+    ReturnType<Octokit["rest"]["pulls"]["listFiles"]>
+  >["data"] = [];
   // GitHub listFiles returns 100 per page. A second page handles a concurrent increase.
   for (let page = 1; page <= 2; page++) {
     const { data } = await octokit.rest.pulls.listFiles({
@@ -135,94 +164,103 @@ export async function loadPullRequest(
       per_page: 100,
       page,
     });
-    if (files.length + data.length > 100)
+    if (listed.length + data.length > 100)
       throw new Error(
         "This PR changes more than 100 files. Split it into smaller PRs before reviewing.",
       );
-    for (const f of data) {
-      const patch = f.patch;
-      patches.set(f.filename, patch);
-      const patchTokens = estimateTokens(
-        JSON.stringify({
-          patch,
-          hunks: buildHunks(
-            { filename: f.filename, patch },
-            `${pr.head.sha}:${pr.base.sha}`,
-          ),
-        }),
-      );
-      const lockfile =
-        /(?:^|\/)(?:package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?)$/.test(
-          f.filename,
-        );
-      const omitted = !patch
-        ? "GitHub supplied no text patch"
-        : lockfile
-          ? "lockfile"
-          : patchTokens > remaining
-            ? "diff token budget"
-            : undefined;
-      diffs.push({
-        filename: f.filename,
-        previousFilename: f.previous_filename,
-        status: f.status,
-        patch:
-          patch && patch.length <= MAX_DISPLAY_PATCH_CHARS ? patch : undefined,
-        omittedReason: omitted,
-        coverageGaps: [
-          ...(!patch
-            ? [
-                {
-                  kind: "text_patch_unavailable" as const,
-                  reason: "GitHub supplied no text patch.",
-                },
-              ]
-            : []),
-          ...(patch && omitted
-            ? [{ kind: "model_context_omitted" as const, reason: omitted }]
-            : []),
-          ...(patch && patch.length > MAX_DISPLAY_PATCH_CHARS
-            ? [
-                {
-                  kind: "display_size_excluded" as const,
-                  reason:
-                    "The text patch exceeds the saved display-size limit.",
-                },
-              ]
-            : []),
-        ],
-        changedLineRanges: patch ? changedLineRanges(patch) : undefined,
-        hunks: buildHunks(
-          {
-            filename: f.filename,
-            patch:
-              patch && patch.length <= MAX_DISPLAY_PATCH_CHARS
-                ? patch
-                : undefined,
-          },
-          `${pr.head.sha}:${pr.base.sha}`,
-        ),
-        headBlobSha: f.status === "removed" ? undefined : (f.sha ?? undefined),
-      });
-      files.push({
-        filename: f.filename,
-        hunks: diffs.at(-1)?.hunks,
-        headBlobSha: f.status === "removed" ? undefined : (f.sha ?? undefined),
-        previous_filename: f.previous_filename,
-        status: f.status,
-        patch: omitted ? undefined : patch,
-        anchors: patch
-          ? {
-              LEFT: [...changedLineAnchors(patch, "LEFT").keys()],
-              RIGHT: [...changedLineAnchors(patch, "RIGHT").keys()],
-            }
-          : undefined,
-      });
-      if (omitted) warnings.push(`Diff omitted: ${f.filename} (${omitted}).`);
-      else remaining -= patchTokens;
-    }
+    listed.push(...data);
     if (data.length < 100) break;
   }
+  const lockfile = (filename: string) =>
+    /(?:^|\/)(?:package-lock\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?)$/.test(
+      filename,
+    );
+  const parts = assignReviewParts(
+    listed.map((f) =>
+      f.patch && !lockfile(f.filename)
+        ? estimateTokens(
+            JSON.stringify({
+              patch: f.patch,
+              hunks: buildHunks(
+                { filename: f.filename, patch: f.patch },
+                `${pr.head.sha}:${pr.base.sha}`,
+              ),
+            }),
+          )
+        : undefined,
+    ),
+    diffTokenBudget,
+    maxParts,
+  );
+  listed.forEach((f, index) => {
+    const patch = f.patch;
+    const part = parts[index];
+    patches.set(f.filename, patch);
+    const omitted = !patch
+      ? "GitHub supplied no text patch"
+      : lockfile(f.filename)
+        ? "lockfile"
+        : part === undefined
+          ? "diff token budget"
+          : undefined;
+    diffs.push({
+      filename: f.filename,
+      previousFilename: f.previous_filename,
+      status: f.status,
+      patch:
+        patch && patch.length <= MAX_DISPLAY_PATCH_CHARS ? patch : undefined,
+      omittedReason: omitted,
+      coverageGaps: [
+        ...(!patch
+          ? [
+              {
+                kind: "text_patch_unavailable" as const,
+                reason: "GitHub supplied no text patch.",
+              },
+            ]
+          : []),
+        ...(patch && omitted
+          ? [{ kind: "model_context_omitted" as const, reason: omitted }]
+          : []),
+        ...(patch && patch.length > MAX_DISPLAY_PATCH_CHARS
+          ? [
+              {
+                kind: "display_size_excluded" as const,
+                reason: "The text patch exceeds the saved display-size limit.",
+              },
+            ]
+          : []),
+      ],
+      changedLineRanges: patch ? changedLineRanges(patch) : undefined,
+      hunks: buildHunks(
+        {
+          filename: f.filename,
+          patch:
+            patch && patch.length <= MAX_DISPLAY_PATCH_CHARS
+              ? patch
+              : undefined,
+        },
+        `${pr.head.sha}:${pr.base.sha}`,
+      ),
+      headBlobSha: f.status === "removed" ? undefined : (f.sha ?? undefined),
+    });
+    files.push({
+      filename: f.filename,
+      hunks: diffs.at(-1)?.hunks,
+      headBlobSha: f.status === "removed" ? undefined : (f.sha ?? undefined),
+      previous_filename: f.previous_filename,
+      status: f.status,
+      patch: omitted ? undefined : patch,
+      ...(omitted ? {} : { part }),
+      anchors: patch
+        ? {
+            LEFT: [...changedLineAnchors(patch, "LEFT").keys()],
+            RIGHT: [...changedLineAnchors(patch, "RIGHT").keys()],
+          }
+        : undefined,
+    });
+    if (omitted) warnings.push(`Diff omitted: ${f.filename} (${omitted}).`);
+  });
   const { data: latest } = await octokit.rest.pulls.get({
     owner,
     repo,

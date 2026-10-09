@@ -264,3 +264,174 @@ test.each(["small-model", "large-model"])(
     ]);
   },
 );
+
+test("a diff beyond one model context is reviewed in parts and merged from their evidence", async () => {
+  const pad = (line: string) => line.padEnd(70_000, " ");
+  mocks.query.mockImplementation((ref) =>
+    getFunctionName(ref) === "reviewJobs:status"
+      ? "running"
+      : {
+          review: {
+            status: "running",
+            repoOwner: "owner",
+            repoName: "app",
+            pullNumber: 7,
+            model: "large-model",
+            instructions: "",
+          },
+          previous: null,
+        },
+  );
+  mocks.mutation.mockResolvedValue(true);
+  mocks.github.mockResolvedValue({
+    rest: {
+      pulls: {
+        get: vi.fn().mockResolvedValue({
+          data: {
+            changed_files: 2,
+            title: "Fix auth and billing",
+            body: "",
+            base: { sha: "base" },
+            head: {
+              sha: "head",
+              repo: { owner: { login: "owner" }, name: "app" },
+            },
+          },
+        }),
+        listFiles: vi.fn().mockResolvedValue({
+          data: [
+            {
+              filename: "src/auth.ts",
+              sha: "auth-blob",
+              status: "modified",
+              patch: `@@ -1 +1 @@\n-oldAuth();\n+${pad("newAuth();")}`,
+            },
+            {
+              filename: "src/billing.ts",
+              sha: "billing-blob",
+              status: "modified",
+              patch: `@@ -1 +1 @@\n-oldCharge();\n+${pad("chargeCard();")}`,
+            },
+          ],
+        }),
+      },
+      git: {
+        getTree: vi
+          .fn()
+          .mockResolvedValue({ data: { tree: [], truncated: false } }),
+      },
+    },
+  });
+  const finding = (path: string, quote: string) => ({
+    severity: "high",
+    title: `Broken ${path}`,
+    path,
+    line: 1,
+    side: "RIGHT",
+    explanation: "Trigger",
+    suggestion: "Fix",
+    evidence: [{ path, line: 1, quote }],
+    previousFindingId: null,
+  });
+  const review = (findings: unknown[]) => ({
+    assessment: null,
+    hotspots: [],
+    changeGroups: [],
+    summary: "Reviewed",
+    findings,
+    limitations: [],
+  });
+  const requests: string[] = [];
+  const provider = createOpenRouter({
+    apiKey: "test-key",
+    fetch: async (_url, options) => {
+      const body = String(options?.body);
+      requests.push(body);
+      const final = !JSON.parse(body).tools;
+      const content = !final
+        ? "Investigation finished"
+        : JSON.stringify(
+            body.includes("partReports")
+              ? review([
+                  finding("src/auth.ts", "newAuth();"),
+                  finding("src/billing.ts", "chargeCard();"),
+                  finding("src/billing.ts", "never inspected();"),
+                ])
+              : body.includes("+newAuth();")
+                ? review([finding("src/auth.ts", "newAuth();")])
+                : review([finding("src/billing.ts", "chargeCard();")]),
+          );
+      return Response.json({
+        id: `completion-${requests.length}`,
+        created: 1,
+        model: "test-model",
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content },
+            finish_reason: "stop",
+          },
+        ],
+        usage: { prompt_tokens: 20, completion_tokens: 10, total_tokens: 30 },
+      });
+    },
+  });
+  mocks.chat.mockImplementation(() => provider.chat("test-model"));
+  const steps: string[] = [];
+  const handler = reviewPullRequest as unknown as (input: {
+    event: { data: { reviewId: string; ownerId: string } };
+    step: { run: (name: string, callback: () => unknown) => unknown };
+  }) => Promise<unknown>;
+  await handler({
+    event: { data: { reviewId: "review-1", ownerId: "user-1" } },
+    step: {
+      run: (name, callback) => {
+        steps.push(name);
+        return callback();
+      },
+    },
+  });
+  expect(steps).toEqual([
+    "load-review",
+    "load-model-budget",
+    "load-pinned-pr",
+    "investigate-part-1",
+    "investigate-part-2",
+    "synthesize-review",
+    "save-review",
+  ]);
+  // Each part sees only its own patch; synthesis sees reports, not patches.
+  const parts = requests.filter((body) => body.includes("reviewScope"));
+  expect(parts.filter((body) => body.includes("+newAuth();"))).toHaveLength(2);
+  expect(
+    parts.every(
+      (body) =>
+        !body.includes("+newAuth();") || !body.includes("+chargeCard();"),
+    ),
+  ).toBe(true);
+  const synthesis = requests.find((body) => body.includes("partReports"))!;
+  expect(synthesis).not.toContain("+newAuth();");
+  expect(synthesis).not.toContain("+chargeCard();");
+  // Only synthesis announces finding preparation in a split review.
+  const progress = mocks.mutation.mock.calls
+    .filter(([ref]) => getFunctionName(ref) === "reviewJobs:progress")
+    .map(([, args]) => args.progress);
+  expect(progress.filter((text: string) => text.includes("preparing"))).toEqual(
+    ["Checking evidence and preparing findings"],
+  );
+  expect(progress.at(-1)).toBe("Checking evidence and preparing findings");
+  const saved = mocks.mutation.mock.calls.find(
+    ([ref]) => getFunctionName(ref) === "reviewJobs:finish",
+  )?.[1];
+  expect(saved.result.findings.map((f: { path: string }) => f.path)).toEqual([
+    "src/auth.ts",
+    "src/billing.ts",
+  ]);
+  expect(saved.result.coverage.diffFiles).toEqual([
+    "src/auth.ts",
+    "src/billing.ts",
+  ]);
+  expect(saved.result.coverage.warnings).toContainEqual(
+    expect.stringContaining("1 proposed finding(s) were withheld"),
+  );
+});

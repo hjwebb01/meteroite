@@ -2,6 +2,7 @@
 import { describe, expect, test, vi } from "vitest";
 import type { Octokit } from "octokit";
 import {
+  assignReviewParts,
   createRepositoryReader,
   loadPullRequest,
   loadReviewSignals,
@@ -148,6 +149,48 @@ describe("pinned repository investigation", () => {
     expect(large.files[0].patch).toContain("x".repeat(70_000));
     expect(small.warnings[0]).toContain("diff token budget");
     expect(large.warnings).toEqual([]);
+  });
+  test("a diff beyond one context is packed into review parts instead of omitted", async () => {
+    const g = github();
+    const patch = (body: string) =>
+      `@@ -1 +1 @@\n-old();\n+${body.padEnd(40_000, " ")}`;
+    g.listFiles.mockResolvedValue({
+      data: [
+        { filename: "src/a.ts", status: "modified", patch: patch("a();") },
+        { filename: "src/b.ts", status: "modified", patch: patch("b();") },
+        { filename: "src/c.ts", status: "modified", patch: patch("c();") },
+        { filename: "package-lock.json", status: "modified", patch: "@@" },
+      ],
+    });
+    const capacity = 100_000;
+    const single = await loadPullRequest(g.client, "o", "app", 7, capacity);
+    expect(single.files.map((f) => f.part)).toEqual([
+      0,
+      0,
+      undefined,
+      undefined,
+    ]);
+    expect(single.warnings).toContain(
+      "Diff omitted: src/c.ts (diff token budget).",
+    );
+    const split = await loadPullRequest(g.client, "o", "app", 7, capacity, 4);
+    expect(split.files.map((f) => f.part)).toEqual([0, 0, 1, undefined]);
+    expect(split.files[2].patch).toContain("c();");
+    expect(split.warnings).toEqual([
+      "Diff omitted: package-lock.json (lockfile).",
+    ]);
+  });
+  test("parts keep listing order, refill earlier parts once all are open, and skip oversized patches", () => {
+    expect(assignReviewParts([6, 6, 3, 20, undefined], 10, 2)).toEqual([
+      0,
+      1,
+      1,
+      undefined,
+      undefined,
+    ]);
+    expect(assignReviewParts([6, 6, 3], 10, 2)).toEqual([0, 1, 1]);
+    expect(assignReviewParts([6, 9, 3], 10, 2)).toEqual([0, 1, 0]);
+    expect(assignReviewParts([6, 6, 3], 10, 1)).toEqual([0, undefined, 0]);
   });
   test("a turn allowance caps reads until it is reset", async () => {
     const g = github();
