@@ -7,10 +7,10 @@ import { getGithubToken } from "@/lib/github";
 import { inngest } from "@/inngest/client";
 import { api } from "../../../../convex/_generated/api";
 import { Id } from "../../../../convex/_generated/dataModel";
-import {
-  isCodingModelId,
-  DEFAULT_CODING_MODEL_ID,
-} from "../../../../convex/lib/coding_models";
+import { DEFAULT_CODING_MODEL_ID } from "../../../../convex/lib/coding_models";
+import { isReviewModelId } from "../../../../convex/lib/review_models";
+import { getChatGPTStatus } from "@/features/chatgpt/lib/local-account";
+import { resolveModelProvider } from "@/features/model-provider/model-provider";
 import { parsePullRequestUrl } from "@/features/reviews/lib/review";
 
 const requestSchema = z.object({
@@ -18,13 +18,13 @@ const requestSchema = z.object({
   instructions: z.string().max(4000).default(""),
   model: z
     .string()
-    .refine(isCodingModelId, "Unsupported review model")
+    .refine(isReviewModelId, "Unsupported review model")
     .default(DEFAULT_CODING_MODEL_ID),
 });
 
-function missingConfiguration() {
+function missingConfiguration(subscription = false) {
   return [
-    "OPENROUTER_API_KEY",
+    ...(subscription ? [] : ["OPENROUTER_API_KEY"]),
     "CONVEX_DEPLOY_KEY",
     ...(process.env.NODE_ENV === "production" ? ["INNGEST_EVENT_KEY"] : []),
   ].filter((key) => !process.env[key]);
@@ -37,7 +37,15 @@ export async function GET() {
       { error: "Sign in to review a pull request." },
       { status: 401 },
     );
-  const missing = missingConfiguration();
+  let missing = missingConfiguration();
+  const openRouterAvailable = !missing.includes("OPENROUTER_API_KEY");
+  if (!openRouterAvailable) {
+    const subscription = await getChatGPTStatus(identity.userId).catch(
+      () => undefined,
+    );
+    if (subscription?.connected && subscription.models.length > 0)
+      missing = missingConfiguration(true);
+  }
   try {
     await fetchQuery(api.reviews.list, {}, { token: identity.token });
   } catch {
@@ -48,6 +56,7 @@ export async function GET() {
         ? "The review service needs configuration and the updated review backend before it can run."
         : "The review backend is unavailable. Deploy the updated Convex functions and check the authentication setup.",
       missing,
+      openRouterAvailable,
     });
   }
   if (missing.length)
@@ -56,6 +65,7 @@ export async function GET() {
       historyAvailable: true,
       reason: "The review service needs configuration before it can run.",
       missing,
+      openRouterAvailable,
     });
   const keyProblem = convexDeployKeyProblem();
   if (keyProblem)
@@ -64,6 +74,7 @@ export async function GET() {
       historyAvailable: true,
       reason: keyProblem,
       missing: [],
+      openRouterAvailable,
     });
   if (process.env.NODE_ENV !== "production") {
     try {
@@ -78,6 +89,7 @@ export async function GET() {
         reason:
           "Start the Inngest development server to run background reviews.",
         missing: [],
+        openRouterAvailable,
       });
     }
   }
@@ -86,6 +98,7 @@ export async function GET() {
     historyAvailable: true,
     reason: "",
     missing: [],
+    openRouterAvailable,
     githubConnected: Boolean(await getGithubToken(identity.userId)),
   });
 }
@@ -117,7 +130,17 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  if (missingConfiguration().length || convexDeployKeyProblem())
+  const resolved = await resolveModelProvider(
+    identity.userId,
+    request,
+    parsed.data.model,
+  );
+  if ("response" in resolved) return resolved.response;
+  const { provider } = resolved;
+  if (
+    missingConfiguration(provider.kind === "chatgpt").length ||
+    convexDeployKeyProblem()
+  )
     return NextResponse.json(
       { error: "The review service is not configured yet." },
       { status: 503 },
@@ -156,7 +179,11 @@ export async function POST(request: Request) {
   try {
     await inngest.send({
       name: "review/requested",
-      data: { reviewId: started.id, ownerId: identity.userId },
+      data: {
+        reviewId: started.id,
+        ownerId: identity.userId,
+        provider,
+      },
     });
   } catch {
     try {

@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
-import { assertCodingModelId } from "./lib/coding_models";
+import { isReviewModelId } from "./lib/review_models";
 import { getOwnedReview } from "./lib/owned_review";
 
 export const list = query({
@@ -57,7 +57,8 @@ export const start = mutation({
   },
   handler: async (ctx, args) => {
     const identity = await verifyAuth(ctx);
-    assertCodingModelId(args.model);
+    if (!isReviewModelId(args.model))
+      throw new Error("Unsupported review model");
     if (
       !/^[A-Za-z0-9-]{1,100}$/.test(args.repoOwner) ||
       !/^[A-Za-z0-9_.-]{1,100}$/.test(args.repoName) ||

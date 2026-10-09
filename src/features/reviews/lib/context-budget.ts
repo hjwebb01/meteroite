@@ -1,4 +1,5 @@
 import type { ModelMessage } from "ai";
+import { chatGPTReviewSlug } from "../../../../convex/lib/review_models";
 
 const OUTPUT_TOKENS = 8_000;
 const SCHEMA_RESERVE_TOKENS = 4_000;
@@ -53,7 +54,9 @@ export async function loadReviewBudget(modelId: string): Promise<ReviewBudget> {
       if (!Array.isArray(data)) throw new Error("Invalid model catalog");
       catalogCache = { expires: Date.now() + 3_600_000, models: data };
     }
-    const model = catalogCache.models.find((entry) => entry.id === modelId);
+    const slug = chatGPTReviewSlug(modelId);
+    const catalogId = slug === undefined ? modelId : `openai/${slug}`;
+    const model = catalogCache.models.find((entry) => entry.id === catalogId);
     if (
       !model ||
       !Number.isSafeInteger(model.context_length) ||

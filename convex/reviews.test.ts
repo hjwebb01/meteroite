@@ -28,6 +28,22 @@ const result = {
 };
 
 describe("private PR reviews", () => {
+  test.each(["openai/gpt-5.3-codex", "chatgpt:account-model"])(
+    "persists the selected review provider and model: %s",
+    async (model) => {
+      const t = convexTest(schema, modules);
+      const alice = t.withIdentity({ subject: "alice" });
+      const { id } = await alice.mutation(api.reviews.start, {
+        ...request,
+        model,
+      });
+      expect(await alice.query(api.reviews.get, { id })).toMatchObject({
+        model,
+        ownerId: "alice",
+        status: "queued",
+      });
+    },
+  );
   test("requires authentication and isolates history and results by owner", async () => {
     const t = convexTest(schema, modules);
     const alice = t.withIdentity({ subject: "alice" });

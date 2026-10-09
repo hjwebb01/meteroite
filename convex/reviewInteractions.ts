@@ -3,7 +3,7 @@ import { mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
 import type { Doc } from "./_generated/dataModel";
 import { getOwnedReview } from "./lib/owned_review";
-import { assertCodingModelId } from "./lib/coding_models";
+import { resolveCodingModelId } from "./lib/coding_models";
 import {
   assertNoActiveFindingWork,
   requeueFindingWork,
@@ -158,14 +158,13 @@ export const discuss = mutation({
       throw new ConvexError(
         "This review has no pinned source. Run a new review first.",
       );
-    assertCodingModelId(review.model);
     const now = Date.now();
     const workId = await ctx.db.insert("reviewFindingWork", {
       ...args,
       body: args.body.trim(),
       ownerId: identity.subject,
       kind: "discussion",
-      model: review.model,
+      model: resolveCodingModelId(review.model),
       status: "queued",
       attempt: 0,
       headSha: review.headSha,

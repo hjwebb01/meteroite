@@ -26,10 +26,13 @@ import {
 } from "lucide-react";
 import { api } from "../../../../convex/_generated/api";
 import { Doc, Id } from "../../../../convex/_generated/dataModel";
+import { DEFAULT_CODING_MODEL_ID } from "../../../../convex/lib/coding_models";
 import {
-  CODING_MODELS,
-  DEFAULT_CODING_MODEL_ID,
-} from "../../../../convex/lib/coding_models";
+  REVIEW_MODELS,
+  chatGPTReviewModelId,
+} from "../../../../convex/lib/review_models";
+import { useChatGPT } from "@/features/chatgpt/hooks/use-chatgpt";
+import { ChatGPTProvider } from "@/features/chatgpt/components/chatgpt-provider";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -59,6 +62,7 @@ type Availability = {
   historyAvailable: boolean;
   reason: string;
   missing: string[];
+  openRouterAvailable: boolean;
   githubConnected?: boolean;
 };
 type Review = Doc<"reviews">;
@@ -97,6 +101,7 @@ async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export function ReviewsWorkspace() {
+  const chatGPT = useChatGPT();
   const [availability, setAvailability] = useState<Availability | null>(null);
   const [setupError, setSetupError] = useState("");
   const [checking, setChecking] = useState(true);
@@ -105,9 +110,22 @@ export function ReviewsWorkspace() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [url, setUrl] = useState("");
   const [instructions, setInstructions] = useState("");
-  const [model, setModel] = useState<string>(DEFAULT_CODING_MODEL_ID);
+  const [chosenModel, setModel] = useState<string>(DEFAULT_CODING_MODEL_ID);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const openRouterModels = availability?.openRouterAvailable
+    ? REVIEW_MODELS
+    : [];
+  const chatGPTModels = chatGPT.status?.connected ? chatGPT.status.models : [];
+  // The selection can outlive its provider, such as after ChatGPT disconnects.
+  const model = [
+    ...openRouterModels.map((m) => m.id),
+    ...chatGPTModels.map((m) => chatGPTReviewModelId(m.id)),
+  ].includes(chosenModel)
+    ? chosenModel
+    : (openRouterModels[0]?.id ??
+      (chatGPTModels[0] && chatGPTReviewModelId(chatGPTModels[0].id)) ??
+      "");
   const history = useReviewHistory(availability?.historyAvailable === true);
   const review = useQuery(
     api.reviews.get,
@@ -146,7 +164,7 @@ export function ReviewsWorkspace() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [chatGPT.status?.connected]);
 
   async function startReview(
     value: string,
@@ -457,17 +475,38 @@ export function ReviewsWorkspace() {
                       onChange={(e) => setModel(e.target.value)}
                       className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-52"
                     >
-                      {CODING_MODELS.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name}
-                        </option>
-                      ))}
+                      {openRouterModels.length > 0 && (
+                        <optgroup label="OpenRouter · API billing">
+                          {openRouterModels.map((m) => (
+                            <option key={m.id} value={m.id}>
+                              {m.name} · OpenRouter
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {chatGPTModels.length > 0 && (
+                        <optgroup label="ChatGPT subscription · plan usage">
+                          {chatGPTModels.map((m) => (
+                            <option
+                              key={m.id}
+                              value={chatGPTReviewModelId(m.id)}
+                            >
+                              {m.name} · ChatGPT subscription
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
                     </select>
+                  </div>
+                  <div className="sm:w-64">
+                    <ChatGPTProvider connection={chatGPT} purpose="review" />
                   </div>
                   <Button
                     type="submit"
                     size="lg"
-                    disabled={submitting || checking || !availability?.ready}
+                    disabled={
+                      submitting || checking || !availability?.ready || !model
+                    }
                   >
                     {submitting ? (
                       <LoaderCircle className="size-4 animate-spin motion-reduce:animate-none" />
@@ -477,6 +516,12 @@ export function ReviewsWorkspace() {
                     {submitting ? "Starting review…" : "Review pull request"}
                   </Button>
                 </div>
+                {availability?.ready && !model && (
+                  <p className="mt-4 text-sm text-amber-300">
+                    No review model is available. Connect ChatGPT or configure
+                    OpenRouter.
+                  </p>
+                )}
                 {availability?.ready &&
                   availability.githubConnected === false && (
                     <p className="mt-4 text-sm text-amber-300">

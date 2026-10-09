@@ -97,6 +97,7 @@ export const reviewOutputSchema = z.object({
   limitations: z.array(z.string()),
 });
 
+export type ReviewOutput = z.infer<typeof reviewOutputSchema>;
 export type FindingDraft = z.infer<typeof findingSchema>;
 export type EvidenceLines = Map<string, Map<number, string>>;
 export type ChangedFile = {

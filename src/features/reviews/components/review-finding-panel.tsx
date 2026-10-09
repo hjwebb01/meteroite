@@ -8,7 +8,10 @@ import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Doc } from "../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
-import { CODING_MODELS } from "../../../../convex/lib/coding_models";
+import {
+  CODING_MODELS,
+  resolveCodingModelId,
+} from "../../../../convex/lib/coding_models";
 import { isActiveWork } from "../../../../convex/lib/finding_lease";
 import { Textarea } from "@/components/ui/textarea";
 import { fileAtCommitUrl } from "../lib/review";
@@ -53,7 +56,9 @@ export function ReviewFindingPanel({
     available: boolean;
     reason: string;
   } | null>(null);
-  const [model, setModel] = useState(review.model);
+  const [model, setModel] = useState<string>(
+    resolveCodingModelId(review.model),
+  );
   const [seconds, setSeconds] = useState(300);
   const [dollars, setDollars] = useState(2);
   const investigationRequest = useRef<string | null>(null);
@@ -281,7 +286,7 @@ export function ReviewFindingPanel({
             >
               {CODING_MODELS.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name}
+                  {m.name} · OpenRouter
                 </option>
               ))}
             </select>

@@ -3,7 +3,7 @@ import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
-import { DEFAULT_CODING_MODEL_ID } from "./lib/coding_models";
+import { DEFAULT_CODING_MODEL_ID, isCodingModelId } from "./lib/coding_models";
 const modules = import.meta.glob("./**/*.ts");
 const conclusion = {
   verdict: "incorrect" as const,
@@ -458,3 +458,16 @@ test("latest reconsidered verdict per finding is visible only to the owner", asy
     bob.query(api.reviewInteractions.verdicts, { reviewId }),
   ).rejects.toThrow("Review not found");
 });
+test.each(["openai/gpt-5.3-codex", "chatgpt:some-model"])(
+  "discussion on a %s review stores a runnable coding model",
+  async (model) => {
+    const { t, alice, reviewId, request } = await fixture();
+    await t.run((ctx) => ctx.db.patch("reviews", reviewId, { model }));
+    const { workId } = await alice.mutation(
+      api.reviewInteractions.discuss,
+      request,
+    );
+    const work = await t.run((ctx) => ctx.db.get("reviewFindingWork", workId));
+    expect(isCodingModelId(work!.model)).toBe(true);
+  },
+);

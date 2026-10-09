@@ -6,6 +6,12 @@ const mocks = vi.hoisted(() => ({
   mutation: vi.fn(),
   query: vi.fn(),
   send: vi.fn(),
+  subscription: vi.fn(),
+  subscriptionStatus: vi.fn(),
+}));
+vi.mock("@/features/chatgpt/lib/local-account", () => ({
+  getChatGPTReviewSelection: mocks.subscription,
+  getChatGPTStatus: mocks.subscriptionStatus,
 }));
 vi.mock("@/lib/convex-auth", () => ({ getConvexAuth: mocks.auth }));
 vi.mock("@/lib/github", () => ({ getGithubToken: mocks.github }));
@@ -34,6 +40,10 @@ describe("private review API", () => {
     vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://example.convex.cloud");
     vi.stubEnv("CONVEX_DEPLOY_KEY", "dev:example|test-deploy-key");
     vi.stubEnv("INNGEST_EVENT_KEY", "test-event-key");
+    mocks.subscriptionStatus.mockResolvedValue({
+      connected: false,
+      models: [],
+    });
     mocks.auth.mockResolvedValue({ userId: "alice", token: "user-jwt" });
     mocks.github.mockResolvedValue("github-secret");
     mocks.mutation.mockResolvedValue({ id: "review-id", created: true });
@@ -45,6 +55,65 @@ describe("private review API", () => {
     vi.unstubAllEnvs();
   });
 
+  test("queues a selected subscription model without API billing or credentials in the event", async () => {
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+    mocks.subscription.mockResolvedValue({
+      userId: "alice",
+      connectionId: "local-connection",
+      model: "account-model",
+    });
+    const response = await post({
+      url: "https://github.com/alice/app/pull/1",
+      model: "chatgpt:account-model",
+    });
+    expect(response.status).toBe(202);
+    expect(mocks.subscription).toHaveBeenCalledWith(
+      "alice",
+      expect.any(Request),
+      "account-model",
+    );
+    expect(mocks.send).toHaveBeenCalledWith({
+      name: "review/requested",
+      data: {
+        reviewId: "review-id",
+        ownerId: "alice",
+        provider: {
+          kind: "chatgpt",
+          selection: {
+            userId: "alice",
+            connectionId: "local-connection",
+            model: "account-model",
+          },
+        },
+      },
+    });
+  });
+  test("rejects an unavailable subscription model before saving a review", async () => {
+    mocks.subscription.mockRejectedValue(
+      new Error("Choose a model available to your connected ChatGPT account."),
+    );
+    expect(
+      (
+        await post({
+          url: "https://github.com/alice/app/pull/1",
+          model: "chatgpt:unavailable",
+        })
+      ).status,
+    ).toBe(400);
+    expect(mocks.mutation).not.toHaveBeenCalled();
+    expect(mocks.send).not.toHaveBeenCalled();
+  });
+  test("accepts an OpenRouter Codex model without selecting the subscription", async () => {
+    expect(
+      (
+        await post({
+          url: "https://github.com/alice/app/pull/1",
+          model: "openai/gpt-5.3-codex",
+        })
+      ).status,
+    ).toBe(202);
+    expect(mocks.subscription).not.toHaveBeenCalled();
+  });
   test("unauthenticated callers cannot read configuration or start jobs", async () => {
     mocks.auth.mockResolvedValue(null);
     expect((await GET()).status).toBe(401);
@@ -93,7 +162,11 @@ describe("private review API", () => {
     );
     expect(mocks.send).toHaveBeenCalledWith({
       name: "review/requested",
-      data: { reviewId: "review-id", ownerId: "alice" },
+      data: {
+        reviewId: "review-id",
+        ownerId: "alice",
+        provider: { kind: "openrouter" },
+      },
     });
     expect(JSON.stringify(mocks.send.mock.calls)).not.toContain(
       "github-secret",
@@ -135,6 +208,22 @@ describe("private review API", () => {
     expect(
       (await post({ url: "https://github.com/alice/app/pull/1" })).status,
     ).toBe(503);
+  });
+  test("reports whether OpenRouter models can run alongside ChatGPT", async () => {
+    expect(await (await GET()).json()).toMatchObject({
+      ready: true,
+      openRouterAvailable: true,
+    });
+    vi.stubEnv("OPENROUTER_API_KEY", "");
+    mocks.subscriptionStatus.mockResolvedValue({
+      connected: true,
+      models: [{ id: "account-model", name: "Account model" }],
+    });
+    expect(await (await GET()).json()).toMatchObject({
+      ready: true,
+      missing: [],
+      openRouterAvailable: false,
+    });
   });
   test("reports a deploy key that cannot authenticate the worker", async () => {
     vi.stubEnv("CONVEX_DEPLOY_KEY", "preview:team:project|secret");

@@ -30,6 +30,7 @@ test("loads the selected model's live context window and caches the catalog", as
       data: [
         { id: "small", context_length: 32_000 },
         { id: "large", context_length: 1_050_000 },
+        { id: "openai/gpt-6.1-sol", context_length: 1_050_000 },
       ],
     }),
   );
@@ -37,6 +38,9 @@ test("loads the selected model's live context window and caches the catalog", as
   const { loadReviewBudget } = await import("./context-budget");
   expect(await loadReviewBudget("small")).toEqual(createReviewBudget(32_000));
   expect(await loadReviewBudget("large")).toEqual(
+    createReviewBudget(1_050_000),
+  );
+  expect(await loadReviewBudget("chatgpt:gpt-6.1-sol")).toEqual(
     createReviewBudget(1_050_000),
   );
   expect(fetch).toHaveBeenCalledTimes(1);
