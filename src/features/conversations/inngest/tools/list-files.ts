@@ -36,12 +36,8 @@ export const createListFilesTool = ({
         .describe(
           "Only paths under this prefix (workspace-relative, no leading /). Empty = all.",
         ),
-      limit: z
-        .number()
-        .describe("Max rows per page (1–5000). Default 500."),
-      cursor: z
-        .number()
-        .describe("Offset for pagination. Default 0."),
+      limit: z.number().describe("Max rows per page (1–5000). Default 500."),
+      cursor: z.number().describe("Offset for pagination. Default 0."),
     }),
     validation: paramsSchema,
     reporter,
@@ -52,13 +48,16 @@ export const createListFilesTool = ({
         : undefined;
     },
     run: async ({ format, pathPrefix, limit, cursor }) => {
-      const queryResult = await getConvexAdminClient().query(internal.agentFiles.agentListProjectFiles, {
-        projectId,
-        format,
-        pathPrefix: pathPrefix || undefined,
-        limit,
-        cursor,
-      });
+      const queryResult = await getConvexAdminClient().query(
+        internal.agentFiles.agentListProjectFiles,
+        {
+          projectId,
+          format,
+          pathPrefix: pathPrefix || undefined,
+          limit,
+          cursor,
+        },
+      );
       return JSON.stringify(queryResult);
     },
   });

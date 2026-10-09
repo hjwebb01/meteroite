@@ -19,13 +19,10 @@ const paramsSchema = z
     lineStart: z.number().int().min(1).optional(),
     lineEnd: z.number().int().min(1).optional(),
   })
-  .refine(
-    (data) =>
-      data.paths.length > 0 || data.fileIds.length > 0,
-    {
-      message: "Provide at least one workspace-relative path or file id from listFiles",
-    },
-  );
+  .refine((data) => data.paths.length > 0 || data.fileIds.length > 0, {
+    message:
+      "Provide at least one workspace-relative path or file id from listFiles",
+  });
 
 /** Cap total `content` across all successful file reads in one tool call (limits prompt growth). */
 const MAX_AGGREGATE_CONTENT_CHARS = 200_000;
@@ -52,35 +49,41 @@ function applyAggregateContentCap(rows: AgentReadRow[]): AgentReadRow[] {
   });
 }
 
-type AgentReadRow = {
-  status: "ok";
-  path: string;
-  id: Id<"files">;
-  name: string;
-  content: string;
-  truncated?: boolean;
-  totalChars?: number;
-} | {
-  status: "missing";
-  path: string;
-} | {
-  status: "folder";
-  path: string;
-  id: Id<"files">;
-  name: string;
-} | {
-  status: "binary";
-  path: string;
-  id: Id<"files">;
-  name: string;
-} | {
-  status: "invalid_id";
-  requestedId: string;
-} | {
-  status: "invalid_path";
-  input: string;
-  message: string;
-};
+type AgentReadRow =
+  | {
+      status: "ok";
+      path: string;
+      id: Id<"files">;
+      name: string;
+      content: string;
+      truncated?: boolean;
+      totalChars?: number;
+    }
+  | {
+      status: "missing";
+      path: string;
+    }
+  | {
+      status: "folder";
+      path: string;
+      id: Id<"files">;
+      name: string;
+    }
+  | {
+      status: "binary";
+      path: string;
+      id: Id<"files">;
+      name: string;
+    }
+  | {
+      status: "invalid_id";
+      requestedId: string;
+    }
+  | {
+      status: "invalid_path";
+      input: string;
+      message: string;
+    };
 
 function toCompactRow(row: AgentReadRow): unknown[] {
   switch (row.status) {
@@ -118,7 +121,9 @@ export const createReadFilesTool = ({
     parameters: z.object({
       paths: z
         .array(z.string())
-        .describe("Workspace-relative paths; no listFiles call required if known."),
+        .describe(
+          "Workspace-relative paths; no listFiles call required if known.",
+        ),
       fileIds: z
         .array(z.string())
         .optional()
@@ -128,13 +133,11 @@ export const createReadFilesTool = ({
         .describe("compact: v=2 row table. full: one JSON object per line."),
       maxChars: z
         .number()
-        .describe("Max characters returned per file after line slicing (default 80000)."),
-      lineStart: z
-        .number()
-        .describe("1-based start line (optional)."),
-      lineEnd: z
-        .number()
-        .describe("1-based end line inclusive (optional)."),
+        .describe(
+          "Max characters returned per file after line slicing (default 80000).",
+        ),
+      lineStart: z.number().describe("1-based start line (optional)."),
+      lineEnd: z.number().describe("1-based end line inclusive (optional)."),
     }),
     validation: paramsSchema,
     reporter,
@@ -153,14 +156,17 @@ export const createReadFilesTool = ({
       return hintParts.length > 0 ? hintParts.join(" · ") : undefined;
     },
     run: async ({ paths, fileIds, format, maxChars, lineStart, lineEnd }) => {
-      const rows = (await getConvexAdminClient().query(internal.agentFiles.agentReadFiles, {
-        projectId,
-        paths,
-        fileIds,
-        maxChars,
-        lineStart,
-        lineEnd,
-      })) as AgentReadRow[];
+      const rows = (await getConvexAdminClient().query(
+        internal.agentFiles.agentReadFiles,
+        {
+          projectId,
+          paths,
+          fileIds,
+          maxChars,
+          lineStart,
+          lineEnd,
+        },
+      )) as AgentReadRow[];
 
       const cappedRows = applyAggregateContentCap(rows);
 

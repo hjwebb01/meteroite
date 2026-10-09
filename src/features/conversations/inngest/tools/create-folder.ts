@@ -35,10 +35,13 @@ export const createCreateFolderTool = ({
     label: ({ path }) => path,
     errorPrefix: "Error creating folder",
     run: async ({ path }) => {
-      const result = await getConvexAdminClient().mutation(internal.agentFiles.agentEnsureFolderPath, {
-        projectId,
-        path,
-      });
+      const result = await getConvexAdminClient().mutation(
+        internal.agentFiles.agentEnsureFolderPath,
+        {
+          projectId,
+          path,
+        },
+      );
       return JSON.stringify(result);
     },
   });

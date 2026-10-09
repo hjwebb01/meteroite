@@ -445,10 +445,7 @@ export const ConversationSideBar = ({
           <ConversationScrollButton />
         </Conversation>
         <div className="p-3">
-          <PromptInput
-            onSubmit={handleSubmit}
-            className="mt-2"
-          >
+          <PromptInput onSubmit={handleSubmit} className="mt-2">
             <PromptInputBody>
               <PromptInputTextarea
                 placeholder="Ask me anything..."

@@ -130,7 +130,10 @@ export function createMessageProgressReporter(options: {
     }
   }
 
-  function pushPhase(label: string, status: ProgressStepStatus = "active"): void {
+  function pushPhase(
+    label: string,
+    status: ProgressStepStatus = "active",
+  ): void {
     phaseSeq += 1;
     steps.push({
       id: `phase-${phaseSeq}`,
@@ -233,7 +236,9 @@ export function createMessageProgressReporter(options: {
         }
       }
       completeActivePhases();
-      pushPhase(success ? "Reviewing tool results" : "Recovering from tool error");
+      pushPhase(
+        success ? "Reviewing tool results" : "Recovering from tool error",
+      );
       await flush();
     },
 
