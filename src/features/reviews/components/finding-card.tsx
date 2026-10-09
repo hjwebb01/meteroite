@@ -1,9 +1,13 @@
-import { FileDiff } from "lucide-react";
+import { useState } from "react";
+import { Check, Copy, FileDiff } from "lucide-react";
 import type { Doc } from "../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { fileAtCommitUrl } from "../lib/review";
-import { CATEGORY_LABEL } from "../lib/finding-presentation";
+import {
+  CATEGORY_LABEL,
+  findingAgentPrompt,
+} from "../lib/finding-presentation";
 import { SeverityBadge } from "./severity-badge";
 import {
   FindingVerdictBadge,
@@ -30,6 +34,16 @@ export function FindingCard({
   onDiscuss: () => void;
   context?: boolean;
 }) {
+  const [copied, setCopied] = useState(false);
+  const copyPrompt = () => {
+    void navigator.clipboard
+      .writeText(findingAgentPrompt(f, review))
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {});
+  };
   const anchor = fileAtCommitUrl(
     f.side === "LEFT"
       ? review.repoOwner
@@ -135,6 +149,19 @@ export function FindingCard({
           <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
             {f.suggestion}
           </p>
+          <Button
+            size="xs"
+            variant="outline"
+            className="mt-3"
+            onClick={copyPrompt}
+          >
+            {copied ? (
+              <Check className="size-3.5" />
+            ) : (
+              <Copy className="size-3.5" />
+            )}
+            {copied ? "Copied" : "Copy prompt for AI agent"}
+          </Button>
         </div>
       </div>
     </article>

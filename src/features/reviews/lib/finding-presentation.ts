@@ -41,3 +41,26 @@ export function severityCounts(findings: Finding[]) {
   for (const finding of findings) counts[finding.severity]++;
   return counts;
 }
+
+/** A self-contained brief a coding agent can act on without this review open. */
+export function findingAgentPrompt(finding: Finding, review: Review) {
+  const location = `${finding.path}:${finding.line}${finding.side === "LEFT" ? " (removed line)" : ""}`;
+  const source = `${review.sourceOwner ?? review.repoOwner}/${review.sourceRepo ?? review.repoName}`;
+  return [
+    `Verify this code review finding against the current code and fix it only if it is a real issue.`,
+    ``,
+    `Repository: ${source} at commit ${review.headSha ?? "unknown"}`,
+    `Location: ${location}`,
+    `Severity: ${finding.severity}${finding.category ? ` · ${CATEGORY_LABEL[finding.category]}` : ""}`,
+    ``,
+    `Problem: ${finding.title}`,
+    finding.explanation,
+    ``,
+    `Evidence:`,
+    ...finding.evidence.map(
+      (entry) => `- ${entry.path}:${entry.line}: ${entry.quote}`,
+    ),
+    ``,
+    `Suggested fix: ${finding.suggestion}`,
+  ].join("\n");
+}

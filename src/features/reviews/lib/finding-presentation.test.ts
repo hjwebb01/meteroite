@@ -1,5 +1,7 @@
 import { describe, expect, test } from "vitest";
+import type { Doc } from "../../../../convex/_generated/dataModel";
 import {
+  findingAgentPrompt,
   isNitpick,
   sortFindings,
   type Finding,
@@ -38,6 +40,18 @@ describe("finding presentation", () => {
     expect(
       isNitpick({ ...base, severity: "high", category: "maintainability" }),
     ).toBe(false);
+  });
+
+  test("agent prompt carries location, evidence and fix", () => {
+    const prompt = findingAgentPrompt({ ...base, category: "security" }, {
+      repoOwner: "a",
+      repoName: "b",
+      headSha: "abc123",
+    } as Doc<"reviews">);
+    expect(prompt).toContain("a/b at commit abc123");
+    expect(prompt).toContain("app.ts:11");
+    expect(prompt).toContain("- app.ts:11: authorize();");
+    expect(prompt).toContain("Suggested fix: Check the owner.");
   });
 });
 
