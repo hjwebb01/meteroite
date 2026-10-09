@@ -1,7 +1,7 @@
-import { redirect } from "next/navigation";
+import { ReviewsWorkspace } from "@/features/reviews/components/reviews-workspace";
 
-const Home = () => {
-  redirect("/reviews");
-};
+export const metadata = { title: "Private code review · Meteroite" };
 
-export default Home;
+export default function Home() {
+  return <ReviewsWorkspace />;
+}
