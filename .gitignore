@@ -42,3 +42,9 @@ next-env.d.ts
 
 # Sentry Config File
 .env.sentry-build-plugin
+
+# local video projects and supporting marketing assets
+/motion/
+/brand/
+/.agents/product-marketing.md
+/.agents/assets/fixture-finding-card.jpg
