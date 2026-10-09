@@ -6,6 +6,7 @@ import {
   type ChangeHunk,
 } from "../../../../convex/lib/review_navigation";
 import { assessmentResponseSchema } from "../../../../convex/lib/review_assessment";
+import { FINDING_CATEGORIES } from "../../../../convex/lib/review_fields";
 
 export function parsePullRequestUrl(value: string) {
   let url: URL;
@@ -43,6 +44,20 @@ export function parsePullRequestUrl(value: string) {
 
 const MAX_FINDINGS = 20;
 
+// A missing or unrecognised label only drops the label, never the finding.
+const categorySchema = z
+  .enum(FINDING_CATEGORIES)
+  .nullish()
+  .catch(undefined)
+  .transform((value) => value ?? undefined)
+  .optional();
+const confidenceSchema = z
+  .union([z.literal(1), z.literal(2), z.literal(3), z.literal(4), z.literal(5)])
+  .nullish()
+  .catch(undefined)
+  .transform((value) => value ?? undefined)
+  .optional();
+
 export const findingSchema = z.object({
   severity: z.enum(["high", "medium", "low"]),
   title: z.string().min(1).max(180),
@@ -62,6 +77,8 @@ export const findingSchema = z.object({
     .min(1)
     .max(4),
   previousFindingId: z.string().nullable(),
+  category: categorySchema,
+  confidence: confidenceSchema,
 });
 
 // The response shapes carry no length or count bounds, so one hotspot or
@@ -86,6 +103,8 @@ const findingResponseSchema = z.object({
     z.object({ path: z.string(), line: z.number(), quote: z.string() }),
   ),
   previousFindingId: z.string().nullable(),
+  category: z.string().nullable(),
+  confidence: z.number().nullable(),
 });
 
 export const reviewOutputSchema = z.object({

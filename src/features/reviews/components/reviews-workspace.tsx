@@ -40,6 +40,11 @@ import { cn } from "@/lib/utils";
 import { parsePullRequestUrl } from "../lib/review";
 import { ReviewFindingPanel } from "./review-finding-panel";
 import { FindingCard } from "./finding-card";
+import {
+  isNitpick,
+  severityCounts,
+  sortFindings,
+} from "../lib/finding-presentation";
 import type { ReviewNavigationTarget } from "../lib/review-diff";
 import { ReviewReassessment } from "./review-reassessment";
 import { ReviewNavigation } from "./review-navigation";
@@ -668,10 +673,37 @@ function ReviewDetail({
   const result = review.result;
   const findings = useMemo(
     () =>
-      result?.findings.filter(
-        (f) => filter === "all" || f.severity === filter,
-      ) ?? [],
+      sortFindings(
+        result?.findings.filter(
+          (f) => filter === "all" || f.severity === filter,
+        ) ?? [],
+      ),
     [result, filter],
+  );
+  const nitpicks = findings.filter(isNitpick);
+  const mainFindings = findings.filter((f) => !isNitpick(f));
+  const counts = severityCounts(result?.findings ?? []);
+  const renderFinding = (f: (typeof findings)[number]) => (
+    <FindingCard
+      key={f.id}
+      finding={f}
+      verdict={verdicts?.[f.id]}
+      review={review}
+      active={f.id === activeFindingId}
+      onDiscuss={() => selectFinding(f.id)}
+      onShowInDiff={
+        diffPaths.has(f.path)
+          ? () => {
+              setActiveFindingId(f.id);
+              setFocus({ kind: "finding", finding: f });
+              // Below xl the diff stacks under the findings.
+              document
+                .getElementById("review-diff")
+                ?.scrollIntoView({ block: "nearest" });
+            }
+          : undefined
+      }
+    />
   );
   const linked = new Set(
     result?.findings.map((f) => f.previousFindingId).filter(Boolean),
@@ -937,6 +969,12 @@ function ReviewDetail({
                 <p className="mt-3 whitespace-pre-wrap text-sm leading-7">
                   {result.summary}
                 </p>
+                {result.findings.length > 0 && (
+                  <p className="mt-4 text-xs font-medium">
+                    {counts.high} high · {counts.medium} medium · {counts.low}{" "}
+                    low
+                  </p>
+                )}
                 <p className="mt-4 text-xs text-muted-foreground">
                   Static analysis · {result.coverage.diffFiles.length}/
                   {result.coverage.changedFiles} file diffs supplied ·{" "}
@@ -1020,28 +1058,17 @@ function ReviewDetail({
                 </p>
               ) : (
                 <div className="space-y-4">
-                  {findings.map((f) => (
-                    <FindingCard
-                      key={f.id}
-                      finding={f}
-                      verdict={verdicts?.[f.id]}
-                      review={review}
-                      active={f.id === activeFindingId}
-                      onDiscuss={() => selectFinding(f.id)}
-                      onShowInDiff={
-                        diffPaths.has(f.path)
-                          ? () => {
-                              setActiveFindingId(f.id);
-                              setFocus({ kind: "finding", finding: f });
-                              // Below xl the diff stacks under the findings.
-                              document
-                                .getElementById("review-diff")
-                                ?.scrollIntoView({ block: "nearest" });
-                            }
-                          : undefined
-                      }
-                    />
-                  ))}
+                  {mainFindings.map(renderFinding)}
+                  {nitpicks.length > 0 && (
+                    <details className="rounded-lg border p-4">
+                      <summary className="cursor-pointer text-sm font-medium">
+                        Nitpicks and low-confidence notes ({nitpicks.length})
+                      </summary>
+                      <div className="mt-4 space-y-4">
+                        {nitpicks.map(renderFinding)}
+                      </div>
+                    </details>
+                  )}
                 </div>
               )}
               {previous?.result && !result.reassessment && (

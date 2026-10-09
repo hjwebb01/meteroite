@@ -1,5 +1,14 @@
 import { v } from "convex/values";
 
+export const FINDING_CATEGORIES = [
+  "bug",
+  "security",
+  "performance",
+  "data_integrity",
+  "test_gap",
+  "maintainability",
+] as const;
+
 export const reviewFinding = v.object({
   id: v.string(),
   severity: v.union(v.literal("high"), v.literal("medium"), v.literal("low")),
@@ -20,6 +29,19 @@ export const reviewFinding = v.object({
     }),
   ),
   previousFindingId: v.union(v.string(), v.null()),
+  // Absent on reviews saved before findings were categorised and scored.
+  category: v.optional(
+    v.union(...FINDING_CATEGORIES.map((category) => v.literal(category))),
+  ),
+  confidence: v.optional(
+    v.union(
+      v.literal(1),
+      v.literal(2),
+      v.literal(3),
+      v.literal(4),
+      v.literal(5),
+    ),
+  ),
 });
 
 const observationFields = { headSha: v.string(), observedAt: v.number() };

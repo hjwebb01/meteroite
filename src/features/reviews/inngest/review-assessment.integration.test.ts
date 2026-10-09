@@ -308,6 +308,8 @@ describe("authenticated persisted review assessment", () => {
             suggestion: "Restore the guard.",
             evidence: [{ path: "README.md", line: 1, quote: fixture.source }],
             previousFindingId: null,
+            category: null,
+            confidence: null,
           },
         ],
         limitations: [],
@@ -447,6 +449,8 @@ describe("authenticated persisted review assessment", () => {
       suggestion: "Restore the guard.",
       evidence: [{ path: "README.md", line: 1, quote: fixture.source }],
       previousFindingId: null,
+      category: null,
+      confidence: null,
     };
     output = {
       summary: "Original snapshot",

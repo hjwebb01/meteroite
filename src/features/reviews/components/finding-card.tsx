@@ -3,6 +3,7 @@ import type { Doc } from "../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { fileAtCommitUrl } from "../lib/review";
+import { CATEGORY_LABEL } from "../lib/finding-presentation";
 import { SeverityBadge } from "./severity-badge";
 import {
   FindingVerdictBadge,
@@ -53,6 +54,19 @@ export function FindingCard({
           Discuss finding
         </Button>
         <SeverityBadge severity={f.severity} />
+        {f.category && (
+          <span className="shrink-0 rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
+            {CATEGORY_LABEL[f.category]}
+          </span>
+        )}
+        {f.confidence && (
+          <span
+            className="shrink-0 text-xs text-muted-foreground"
+            title="How sure the reviewer is that this is a real defect"
+          >
+            Confidence {f.confidence}/5
+          </span>
+        )}
         <FindingVerdictBadge verdict={verdict} />
         <a
           className="min-w-0 break-all font-mono text-xs text-muted-foreground hover:text-foreground"

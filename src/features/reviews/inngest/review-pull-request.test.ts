@@ -191,6 +191,8 @@ test.each(["small-model", "large-model"])(
                               },
                             ],
                             previousFindingId: null,
+                            category: null,
+                            confidence: null,
                           },
                         ],
                         limitations: [],
@@ -332,6 +334,8 @@ test("a diff beyond one model context is reviewed in parts and merged from their
     suggestion: "Fix",
     evidence: [{ path, line: 1, quote }],
     previousFindingId: null,
+    category: null,
+    confidence: null,
   });
   const review = (findings: unknown[]) => ({
     assessment: null,
