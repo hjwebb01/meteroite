@@ -11,21 +11,11 @@ import type { useChatGPT } from "../hooks/use-chatgpt";
 
 export function ChatGPTProvider({
   connection,
-  purpose = "coding",
 }: {
   connection: ReturnType<typeof useChatGPT>;
-  purpose?: "coding" | "review";
 }) {
-  const {
-    status,
-    busy,
-    pending,
-    connect,
-    update,
-    disconnect,
-    refresh,
-    stopWaiting,
-  } = connection;
+  const { status, busy, pending, connect, disconnect, refresh, stopWaiting } =
+    connection;
   if (!status?.available) return null;
   return (
     <Popover>
@@ -34,83 +24,25 @@ export function ChatGPTProvider({
           variant="outline"
           size="sm"
           className="w-full justify-between"
-          aria-label={
-            purpose === "review"
-              ? "ChatGPT connection settings"
-              : "Coding provider settings"
-          }
+          aria-label="ChatGPT connection settings"
         >
-          <span>
-            {purpose === "review"
-              ? "ChatGPT connection"
-              : `Provider: ${status.enabled ? "ChatGPT subscription" : "OpenRouter"}`}
-          </span>
+          <span>ChatGPT connection</span>
           <ChevronDownIcon className="size-3.5" />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 space-y-4">
         <div>
-          <h2 className="text-sm font-medium">
-            {purpose === "review" ? "ChatGPT connection" : "Coding provider"}
-          </h2>
+          <h2 className="text-sm font-medium">ChatGPT connection</h2>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-            {purpose === "review"
-              ? "Connect your ChatGPT account to add its models to the review model picker. Each review uses the provider selected there."
-              : "Choose how coding conversations run on this machine. PR reviews choose their own provider. Editor suggestions use OpenRouter."}
+            Connect your ChatGPT account to add its models to the review model
+            picker. Each review uses the provider selected there.
           </p>
         </div>
-        {purpose === "coding" && (
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="coding-provider"
-                checked={!status.enabled}
-                disabled={busy || pending}
-                onChange={() => {
-                  if (status.connected) void update({ enabled: false });
-                }}
-              />
-              OpenRouter
-            </label>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="radio"
-                name="coding-provider"
-                checked={status.enabled}
-                disabled={
-                  !status.connected || busy || pending || !status.models.length
-                }
-                onChange={() => void update({ enabled: true })}
-              />
-              ChatGPT subscription
-            </label>
-          </div>
-        )}
         {status.connected && (
           <p className="break-all text-xs text-muted-foreground">
             Connected as {status.email ?? "your ChatGPT account"}
           </p>
         )}
-        {purpose === "coding" &&
-          status.connected &&
-          status.models.length > 0 && (
-            <label className="block space-y-1.5 text-xs font-medium">
-              <span>ChatGPT model</span>
-              <select
-                className="h-9 w-full rounded-md border bg-background px-2 text-sm"
-                value={status.model ?? ""}
-                disabled={busy || pending}
-                onChange={(event) => void update({ model: event.target.value })}
-              >
-                {status.models.map((model) => (
-                  <option key={model.id} value={model.id}>
-                    {model.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
         {status.error && (
           <p role="alert" className="text-xs text-destructive">
             {status.error}

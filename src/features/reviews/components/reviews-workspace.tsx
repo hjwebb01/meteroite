@@ -496,7 +496,7 @@ export function ReviewsWorkspace() {
                     </select>
                   </div>
                   <div className="sm:w-64">
-                    <ChatGPTProvider connection={chatGPT} purpose="review" />
+                    <ChatGPTProvider connection={chatGPT} />
                   </div>
                   <Button
                     type="submit"
