@@ -1,4 +1,4 @@
-import ky from "ky";
+import ky, { HTTPError } from "ky";
 import { toast } from "sonner";
 import { memo, useState } from "react";
 
@@ -396,10 +396,14 @@ export const ConversationSideBar = ({
           model,
         },
       });
-    } catch {
-      toast.error("Failed to send message");
+      setInput("");
+    } catch (error) {
+      const data =
+        error instanceof HTTPError
+          ? (error.data as { error?: string } | undefined)
+          : null;
+      toast.error(data?.error ?? "Failed to send message");
     }
-    setInput("");
   };
   return (
     <>
