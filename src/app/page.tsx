@@ -1,7 +1,7 @@
-import { ProjectsView } from "@/features/projects/components/projects-view";
+import { redirect } from "next/navigation";
 
 const Home = () => {
-  return <ProjectsView />;
+  redirect("/reviews");
 };
 
 export default Home;

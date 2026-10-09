@@ -65,7 +65,7 @@ const reachable = async (url) => {
 
 const flows = [
   {
-    name: "Sign in and browse projects",
+    name: "Sign in",
     env: [
       "NEXT_PUBLIC_CONVEX_URL",
       "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
@@ -73,15 +73,7 @@ const flows = [
     ],
   },
   {
-    name: "Create project from prompt, GitHub import",
-    env: ["CONVEX_DEPLOY_KEY"],
-  },
-  {
-    name: "Autocomplete, next edit, quick edit",
-    env: ["OPENROUTER_API_KEY"],
-  },
-  {
-    name: "Coding agent runs, PR reviews",
+    name: "PR reviews",
     env: ["CONVEX_DEPLOY_KEY", "OPENROUTER_API_KEY"],
     services: [["Inngest dev server", "http://localhost:8288"]],
   },
