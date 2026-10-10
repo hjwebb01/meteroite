@@ -40,6 +40,10 @@ describe("private review API", () => {
     vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://example.convex.cloud");
     vi.stubEnv("CONVEX_DEPLOY_KEY", "dev:example|test-deploy-key");
     vi.stubEnv("INNGEST_EVENT_KEY", "test-event-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("ok")),
+    );
     mocks.subscriptionStatus.mockResolvedValue({
       connected: false,
       models: [],
@@ -53,6 +57,7 @@ describe("private review API", () => {
   afterEach(() => {
     vi.resetAllMocks();
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
   });
 
   test("queues a selected subscription model without API billing or credentials in the event", async () => {

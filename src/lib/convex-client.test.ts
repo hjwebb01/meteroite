@@ -39,8 +39,8 @@ describe("Convex admin client", () => {
     vi.stubGlobal("fetch", fetch);
 
     await getConvexAdminClient().query(
-      internal.systemMessages.getConversationById,
-      { conversationId: "conversation" as Id<"conversations"> },
+      internal.reviewJobs.status,
+      { id: "review" as Id<"reviews">, ownerId: "owner" },
     );
     const adminRequest = fetch.mock.calls[0] as unknown as [
       string,
@@ -50,14 +50,14 @@ describe("Convex admin client", () => {
       "Convex dev:example|test-deploy-key",
     );
     expect(JSON.parse(String(adminRequest[1].body))).toMatchObject({
-      path: "systemMessages:getConversationById",
-      args: [{ conversationId: "conversation" }],
+      path: "reviewJobs:status",
+      args: [{ id: "review", ownerId: "owner" }],
     });
     expect(String(adminRequest[1].body)).not.toContain("test-deploy-key");
 
     await getConvexAdminClient().mutation(
-      internal.systemMessages.updateMessageContent,
-      { messageId: "message" as Id<"messages">, content: "done" },
+      internal.reviewJobs.progress,
+      { id: "review" as Id<"reviews">, progress: "done" },
     );
     const mutationRequest = fetch.mock.calls[1] as unknown as [
       string,
@@ -70,7 +70,7 @@ describe("Convex admin client", () => {
     const publicClient = new ConvexHttpClient(
       process.env.NEXT_PUBLIC_CONVEX_URL!,
     );
-    await publicClient.query(api.projects.get, {});
+    await publicClient.query(api.reviews.list, {});
     const publicRequest = fetch.mock.calls[2] as unknown as [
       string,
       RequestInit,

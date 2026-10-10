@@ -55,7 +55,7 @@ export function useChatGPT() {
           setPending(false);
           window.dispatchEvent(new Event(CHANGED));
           toast.success(
-            "ChatGPT connected. Coding conversations now use your plan.",
+            "ChatGPT connected. Its models are now available for reviews.",
           );
           return;
         }

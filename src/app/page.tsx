@@ -1,7 +1,7 @@
-import { ProjectsView } from "@/features/projects/components/projects-view";
+import { ReviewsWorkspace } from "@/features/reviews/components/reviews-workspace";
 
-const Home = () => {
-  return <ProjectsView />;
-};
+export const metadata = { title: "Private code review · Meteroite" };
 
-export default Home;
+export default function Home() {
+  return <ReviewsWorkspace />;
+}

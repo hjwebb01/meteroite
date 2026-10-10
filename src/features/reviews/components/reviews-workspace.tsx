@@ -12,7 +12,6 @@ import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import {
-  ArrowLeft,
   ArrowUpRight,
   Check,
   ChevronRight,
@@ -214,13 +213,6 @@ export function ReviewsWorkspace() {
     <div className="min-h-screen bg-background text-foreground">
       <header className="flex h-16 items-center justify-between gap-4 border-b px-5 md:px-8">
         <div className="flex items-center gap-5">
-          <Link
-            href="/"
-            aria-label="Back to projects"
-            className="rounded-md p-2 text-muted-foreground hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
-          >
-            <ArrowLeft className="size-4" />
-          </Link>
           <Link href="/" className="font-semibold tracking-tight">
             Meteroite
           </Link>
@@ -504,7 +496,7 @@ export function ReviewsWorkspace() {
                     </select>
                   </div>
                   <div className="sm:w-64">
-                    <ChatGPTProvider connection={chatGPT} purpose="review" />
+                    <ChatGPTProvider connection={chatGPT} />
                   </div>
                   <Button
                     type="submit"

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Inter, IBM_Plex_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 import "./globals.css";
-import "allotment/dist/style.css";
 import { Toaster } from "@/components/ui/sonner";
 
 const inter = Inter({

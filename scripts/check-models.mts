@@ -2,8 +2,6 @@
 // with the capabilities its callers rely on. Run after changing any model list.
 import { REVIEW_MODELS } from "../convex/lib/review_models.ts";
 import { CODING_MODELS } from "../convex/lib/coding_models.ts";
-import { TITLE_GENERATOR_MODEL } from "../src/features/conversations/inngest/constants.ts";
-import { AUTOCOMPLETE_MODELS } from "../src/features/editor/extensions/suggestion/autocomplete-models.ts";
 
 type CatalogModel = { id: string; supported_parameters?: string[] };
 
@@ -18,12 +16,6 @@ const requirements: { id: string; usage: string; needs: string[] }[] = [
     usage: "PR review",
     needs: ["tools", "structured_outputs"],
   })),
-  ...AUTOCOMPLETE_MODELS.map(({ id }) => ({
-    id,
-    usage: "autocomplete",
-    needs: ["structured_outputs"],
-  })),
-  { id: TITLE_GENERATOR_MODEL, usage: "title generator", needs: ["reasoning"] },
 ];
 
 const response = await fetch("https://openrouter.ai/api/v1/models");

@@ -2,10 +2,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { generateText, Output } from "ai";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
-import ky, { HTTPError } from "ky";
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { getHttpErrorMessage } from "./http-error";
 
 vi.mock("@/lib/convex-client", () => ({ getConvexAdminClient: () => ({}) }));
 
@@ -15,36 +13,6 @@ afterEach(() => {
 });
 
 describe("dependency migration integration", () => {
-  it("falls back to the generic GitHub error for a non-JSON response", async () => {
-    try {
-      await ky.post("https://example.test/api/github/export", {
-        retry: 0,
-        fetch: async () => new Response("Bad gateway", { status: 502 }),
-      });
-      expect.unreachable("Expected an HTTP error");
-    } catch (error) {
-      expect(error).toBeInstanceOf(HTTPError);
-      expect(getHttpErrorMessage(error as HTTPError)).toBeUndefined();
-    }
-  });
-
-  it.each(["Pro plan required", "GitHub not connected"])(
-    "preserves the GitHub error action for %s with Ky 2",
-    async (message) => {
-      try {
-        await ky.post("https://example.test/api/github/import", {
-          retry: 0,
-          fetch: async () => Response.json({ error: message }, { status: 403 }),
-        });
-        expect.unreachable("Expected an HTTP error");
-      } catch (error) {
-        expect(error).toBeInstanceOf(HTTPError);
-        expect(getHttpErrorMessage(error as HTTPError)).toBe(message);
-        expect((error as HTTPError).response.bodyUsed).toBe(true);
-      }
-    },
-  );
-
   it("keeps structured code suggestions and token usage working through OpenRouter", async () => {
     const openRouter = createOpenRouter({
       apiKey: "test-key",
@@ -82,7 +50,7 @@ describe("dependency migration integration", () => {
     expect(result.usage.outputTokenDetails.reasoningTokens).toBe(2);
   });
 
-  it("registers the project jobs, cancellation filters, and failure handlers with Inngest 4", async () => {
+  it("registers the review jobs, cancellation filters, and failure handlers with Inngest 4", async () => {
     vi.stubEnv("OPENROUTER_API_KEY", "test-key");
     let registration:
       | {
@@ -112,28 +80,8 @@ describe("dependency migration integration", () => {
     expect(response.status).toBe(200);
     expect(registration).toBeDefined();
     const functions = registration!.functions;
-    expect(
-      functions.find((fn) => fn.id === "meteroite-import-github-repo")
-        ?.triggers,
-    ).toEqual([{ event: "github/import.repo" }]);
-    expect(
-      functions.find((fn) => fn.id === "meteroite-export-to-github")?.cancel,
-    ).toEqual([
-      expect.objectContaining({
-        event: "github/export.cancel",
-        if: "event.data.jobId == async.data.jobId",
-      }),
-    ]);
-    expect(
-      functions.find((fn) => fn.id === "meteroite-process-message")?.cancel,
-    ).toEqual([
-      expect.objectContaining({
-        event: "message/cancel",
-        if: "event.data.messageId == async.data.messageId",
-      }),
-    ]);
     expect(functions.filter((fn) => fn.id.endsWith("-failure"))).toHaveLength(
-      6,
+      3,
     );
     expect(
       functions.find((fn) => fn.id === "meteroite-review-pull-request")
