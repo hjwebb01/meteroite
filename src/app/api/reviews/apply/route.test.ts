@@ -51,11 +51,36 @@ type RemoteMode =
   | "stale"
   | "target-changed"
   | "race"
+  | "protected"
+  | "invalid-input"
+  | "internal-error"
+  | "partial-error"
+  | "reconcile-fails"
+  | "pull-403"
+  | "repo-404"
+  | "pull-401"
+  | "rate-limit"
   | "lost-reply"
   | "write-failed"
   | "wrong-contents"
   | "extra-change"
   | "disconnected";
+function graphqlError(
+  type: string,
+  data: unknown = { createCommitOnBranch: null },
+) {
+  return Object.assign(new Error("GitHub mutation rejected"), {
+    name: "GraphqlResponseError",
+    data,
+    errors: [
+      {
+        type,
+        message: "GitHub mutation rejected",
+        path: ["createCommitOnBranch"],
+      },
+    ],
+  });
+}
 async function fixture(mode: RemoteMode = "normal") {
   const t = convexTest(schema, modules);
   const owner = t.withIdentity({ subject: "alice" });
@@ -174,8 +199,38 @@ async function fixture(mode: RemoteMode = "normal") {
       ]);
       await beforeWrite?.();
       if (mode === "race") head = "concurrent";
-      if (head !== input.expectedHeadOid)
-        throw new Error("Expected head does not match");
+      if (head !== input.expectedHeadOid) throw graphqlError("STALE_DATA");
+      if (mode === "protected" || mode === "reconcile-fails")
+        throw graphqlError("FORBIDDEN");
+      if (mode === "invalid-input")
+        throw Object.assign(
+          new Error(
+            "Variable $input of type CreateCommitOnBranchInput! was provided invalid value",
+          ),
+          {
+            name: "GraphqlResponseError",
+            data: undefined,
+            errors: [
+              {
+                extensions: {
+                  problems: [
+                    {
+                      path: ["branch"],
+                      explanation: "branchName must be passed",
+                    },
+                  ],
+                },
+                locations: [{ line: 1, column: 10 }],
+                message: "Invalid input",
+              },
+            ],
+          },
+        );
+      if (mode === "internal-error") throw graphqlError("INTERNAL");
+      if (mode === "partial-error")
+        throw graphqlError("FORBIDDEN", {
+          createCommitOnBranch: { commit: { oid: "maybe" } },
+        });
       if (mode === "write-failed") throw new Error("GitHub unavailable");
       remoteMessage = input.message.body;
       remoteCommitted = true;
@@ -202,6 +257,15 @@ async function fixture(mode: RemoteMode = "normal") {
             repo: "app",
             pull_number: 7,
           });
+          if (mode.startsWith("pull-"))
+            throw Object.assign(new Error("Not accessible"), {
+              status: Number(mode.slice(5)),
+            });
+          if (mode === "rate-limit")
+            throw Object.assign(new Error("Rate limit"), {
+              status: 403,
+              response: { headers: { "x-ratelimit-remaining": "0" } },
+            });
           return {
             data: {
               state: "open",
@@ -217,6 +281,8 @@ async function fixture(mode: RemoteMode = "normal") {
       repos: {
         get: async (args: unknown) => {
           expect(args).toEqual(expectedTarget);
+          if (mode === "repo-404")
+            throw Object.assign(new Error("Not Found"), { status: 404 });
           return {
             data: {
               private: mode === "private-scope",
@@ -225,18 +291,22 @@ async function fixture(mode: RemoteMode = "normal") {
             headers: {},
           };
         },
-        listCommits: async () => ({
-          data: remoteCommitted
-            ? [
-                {
-                  sha: "applied",
-                  html_url: "https://github.com/fork/app/commit/applied",
-                  commit: { message: remoteMessage },
-                },
-                { sha: "source", commit: { message: "original" } },
-              ]
-            : [{ sha: head, commit: { message: "original" } }],
-        }),
+        listCommits: async () => {
+          if (mode === "reconcile-fails")
+            throw new Error("History unavailable");
+          return {
+            data: remoteCommitted
+              ? [
+                  {
+                    sha: "applied",
+                    html_url: "https://github.com/fork/app/commit/applied",
+                    commit: { message: remoteMessage },
+                  },
+                  { sha: "source", commit: { message: "original" } },
+                ]
+              : [{ sha: head, commit: { message: "original" } }],
+          };
+        },
       },
       git: {
         getRef: async (args: unknown) => {
@@ -392,8 +462,10 @@ test.each([
   },
 );
 test.each([
-  "race",
   "write-failed",
+  "internal-error",
+  "partial-error",
+  "reconcile-fails",
   "wrong-contents",
   "extra-change",
 ] as RemoteMode[])(
@@ -404,9 +476,85 @@ test.each([
     await f.run();
     expect((await f.saved())[0]).toMatchObject({ status: "uncertain" });
     expect((await f.saved())[0].commitSha).toBeUndefined();
-    if (mode === "race") expect(f.head()).toBe("concurrent");
+    expect(f.graphql).toHaveBeenCalledTimes(1);
   },
 );
+test.each([
+  ["race", "stale"],
+  ["protected", "permission"],
+  ["invalid-input", "invalid_proposal"],
+] as const)(
+  "%s rejection resolves immediately without another write",
+  async (mode, blockReason) => {
+    const f = await fixture(mode);
+    await f.post();
+    await f.run();
+    const row = (await f.saved())[0];
+    expect(row).toMatchObject({ status: "blocked", blockReason });
+    expect(row.remoteStartedAt).toBeUndefined();
+    expect(row.commitSha).toBeUndefined();
+    expect(f.graphql).toHaveBeenCalledTimes(1);
+    if (mode === "race") {
+      expect(f.head()).toBe("concurrent");
+      expect(applicationAction(row)).toBe("reassess");
+      expect((await f.post()).status).toBe(409);
+      expect(f.graphql).toHaveBeenCalledTimes(1);
+    }
+  },
+);
+
+test.each([
+  ["pull-403", "permission"],
+  ["repo-404", "permission"],
+  ["pull-401", "disconnected"],
+] as const)(
+  "%s access failure gives actionable guidance and preserves the patch",
+  async (mode, blockReason) => {
+    const f = await fixture(mode);
+    await f.post();
+    await f.run();
+    expect((await f.saved())[0]).toMatchObject({
+      status: "blocked",
+      blockReason,
+      error: expect.stringMatching(/access|Reconnect/),
+    });
+    expect(f.graphql).not.toHaveBeenCalled();
+    expect(
+      await f.t.run((ctx) => ctx.db.get("reviewProposals", f.proposalId)),
+    ).not.toBeNull();
+  },
+);
+
+test("rate limiting remains retryable instead of requesting repository permissions", async () => {
+  const f = await fixture("rate-limit");
+  await f.post();
+  await f.run();
+  expect((await f.saved())[0]).toMatchObject({
+    status: "blocked",
+    blockReason: "transient",
+  });
+  expect(f.graphql).not.toHaveBeenCalled();
+});
+
+test("a reconciled no-write attempt clears old uncertainty before a permission failure", async () => {
+  const f = await fixture("write-failed");
+  await f.post();
+  await f.run();
+  expect((await f.saved())[0].status).toBe("uncertain");
+  const client = await mocks.github.mock.results[0].value;
+  vi.spyOn(client.octokit.rest.repos, "get").mockRejectedValue(
+    Object.assign(new Error("No access"), { status: 403 }),
+  );
+  await f.post();
+  await f.run();
+  expect((await f.saved())[0]).toMatchObject({
+    status: "blocked",
+    blockReason: "permission",
+  });
+  expect((await f.saved())[0].remoteStartedAt).toBeUndefined();
+  expect(f.graphql).toHaveBeenCalledTimes(1);
+});
+
 test("lost success reply reconciles marker, exact parent/files and branch membership before retry without a duplicate commit", async () => {
   const f = await fixture("lost-reply");
   await f.post();

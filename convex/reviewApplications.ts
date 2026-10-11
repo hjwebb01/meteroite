@@ -185,16 +185,21 @@ export const fail = internalMutation({
     generation: v.number(),
     error: v.string(),
     blockReason: v.optional(applicationBlockReason),
+    remoteOutcomeKnown: v.optional(v.boolean()),
   },
-  handler: async (ctx, { applicationId, generation, error, blockReason }) => {
+  handler: async (
+    ctx,
+    { applicationId, generation, error, blockReason, remoteOutcomeKnown },
+  ) => {
     const row = await ctx.db.get("reviewApplications", applicationId);
     if (!row || row.generation !== generation || row.status === "applied")
       return;
+    const uncertain = Boolean(row.remoteStartedAt) && !remoteOutcomeKnown;
     await ctx.db.patch("reviewApplications", applicationId, {
-      status: row.remoteStartedAt ? "uncertain" : "blocked",
+      status: uncertain ? "uncertain" : "blocked",
+      remoteStartedAt: uncertain ? row.remoteStartedAt : undefined,
       error: error.slice(0, 500),
-      blockReason:
-        blockReason ?? (row.remoteStartedAt ? "uncertain" : "transient"),
+      blockReason: uncertain ? "uncertain" : (blockReason ?? "transient"),
       updatedAt: Date.now(),
     });
   },

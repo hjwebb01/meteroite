@@ -9,6 +9,7 @@ import {
   reconcileApplication,
   commitApplication,
   validateApplication,
+  ApplicationWriteRejectedError,
 } from "../lib/github-application";
 export const applyReviewProposal = inngest.createFunction(
   {
@@ -44,17 +45,20 @@ export const applyReviewProposal = inngest.createFunction(
     );
     if (!claimed) return { applicationId, skipped: true };
     return step.run("apply-inspected-manifest", async () => {
+      let remoteOutcomeKnown = false;
       try {
         const { application, proposal, review } =
           await getConvexAdminClient().query(internal.reviewApplications.get, {
             applicationId,
             ownerId,
           });
+        remoteOutcomeKnown = !application.remoteStartedAt;
         const { octokit, scopes } = await githubApplicationClient(ownerId);
         let confirmed = application.remoteStartedAt
           ? await reconcileApplication(octokit, application, proposal)
           : null;
         if (!confirmed) {
+          remoteOutcomeKnown = true;
           const head = await inspectApplicationTarget(
             octokit,
             scopes,
@@ -73,7 +77,33 @@ export const applyReviewProposal = inngest.createFunction(
           );
           if (!writing)
             throw new Error("Application attempt expired or was superseded");
-          confirmed = await commitApplication(octokit, application, proposal);
+          remoteOutcomeKnown = false;
+          try {
+            confirmed = await commitApplication(octokit, application, proposal);
+          } catch (error) {
+            if (!(error instanceof ApplicationWriteRejectedError)) throw error;
+            // Reconcile even a rejection: an earlier attempt may have committed.
+            confirmed = await reconcileApplication(
+              octokit,
+              application,
+              proposal,
+            );
+            if (!confirmed) {
+              remoteOutcomeKnown = true;
+              const latestHead = await inspectApplicationTarget(
+                octokit,
+                scopes,
+                proposal,
+                review,
+              );
+              if (latestHead !== application.expectedHeadSha)
+                throw new ApplicationBlockedError(
+                  "stale",
+                  "The source branch advanced. Start a new review and investigation. No newer work was overwritten.",
+                );
+              throw error;
+            }
+          }
         }
         const saved = await getConvexAdminClient().mutation(
           internal.reviewApplications.finish,
@@ -92,6 +122,7 @@ export const applyReviewProposal = inngest.createFunction(
           {
             applicationId,
             generation,
+            remoteOutcomeKnown,
             blockReason:
               error instanceof ApplicationBlockedError
                 ? error.reason

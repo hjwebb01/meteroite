@@ -26,17 +26,104 @@ export async function githubApplicationClient(ownerId: string) {
 export function applicationMarker(applicationId: string, digest: string) {
   return `Meteroite-Application: ${applicationId}\nMeteroite-Proposal: ${digest}`;
 }
+
+function accessFailure(error: unknown, target: string): never {
+  const response = error as {
+    status?: number;
+    response?: { headers?: Record<string, string> };
+  } | null;
+  const status = response?.status;
+  if (
+    status === 403 &&
+    (response?.response?.headers?.["x-ratelimit-remaining"] === "0" ||
+      response?.response?.headers?.["retry-after"])
+  )
+    throw error;
+  if (status === 401)
+    throw new ApplicationBlockedError(
+      "disconnected",
+      "GitHub credentials are no longer valid. Reconnect GitHub; the proposal remains saved.",
+    );
+  if (status === 403 || status === 404)
+    throw new ApplicationBlockedError(
+      "permission",
+      `GitHub access to ${target} is unavailable. Check repository access and your GitHub connection; request source-repository write access before applying. The proposal remains saved.`,
+    );
+  throw error;
+}
+
+// Only explicit rejection responses can resolve a write as unsuccessful.
+// Transport failures, internal errors, and partial commit responses stay uncertain.
+export class ApplicationWriteRejectedError extends ApplicationBlockedError {}
+function writeRejection(error: unknown) {
+  const response = error as {
+    name?: string;
+    data?: { createCommitOnBranch?: { commit?: unknown } | null } | null;
+    errors?: Array<{
+      type?: string;
+      path?: unknown[];
+      extensions?: { code?: string; problems?: unknown[] };
+      message: string;
+    }>;
+  } | null;
+  if (
+    response?.name !== "GraphqlResponseError" ||
+    response.data?.createCommitOnBranch?.commit ||
+    !response.errors?.length
+  )
+    return null;
+  const codes = response.errors.map(
+    (item) =>
+      item.type ??
+      item.extensions?.code ??
+      (!response.data && !item.path && item.extensions?.problems?.length
+        ? "GRAPHQL_VALIDATION_FAILED"
+        : undefined),
+  );
+  if (
+    !codes.every(
+      (code) =>
+        code &&
+        [
+          "STALE_DATA",
+          "FORBIDDEN",
+          "NOT_FOUND",
+          "UNPROCESSABLE",
+          "GRAPHQL_VALIDATION_FAILED",
+        ].includes(code),
+    )
+  )
+    return null;
+  if (codes.includes("STALE_DATA"))
+    return new ApplicationWriteRejectedError(
+      "stale",
+      "The source branch advanced. Start a new review and investigation. No newer work was overwritten.",
+    );
+  if (codes.includes("FORBIDDEN") || codes.includes("NOT_FOUND"))
+    return new ApplicationWriteRejectedError(
+      "permission",
+      "GitHub rejected the write. Check source-repository write access and branch protection rules. The proposal remains saved.",
+    );
+  return new ApplicationWriteRejectedError(
+    "invalid_proposal",
+    "GitHub rejected the proposal input. Start a new review and investigation; the saved patch remains available.",
+  );
+}
 export async function inspectApplicationTarget(
   octokit: Octokit,
   scopes: string[],
   proposal: Doc<"reviewProposals">,
   review: Doc<"reviews">,
 ) {
-  const { data: pr } = await octokit.rest.pulls.get({
-    owner: review.repoOwner,
-    repo: review.repoName,
-    pull_number: review.pullNumber,
-  });
+  const { data: pr } = await octokit.rest.pulls
+    .get({
+      owner: review.repoOwner,
+      repo: review.repoName,
+      pull_number: review.pullNumber,
+    })
+    .catch((error: unknown) =>
+      accessFailure(error, `${review.repoOwner}/${review.repoName}`),
+    );
   if (
     pr.state !== "open" ||
     pr.head.repo?.owner.login.toLowerCase() !==
@@ -48,10 +135,14 @@ export async function inspectApplicationTarget(
       "stale",
       "The PR source branch changed or is closed. Start a new review and investigation.",
     );
-  const { data: repo, headers } = await octokit.rest.repos.get({
-    owner: proposal.sourceOwner,
-    repo: proposal.sourceRepo,
-  });
+  const { data: repo, headers } = await octokit.rest.repos
+    .get({
+      owner: proposal.sourceOwner,
+      repo: proposal.sourceRepo,
+    })
+    .catch((error: unknown) =>
+      accessFailure(error, `${proposal.sourceOwner}/${proposal.sourceRepo}`),
+    );
   const actual = (headers["x-oauth-scopes"] ?? scopes.join(","))
     .split(",")
     .map((s) => s.trim());
@@ -76,11 +167,15 @@ export async function inspectApplicationTarget(
       "permission",
       `Your GitHub account cannot push to ${proposal.sourceOwner}/${proposal.sourceRepo}. Request source-repository write access; fork proposals remain saved.`,
     );
-  const { data: ref } = await octokit.rest.git.getRef({
-    owner: proposal.sourceOwner,
-    repo: proposal.sourceRepo,
-    ref: `heads/${proposal.sourceBranch}`,
-  });
+  const { data: ref } = await octokit.rest.git
+    .getRef({
+      owner: proposal.sourceOwner,
+      repo: proposal.sourceRepo,
+      ref: `heads/${proposal.sourceBranch}`,
+    })
+    .catch((error: unknown) =>
+      accessFailure(error, `${proposal.sourceOwner}/${proposal.sourceRepo}`),
+    );
   return ref.object.sha;
 }
 export async function reconcileApplication(
@@ -226,36 +321,40 @@ export async function commitApplication(
   proposal: Doc<"reviewProposals">,
 ) {
   const marker = applicationMarker(application._id, proposal.digest);
-  const result = await octokit.graphql<{
-    createCommitOnBranch: { commit: { oid: string; url: string } };
-  }>(
-    `mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input:$input) { commit { oid url } } }`,
-    {
-      input: {
-        branch: {
-          repositoryNameWithOwner: `${proposal.sourceOwner}/${proposal.sourceRepo}`,
-          branchName: proposal.sourceBranch,
-        },
-        expectedHeadOid: proposal.sourceSha,
-        clientMutationId: application._id,
-        message: {
-          headline: `Fix reviewed finding: ${proposal.findingId}`,
-          body: marker,
-        },
-        fileChanges: {
-          additions: proposal.files
-            .filter((f) => f.replacement !== null)
-            .map((f) => ({
-              path: f.path,
-              contents: Buffer.from(f.replacement!).toString("base64"),
-            })),
-          deletions: proposal.files
-            .filter((f) => f.replacement === null)
-            .map((f) => ({ path: f.path })),
+  const result = await octokit
+    .graphql<{
+      createCommitOnBranch: { commit: { oid: string; url: string } };
+    }>(
+      `mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input:$input) { commit { oid url } } }`,
+      {
+        input: {
+          branch: {
+            repositoryNameWithOwner: `${proposal.sourceOwner}/${proposal.sourceRepo}`,
+            branchName: proposal.sourceBranch,
+          },
+          expectedHeadOid: proposal.sourceSha,
+          clientMutationId: application._id,
+          message: {
+            headline: `Fix reviewed finding: ${proposal.findingId}`,
+            body: marker,
+          },
+          fileChanges: {
+            additions: proposal.files
+              .filter((f) => f.replacement !== null)
+              .map((f) => ({
+                path: f.path,
+                contents: Buffer.from(f.replacement!).toString("base64"),
+              })),
+            deletions: proposal.files
+              .filter((f) => f.replacement === null)
+              .map((f) => ({ path: f.path })),
+          },
         },
       },
-    },
-  );
+    )
+    .catch((error: unknown) => {
+      throw writeRejection(error) ?? error;
+    });
   const remote = result.createCommitOnBranch.commit;
   await verifyAppliedCommit(octokit, proposal, remote.oid, marker);
   const confirmed = await reconcileApplication(octokit, application, proposal);
