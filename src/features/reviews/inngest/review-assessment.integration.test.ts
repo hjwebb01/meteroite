@@ -601,6 +601,77 @@ describe("authenticated persisted review assessment", () => {
       bob.query(api.reviews.get, { id: original._id }),
     ).rejects.toThrow("Review not found");
   });
+  test.each([false, true])(
+    "unchanged support survives a new provider snapshot with rename=%s and pinned prior provenance",
+    async (renamed) => {
+      const original = await startAndRun();
+      const github = await mocks.github();
+      const { data: live } = await github.rest.pulls.get();
+      live.head.sha = "next-head";
+      const path = renamed ? "POLICY.md" : "README.md";
+      const file = {
+        filename: path,
+        ...(renamed ? { previous_filename: "README.md" } : {}),
+        status: renamed ? "renamed" : "modified",
+        sha: "blob",
+        patch: `@@ -1 +1 @@\n-old behavior\n+${fixture.source}`,
+      };
+      github.rest.pulls.listFiles = async () => ({ data: [file] });
+      github.rest.repos.compareCommitsWithBasehead = async () => ({
+        data: { merge_base_commit: { sha: "merge-base" }, files: [file] },
+      });
+      github.rest.git.getTree = async ({ tree_sha }: { tree_sha: string }) => ({
+        data: {
+          truncated: false,
+          tree: [
+            {
+              type: "blob",
+              mode: "100644",
+              path: tree_sha === "next-head" ? path : "README.md",
+              sha: "blob",
+              size: fixture.source.length,
+            },
+          ],
+        },
+      });
+      output = {
+        summary: "New snapshot with unchanged supporting source",
+        assessment: {
+          state: "incomplete",
+          missingEvidence: ["Runtime verification unavailable."],
+        },
+        findings: [],
+        limitations: [],
+        hotspots: [
+          {
+            kind: "human_judgment",
+            title: "Authorization boundary",
+            reason: "Still requires review",
+            references: [{ path, line: 1, side: "RIGHT" }],
+          },
+        ],
+      };
+      const current = await startAndRun();
+      expect(current.result?.reassessment).toMatchObject({
+        sourceReviewId: original._id,
+        sourceHeadSha: "head",
+        headSha: "next-head",
+        contexts: [
+          { kind: "hotspot", state: "unchanged", currentPaths: [path] },
+        ],
+      });
+      expect(current.result?.hotspots?.[0].references[0]).toMatchObject({
+        sourcePath: path,
+        commitSha: "next-head",
+        blobSha: "blob",
+      });
+      expect(
+        (await authenticated.query(api.reviews.get, { id: original._id }))
+          .result,
+      ).toEqual(original.result);
+    },
+  );
+
   test("freshness failures remain explicit and another owner cannot refresh a saved review", async () => {
     const saved = await startAndRun();
     mocks.github.mockRejectedValue(new Error("provider failed"));
