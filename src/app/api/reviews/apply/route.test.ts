@@ -152,7 +152,7 @@ async function fixture(mode: RemoteMode = "normal") {
       }: {
         input: {
           expectedHeadOid: string;
-          branch: { repositoryNameWithOwner: string; refName: string };
+          branch: { repositoryNameWithOwner: string; branchName: string };
           message: { body: string };
           fileChanges: { additions: Array<{ path: string; contents: string }> };
         };
@@ -166,7 +166,7 @@ async function fixture(mode: RemoteMode = "normal") {
       expect(rows[0].remoteStartedAt).toBeDefined();
       expect(input.branch).toEqual({
         repositoryNameWithOwner: "fork/app",
-        refName: "feature",
+        branchName: "feature",
       });
       expect(input.expectedHeadOid).toBe("source");
       expect(input.fileChanges.additions).toEqual([

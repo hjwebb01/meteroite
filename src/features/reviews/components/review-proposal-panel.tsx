@@ -80,11 +80,12 @@ export default function ReviewProposalPanel({
           </pre>
         </details>
       ))}
-      {action === "reassess" && (
+      {(action === "reassess" || action === "applied") && (
         <div className="mt-4">
           <p className="text-muted-foreground">
-            The saved proposal needs a new assessment and investigation of
-            current code.
+            {action === "applied"
+              ? "The branch now contains the verified commit. Assess its updated code."
+              : "The saved proposal needs a new assessment and investigation of current code."}
           </p>
           <Button
             size="sm"

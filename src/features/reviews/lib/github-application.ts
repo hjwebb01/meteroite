@@ -234,7 +234,7 @@ export async function commitApplication(
       input: {
         branch: {
           repositoryNameWithOwner: `${proposal.sourceOwner}/${proposal.sourceRepo}`,
-          refName: proposal.sourceBranch,
+          branchName: proposal.sourceBranch,
         },
         expectedHeadOid: proposal.sourceSha,
         clientMutationId: application._id,
