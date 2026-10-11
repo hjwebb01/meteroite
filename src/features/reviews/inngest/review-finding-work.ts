@@ -110,7 +110,15 @@ async function respondToFinding({
     ),
   ]);
   const poll = setInterval(() => {
-    void heartbeat().catch((error) => cancellation.abort(error));
+    void heartbeat().catch((error) => {
+      // A transient transport failure is not an ended Lease. The next
+      // synchronous heartbeat still guards every saved result.
+      const reason = findingStopReason(error);
+      if (reason !== "infrastructure")
+        cancellation.abort(
+          new FindingStopped(reason, findingStopMessage(error)),
+        );
+    });
   }, 2000);
   let runtime: IsolatedRepository | undefined;
   try {
@@ -288,7 +296,10 @@ async function respondToFinding({
               signal,
               heartbeat,
             )
-          : [unavailableCheck(limitation!, work.headSha)];
+          : (change.checks.length ? change.checks : [[]]).map((command) => ({
+              ...unavailableCheck(limitation!, work.headSha),
+              command,
+            }));
         if (!checks.length)
           checks.push(
             unavailableCheck(

@@ -101,7 +101,10 @@ export function createCheckExecution(adapter: ExecutionAdapter) {
       try {
         await adapter.replaceFiles(files, signal);
       } catch (error) {
-        return [await unavailable(error, [], signal, heartbeat)];
+        const checks = [];
+        for (const command of commands.length ? commands : [[]])
+          checks.push(await unavailable(error, command, signal, heartbeat));
+        return checks;
       }
       const checks = [];
       for (const command of commands) {

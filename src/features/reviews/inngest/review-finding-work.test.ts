@@ -47,11 +47,15 @@ import {
 } from "../lib/check-execution";
 import { reviewFindingWork } from "./review-finding-work";
 const modules = import.meta.glob("../../../../convex/**/*.ts");
-afterEach(() => expect(mocks.remoteWrite).not.toHaveBeenCalled());
+afterEach(() => {
+  expect(mocks.remoteWrite).not.toHaveBeenCalled();
+  vi.restoreAllMocks();
+});
 test.each([
   "discussion",
   "investigation",
   "supported",
+  "heartbeat-outage",
   "runner-fails-testing",
   "runner-fails-applying",
   "could-not-reproduce",
@@ -94,6 +98,7 @@ test.each([
     const kind = label === "discussion" ? "discussion" : "investigation";
     const proposing = [
       "supported",
+      "heartbeat-outage",
       "runner-fails-testing",
       "runner-fails-applying",
       "static-supported",
@@ -176,6 +181,12 @@ test.each([
             },
           });
     let materialized = false;
+    let poll: (() => void) | undefined;
+    if (label === "heartbeat-outage")
+      vi.spyOn(globalThis, "setInterval").mockImplementation((callback) => {
+        poll = callback as () => void;
+        return 0 as unknown as ReturnType<typeof setInterval>;
+      });
     const originalReview = await alice.query(api.reviews.get, { id: reviewId });
     if (label === "retry-static") {
       const first = await t.mutation(internal.reviewFindingJobs.claim, {
@@ -359,6 +370,14 @@ test.each([
       });
     if (proposing)
       mocks.generate.mockImplementationOnce(async ({ prepareStep }) => {
+        if (label === "heartbeat-outage") {
+          mocks.mutation.mockRejectedValueOnce(
+            new Error("Convex network unavailable"),
+          );
+          poll!();
+          await new Promise((resolve) => setImmediate(resolve));
+          vi.restoreAllMocks();
+        }
         if (label === "cost-limit") {
           await t.run((ctx) =>
             ctx.db.patch("reviewFindingWork", workId, {
@@ -535,12 +554,21 @@ test.each([
       findingId: "finding",
     });
     expect(proposals).toHaveLength(proposing ? 1 : 0);
-    if (label === "static-supported")
-      expect(proposals[0].checks).toEqual([
-        expect.objectContaining({
-          status: "unavailable",
-          output: "Isolated runner unavailable on this host",
-        }),
+    if (label === "static-supported" || label.startsWith("runner-fails-")) {
+      expect(proposals[0].checks.map((check) => check.command)).toEqual([
+        ["node", "--test"],
+        ["python", "check.py"],
+        ["node", "--check", "caller.ts"],
+      ]);
+      expect(
+        proposals[0].checks.every((check) => check.status === "unavailable"),
+      ).toBe(true);
+    }
+    if (label === "heartbeat-outage")
+      expect(proposals[0].checks.map((check) => check.status)).toEqual([
+        "failed",
+        "unavailable",
+        "passed",
       ]);
     if (label.startsWith("runner-fails-")) {
       expect(proposals[0].checks.every((c) => c.status === "unavailable")).toBe(

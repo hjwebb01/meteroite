@@ -31,8 +31,8 @@ export function findingStopReason(
   }
   if (signal?.aborted) {
     if (signal.reason?.name === "TimeoutError") return "time-limit";
-    const reason = findingStopReason(signal.reason);
-    return reason === "infrastructure" ? "cancelled" : reason;
+    if (signal.reason?.name === "AbortError") return "cancelled";
+    return findingStopReason(signal.reason);
   }
   return "infrastructure";
 }

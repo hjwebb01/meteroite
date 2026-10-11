@@ -180,12 +180,13 @@ test("failed materialization is unavailable validation and runs no commands", as
   const run = vi.spyOn(adapter, "run");
   const checks = await execution.validateProposal(
     [{ path: "source.ts", replacement: "proposed" }],
-    [["test"]],
+    [["first"], ["second"]],
     signal,
     heartbeat,
   );
   expect(checks).toEqual([
-    expect.objectContaining({ status: "unavailable", command: [] }),
+    expect.objectContaining({ status: "unavailable", command: ["first"] }),
+    expect.objectContaining({ status: "unavailable", command: ["second"] }),
   ]);
   expect(run).not.toHaveBeenCalled();
 });
