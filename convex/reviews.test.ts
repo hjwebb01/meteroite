@@ -492,6 +492,65 @@ test("freshness observations cannot change saved identity, cross owners or regre
   });
 });
 
+test("failed freshness lookups preserve known staleness until a successful observation", async () => {
+  const t = convexTest(schema, modules);
+  const alice = t.withIdentity({ subject: "alice" });
+  const { id } = await alice.mutation(api.reviews.start, request);
+  await t.mutation(internal.reviewJobs.pinSnapshot, {
+    id,
+    title: "Pinned",
+    headSha: "head",
+    baseSha: "base",
+    sourceOwner: "alice",
+    sourceRepo: "app",
+  });
+  const record = (
+    observation: Parameters<
+      typeof t.mutation<typeof internal.reviewJobs.recordFreshness>
+    >[1]["observation"],
+  ) =>
+    t.mutation(internal.reviewJobs.recordFreshness, {
+      id,
+      ownerId: "alice",
+      observation,
+    });
+  await record({
+    state: "current",
+    headSha: "newer",
+    baseTipSha: "base",
+    observedAt: 100,
+    reason: "Branch advanced",
+  });
+  await record({
+    state: "unavailable",
+    observedAt: 200,
+    reason: "GitHub disconnected",
+  });
+  expect((await alice.query(api.reviews.get, { id })).freshness).toMatchObject({
+    state: "outdated",
+    headSha: "newer",
+    observedAt: 100,
+  });
+  await record({
+    state: "current",
+    headSha: "head",
+    baseTipSha: "base",
+    observedAt: 300,
+    reason: "Branch restored",
+  });
+  expect((await alice.query(api.reviews.get, { id })).freshness?.state).toBe(
+    "current",
+  );
+  await record({
+    state: "unavailable",
+    observedAt: 400,
+    reason: "GitHub disconnected",
+  });
+  expect((await alice.query(api.reviews.get, { id })).freshness?.state).toBe(
+    "unavailable",
+  );
+});
+
 test("reassessment persistence rejects another snapshot or invented prior context", async () => {
   const t = convexTest(schema, modules);
   const alice = t.withIdentity({ subject: "alice" });

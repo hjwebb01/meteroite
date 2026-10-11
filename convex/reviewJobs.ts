@@ -269,7 +269,8 @@ export const recordGithubReview = internalMutation({
   args: { id: v.id("reviews"), ownerId: v.string(), githubReview },
   handler: async (ctx, { id, ownerId, githubReview }) => {
     const review = await getOwnedReview(ctx, id, ownerId);
-    if (!review.githubReview) await ctx.db.patch("reviews", id, { githubReview });
+    if (!review.githubReview)
+      await ctx.db.patch("reviews", id, { githubReview });
   },
 });
 
@@ -284,6 +285,12 @@ export const recordFreshness = internalMutation({
     if (
       review.freshness &&
       review.freshness.observedAt > observation.observedAt
+    )
+      return;
+    // A failed lookup says nothing about a previously observed newer branch.
+    if (
+      observation.state === "unavailable" &&
+      review.freshness?.state === "outdated"
     )
       return;
     const freshness =
