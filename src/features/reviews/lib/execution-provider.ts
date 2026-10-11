@@ -10,34 +10,21 @@ import {
 } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
-import { FindingStopped } from "./finding-stop";
+import { FindingStopped, findingStopReason } from "./finding-stop";
 import { randomUUID } from "node:crypto";
+import {
+  createCheckExecution,
+  SourceVerificationError,
+  ProposalRejectedError,
+  type CheckExecution,
+  type ExecutionCheck,
+  type ProposalFiles,
+} from "./check-execution";
 const exec = promisify(execFile);
-export class SourceVerificationError extends Error {
-  constructor(
-    readonly kind: "changed" | "unavailable",
-    message: string,
-  ) {
-    super(message);
-    this.name = "SourceVerificationError";
-  }
-}
-export type ExecutionCheck = {
-  command: string[];
-  status: "passed" | "failed" | "unavailable";
-  exitCode?: number;
-  output: string;
-  sourceSha: string;
-  sourceIntegrity?: "changed" | "unavailable";
-};
-type ProposalFiles = Array<{ path: string; replacement: string | null }>;
-export type IsolatedRepository = {
+export type IsolatedRepository = CheckExecution & {
   sourceSha: string;
   executionUnit: string;
   directory: string;
-  run(command: string[], signal: AbortSignal): Promise<ExecutionCheck>;
-  replaceFiles(files: ProposalFiles, signal: AbortSignal): Promise<void>;
-  verifyFiles(files: ProposalFiles, signal: AbortSignal): Promise<void>;
   stop(): Promise<void>;
 };
 const properties = [
@@ -381,7 +368,8 @@ export async function openIsolatedRepository(input: {
       ended = true;
       for (const pending of waiting.values())
         pending.reject(
-          new Error(
+          new FindingStopped(
+            Date.now() >= input.deadline ? "time-limit" : "infrastructure",
             "Isolated execution stopped or exceeded its limits: " +
               startupError,
           ),
@@ -400,29 +388,35 @@ export async function openIsolatedRepository(input: {
       sourceSha: input.sourceSha,
       executionUnit: unit,
       directory,
-      run,
-      replaceFiles: async (files, signal) => {
-        const result = await request({ type: "replace", files }, signal);
-        if (result.status !== "passed") throw new Error(result.output);
-      },
-      verifyFiles: async (files, signal) => {
-        let result: ExecutionCheck;
-        try {
-          result = await request({ type: "verify", files }, signal);
-        } catch (error) {
-          throw new SourceVerificationError(
-            "unavailable",
-            error instanceof Error
-              ? error.message
-              : "Source verification unavailable",
-          );
-        }
-        if (result.status !== "passed")
-          throw new SourceVerificationError(
-            result.sourceIntegrity ?? "unavailable",
-            result.output,
-          );
-      },
+      ...createCheckExecution({
+        sourceSha: input.sourceSha,
+        run,
+        replaceFiles: async (files, signal) => {
+          const result = await request({ type: "replace", files }, signal);
+          if (result.status !== "passed")
+            throw new ProposalRejectedError(result.output);
+        },
+        verifyFiles: async (files, signal) => {
+          let result: ExecutionCheck;
+          try {
+            result = await request({ type: "verify", files }, signal);
+          } catch (error) {
+            if (findingStopReason(error, signal) !== "infrastructure")
+              throw error;
+            throw new SourceVerificationError(
+              "unavailable",
+              error instanceof Error
+                ? error.message
+                : "Source verification unavailable",
+            );
+          }
+          if (result.status !== "passed")
+            throw new SourceVerificationError(
+              result.sourceIntegrity ?? "unavailable",
+              result.output,
+            );
+        },
+      }),
       stop,
     };
   } catch (error) {

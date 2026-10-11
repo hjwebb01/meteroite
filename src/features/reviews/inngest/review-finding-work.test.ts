@@ -2,7 +2,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { getFunctionName } from "convex/server";
-import { expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import { api, internal } from "../../../../convex/_generated/api";
 import schema from "../../../../convex/schema";
 import { DEFAULT_CODING_MODEL_ID } from "../../../../convex/lib/coding_models";
@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   stop: vi.fn(),
   capability: vi.fn(),
   quote: vi.fn(),
+  remoteWrite: vi.fn(),
 }));
 vi.mock("@/lib/convex-client", () => ({ getConvexAdminClient: () => mocks }));
 vi.mock("@/lib/github", () => ({
@@ -40,13 +41,20 @@ vi.mock("../lib/finding-budget", async (original) => ({
   ...(await original<typeof import("../lib/finding-budget")>()),
   quoteFindingModel: mocks.quote,
 }));
-import { SourceVerificationError } from "../lib/execution-provider";
+import {
+  createCheckExecution,
+  SourceVerificationError,
+} from "../lib/check-execution";
 import { reviewFindingWork } from "./review-finding-work";
 const modules = import.meta.glob("../../../../convex/**/*.ts");
+afterEach(() => expect(mocks.remoteWrite).not.toHaveBeenCalled());
 test.each([
   "discussion",
   "investigation",
   "supported",
+  "runner-fails-testing",
+  "runner-fails-applying",
+  "could-not-reproduce",
   "cost-limit",
   "time-limit",
   "retry-static",
@@ -86,6 +94,8 @@ test.each([
     const kind = label === "discussion" ? "discussion" : "investigation";
     const proposing = [
       "supported",
+      "runner-fails-testing",
+      "runner-fails-applying",
       "static-supported",
       "cost-limit",
       "time-limit",
@@ -94,9 +104,11 @@ test.each([
     ].includes(label);
     const verdict = proposing
       ? "supported"
-      : label === "inconclusive" || label === "truncated"
-        ? "inconclusive"
-        : "incorrect";
+      : label === "could-not-reproduce"
+        ? "could-not-reproduce"
+        : label === "inconclusive" || label === "truncated"
+          ? "inconclusive"
+          : "incorrect";
     const t = convexTest(schema, modules);
     const alice = t.withIdentity({ subject: "alice" });
     const reviewId = await t.run((ctx) =>
@@ -164,6 +176,7 @@ test.each([
             },
           });
     let materialized = false;
+    const originalReview = await alice.query(api.reviews.get, { id: reviewId });
     if (label === "retry-static") {
       const first = await t.mutation(internal.reviewFindingJobs.claim, {
         workId,
@@ -186,32 +199,44 @@ test.each([
       executionUnit:
         "meteroite-review-00000000-0000-0000-0000-000000000000.service",
       stop: mocks.stop,
-      verifyFiles: async () => {
-        if (label === "comparison-unavailable")
-          throw new SourceVerificationError(
-            "unavailable",
-            "Comparison infrastructure could not finish",
-          );
-        if (label === "comparison-changed")
-          throw new SourceVerificationError(
-            "changed",
-            "Pinned file content changed",
-          );
-      },
-      replaceFiles: async () => {
-        materialized = true;
-      },
-      run: async (command: string[]) => {
-        if (materialized && label === "cancel-testing")
-          await alice.mutation(api.reviewInteractions.cancel, { workId });
-        return {
-          command,
-          status: command[0] === "python" ? "unavailable" : "failed",
-          exitCode: 1,
-          output: "fixture assertion failed",
-          sourceSha: "head",
-        };
-      },
+      ...createCheckExecution({
+        sourceSha: "head",
+        verifyFiles: async () => {
+          if (label === "comparison-unavailable")
+            throw new SourceVerificationError(
+              "unavailable",
+              "Comparison infrastructure could not finish",
+            );
+          if (label === "comparison-changed")
+            throw new SourceVerificationError(
+              "changed",
+              "Pinned file content changed",
+            );
+        },
+        replaceFiles: async () => {
+          if (label === "runner-fails-applying")
+            throw new Error("Isolated runner stopped while applying");
+          materialized = true;
+        },
+        run: async (command: string[]) => {
+          if (materialized && label === "runner-fails-testing")
+            throw new Error("Isolated runner stopped while testing");
+          if (materialized && label === "cancel-testing")
+            await alice.mutation(api.reviewInteractions.cancel, { workId });
+          return {
+            command,
+            status:
+              command[0] === "python"
+                ? "unavailable"
+                : command[1] === "--check"
+                  ? "passed"
+                  : "failed",
+            exitCode: command[1] === "--check" ? 0 : 1,
+            output: "fixture assertion failed",
+            sourceSha: "head",
+          };
+        },
+      }),
     });
     mocks.query.mockImplementation((ref, args) => t.query(ref, args));
     mocks.mutation.mockImplementation(async (ref, args) => {
@@ -235,9 +260,13 @@ test.each([
       return t.mutation(ref, args);
     });
     mocks.github.mockResolvedValue({
-      graphql: vi.fn(),
+      graphql: mocks.remoteWrite,
       rest: {
+        issues: { createComment: mocks.remoteWrite },
+        repos: { createOrUpdateFileContents: mocks.remoteWrite },
         pulls: {
+          createReview: mocks.remoteWrite,
+          merge: mocks.remoteWrite,
           get: async () => ({
             data: {
               head: {
@@ -249,6 +278,10 @@ test.each([
           }),
         },
         git: {
+          createBlob: mocks.remoteWrite,
+          createTree: mocks.remoteWrite,
+          createCommit: mocks.remoteWrite,
+          updateRef: mocks.remoteWrite,
           getTree: async () => ({
             data: {
               truncated: label === "truncated",
@@ -353,6 +386,7 @@ test.each([
             checks: [
               ["node", "--test"],
               ["python", "check.py"],
+              ["node", "--check", "caller.ts"],
             ],
           },
         };
@@ -456,6 +490,9 @@ test.each([
       reviewId,
       findingId: "finding",
     });
+    expect(await alice.query(api.reviews.get, { id: reviewId })).toEqual(
+      originalReview,
+    );
     expect(thread.work[0].status).toBe("completed");
     if (label === "retry-static") {
       expect(thread.work[0].checks).toEqual([]);
@@ -497,9 +534,7 @@ test.each([
       reviewId,
       findingId: "finding",
     });
-    expect(proposals).toHaveLength(
-      label === "supported" || label === "static-supported" ? 1 : 0,
-    );
+    expect(proposals).toHaveLength(proposing ? 1 : 0);
     if (label === "static-supported")
       expect(proposals[0].checks).toEqual([
         expect.objectContaining({
@@ -507,6 +542,17 @@ test.each([
           output: "Isolated runner unavailable on this host",
         }),
       ]);
+    if (label.startsWith("runner-fails-")) {
+      expect(proposals[0].checks.every((c) => c.status === "unavailable")).toBe(
+        true,
+      );
+      expect(proposals[0].checks[0].output).toContain(
+        "Isolated runner stopped",
+      );
+      expect(proposals[0].files[0].replacement).toBe(
+        "if (!user) return false;\n",
+      );
+    }
     if (label === "supported") {
       expect(proposals[0].files[0]).toMatchObject({
         expectedBlobSha: "blob",
@@ -515,6 +561,7 @@ test.each([
       });
       expect(proposals[0].checks[0].status).toBe("failed");
       expect(proposals[0].checks[1].status).toBe("unavailable");
+      expect(proposals[0].checks[2].status).toBe("passed");
       await expect(
         t
           .withIdentity({ subject: "bob" })

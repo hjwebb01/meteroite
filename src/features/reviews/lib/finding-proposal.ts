@@ -12,7 +12,12 @@ export const proposedChangeSchema = z.object({
     )
     .min(1)
     .max(8),
-  checks: z.array(z.array(z.string().max(2000)).min(1).max(20)).max(4),
+  checks: z
+    .array(z.array(z.string().max(2000)).min(1).max(20))
+    .max(4)
+    .describe(
+      "Planned offline validation commands to execute against the proposed files after generation; these need not have run during investigation.",
+    ),
 });
 export type ProposalFile = {
   path: string;
