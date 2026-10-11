@@ -161,3 +161,52 @@
 ::-webkit-scrollbar-thumb {
   @apply rounded-full bg-border border-[1px] border-transparent border-solid bg-clip-padding;
 }
+
+/* Review screen tokens (DESIGN.md). Dark in both app themes. */
+:root {
+  --review-bg: #15171c;
+  --review-chrome: #1b1e25;
+  --review-file-header: #1f232b;
+  --review-hunk: #191c22;
+  --review-border: #2c3039;
+  --review-border-strong: #3a3f4c;
+  --review-text: #e6e8ee;
+  --review-text-body: #c4c8d2;
+  --review-text-muted: #8a90a0;
+  --review-text-dim: #7d8393;
+  --review-link: #8fb4ff;
+  --diff-add-bg: rgb(46 160 67 / 12%);
+  --diff-add-fg: #7ee0a0;
+  --diff-del-bg: rgb(248 81 73 / 10%);
+  --diff-del-fg: #ff9b94;
+  --sev-high: #ffb380;
+  --sev-high-bg: #1f1c1a;
+  --sev-high-line: rgb(255 159 90 / 14%);
+  --sev-medium: #e8c46a;
+  --sev-judgment: #8fb4ff;
+  --sev-resolved: #7ee0a0;
+  --verdict-confirmed: #9be6b4;
+}
+
+@theme inline {
+  --font-ui: var(--font-plex-sans);
+  --font-serif: var(--font-newsreader);
+  --color-review-bg: var(--review-bg);
+  --color-review-chrome: var(--review-chrome);
+  --color-review-file-header: var(--review-file-header);
+  --color-review-border: var(--review-border);
+  --color-review-border-strong: var(--review-border-strong);
+  --color-review-text: var(--review-text);
+  --color-review-body: var(--review-text-body);
+  --color-review-muted: var(--review-text-muted);
+  --color-review-dim: var(--review-text-dim);
+  --color-review-link: var(--review-link);
+  --color-diff-add: var(--diff-add-fg);
+  --color-diff-del: var(--diff-del-fg);
+  --color-sev-high: var(--sev-high);
+  --color-sev-high-bg: var(--sev-high-bg);
+  --color-sev-medium: var(--sev-medium);
+  --color-sev-judgment: var(--sev-judgment);
+  --color-sev-resolved: var(--sev-resolved);
+  --color-verdict-confirmed: var(--verdict-confirmed);
+}

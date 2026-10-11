@@ -37,6 +37,16 @@ export function navigationLocation(target: ReviewNavigationTarget) {
   };
 }
 
+/** Identifies the diff annotation a target renders as; other targets have none. */
+export function annotationKey(target: ReviewNavigationTarget) {
+  if (target.kind === "finding") return `finding:${target.finding.id}`;
+  if (target.kind === "hotspot") {
+    const { path, line, side } = target.reference;
+    return `hotspot:${target.hotspot.id}:${path}:${line}:${side}`;
+  }
+  return undefined;
+}
+
 type SavedFile = {
   filename: string;
   previousFilename?: string;

@@ -631,6 +631,8 @@ function ReviewDetail({
     );
     return finding ? { kind: "finding", finding } : null;
   });
+  // Dismissals are local to this session until triage is persisted.
+  const [resolved, setResolved] = useState<ReadonlySet<string>>(new Set());
   const [refreshing, setRefreshing] = useState(false);
   const [freshnessError, setFreshnessError] = useState("");
   const [publishing, setPublishing] = useState(false);
@@ -648,7 +650,12 @@ function ReviewDetail({
     setFocus(target);
   }, []);
   const selectFinding = useCallback(
-    (id: string) => {
+    (id: string | null) => {
+      if (id === null) {
+        setActiveFindingId(null);
+        setFocus(null);
+        return;
+      }
       const finding = review.result?.findings.find((entry) => entry.id === id);
       if (finding) navigate({ kind: "finding", finding });
     },
@@ -850,18 +857,49 @@ function ReviewDetail({
           </span>
         </p>
       )}
-      <div
-        className={cn(
-          showDiff &&
-            "xl:grid xl:grid-cols-[minmax(0,30rem)_minmax(0,1fr)] xl:items-start xl:gap-8",
-        )}
-      >
+      {showDiff && (
+        <section
+          id="review-diff"
+          aria-label="Pull request diff"
+          className="mb-10 h-[calc(100vh-6rem)] min-h-[560px] overflow-hidden rounded-md border border-review-border"
+        >
+          <ReviewDiffPanel
+            files={files!}
+            findings={findings}
+            verdicts={verdicts}
+            allFindings={result?.findings ?? []}
+            hotspots={result?.hotspots ?? []}
+            onSelectHotspot={selectHotspot}
+            activeFindingId={activeFindingId}
+            focus={focus}
+            onSelectFinding={selectFinding}
+            resolved={resolved}
+            onResolve={(id, value) =>
+              setResolved((current) => {
+                const next = new Set(current);
+                if (value) next.add(id);
+                else next.delete(id);
+                return next;
+              })
+            }
+            onOpenFinding={(id) => {
+              selectFinding(id);
+              requestAnimationFrame(() =>
+                document
+                  .getElementById("selected-review-context")
+                  ?.scrollIntoView({ block: "start" }),
+              )
+            }}
+          />
+        </section>
+      )}
+      <div className={cn(showDiff && "max-w-4xl")}>
         <div className="min-w-0">
           {focus && (
             <section
               id="selected-review-context"
               aria-label="Selected review context"
-              className="mb-6 max-h-[calc(100vh-3rem)] overflow-y-auto rounded-lg bg-sidebar xl:sticky xl:top-6 xl:z-10"
+              className="mb-6 rounded-lg bg-sidebar"
             >
               {focus.kind === "finding" && (
                 <>
@@ -1171,25 +1209,6 @@ function ReviewDetail({
             </>
           )}
         </div>
-        {showDiff && (
-          <section
-            id="review-diff"
-            aria-label="Pull request diff"
-            className="mt-8 h-[75vh] overflow-hidden rounded-xl border xl:sticky xl:top-6 xl:mt-0 xl:h-[calc(100vh-3rem)]"
-          >
-            <ReviewDiffPanel
-              files={files!}
-              findings={findings}
-              verdicts={verdicts}
-              allFindings={result?.findings ?? []}
-              hotspots={result?.hotspots ?? []}
-              onSelectHotspot={selectHotspot}
-              activeFindingId={activeFindingId}
-              focus={focus}
-              onSelectFinding={selectFinding}
-            />
-          </section>
-        )}
       </div>
     </div>
   );

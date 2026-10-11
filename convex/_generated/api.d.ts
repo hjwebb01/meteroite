@@ -21,6 +21,7 @@ import type * as lib_review_navigation from "../lib/review_navigation.js";
 import type * as lib_review_proposal_fields from "../lib/review_proposal_fields.js";
 import type * as lib_review_reassessment from "../lib/review_reassessment.js";
 import type * as lib_review_work_fields from "../lib/review_work_fields.js";
+import type * as lib_zod_validator from "../lib/zod_validator.js";
 import type * as reviewApplications from "../reviewApplications.js";
 import type * as reviewFindingJobs from "../reviewFindingJobs.js";
 import type * as reviewInteractions from "../reviewInteractions.js";
@@ -48,6 +49,7 @@ declare const fullApi: ApiFromModules<{
   "lib/review_proposal_fields": typeof lib_review_proposal_fields;
   "lib/review_reassessment": typeof lib_review_reassessment;
   "lib/review_work_fields": typeof lib_review_work_fields;
+  "lib/zod_validator": typeof lib_zod_validator;
   reviewApplications: typeof reviewApplications;
   reviewFindingJobs: typeof reviewFindingJobs;
   reviewInteractions: typeof reviewInteractions;

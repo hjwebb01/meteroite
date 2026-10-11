@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "convex/_generated/**",
+    // Local, gitignored video projects.
+    "motion/**",
   ]),
   {
     rules: {

@@ -219,16 +219,18 @@ export function createAssessment({
         state: "incomplete" as const,
         missingEvidence: ["The assessment response could not be validated."],
       };
-  const supported =
-    validDraft.state === "complete" &&
-    validDraft.evidence.every((item) => {
-      const line = evidenceLines.get(item.path)?.get(item.line);
-      return (
-        line !== undefined &&
-        item.quote.trim().length >= 8 &&
-        line.includes(item.quote.trim())
-      );
-    });
+  const unsupported =
+    validDraft.state === "complete"
+      ? validDraft.evidence.filter((item) => {
+          const line = evidenceLines.get(item.path)?.get(item.line);
+          return !(
+            line !== undefined &&
+            item.quote.trim().length >= 8 &&
+            line.includes(item.quote.trim())
+          );
+        })
+      : [];
+  const supported = validDraft.state === "complete" && !unsupported.length;
   const interpretation =
     validDraft.state === "complete" && supported
       ? {
@@ -244,6 +246,13 @@ export function createAssessment({
               ? validDraft.missingEvidence
               : [
                   "The assessment's source evidence could not be validated against inspected code.",
+                  ...unsupported.map(({ path, line, quote }) => {
+                    // Keeps a 500-character path within the 700-character entry limit.
+                    const cited = quote.trim();
+                    const shown =
+                      cited.length > 160 ? `${cited.slice(0, 159)}…` : cited;
+                    return `${path}:${line} does not contain "${shown}"`;
+                  }),
                 ],
         };
   const blockers: string[] = [];

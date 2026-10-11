@@ -1,4 +1,12 @@
 import { v } from "convex/values";
+import { persistedAssessmentSchema } from "./review_assessment";
+import {
+  changeGroupSchema,
+  changeHunkSchema,
+  codeReferenceSchema,
+  hotspotSchema,
+} from "./review_navigation";
+import { zodValidator } from "./zod_validator";
 
 export const FINDING_CATEGORIES = [
   "bug",
@@ -44,97 +52,9 @@ export const reviewFinding = v.object({
   ),
 });
 
-const observationFields = { headSha: v.string(), observedAt: v.number() };
-const draftObservation = v.union(
-  v.object({
-    ...observationFields,
-    state: v.literal("known"),
-    value: v.boolean(),
-  }),
-  v.object({
-    ...observationFields,
-    state: v.union(v.literal("unknown"), v.literal("unavailable")),
-    reason: v.string(),
-  }),
-);
-const checkObservation = v.union(
-  v.object({
-    ...observationFields,
-    state: v.literal("known"),
-    value: v.union(
-      v.literal("passed"),
-      v.literal("failed"),
-      v.literal("pending"),
-      v.literal("none"),
-    ),
-  }),
-  v.object({
-    ...observationFields,
-    state: v.union(v.literal("unknown"), v.literal("unavailable")),
-    reason: v.string(),
-  }),
-);
-const scrutinyScore = v.union(
-  v.literal(1),
-  v.literal(2),
-  v.literal(3),
-  v.literal(4),
-  v.literal(5),
-);
-const assessmentReason = v.object({ level: scrutinyScore, reason: v.string() });
-const assessmentFields = {
-  rubricVersion: v.literal("conservative-v1"),
-  headSha: v.string(),
-  baseSha: v.string(),
-  assessedAt: v.number(),
-  signals: v.object({ draft: draftObservation, checks: checkObservation }),
-  readiness: v.object({
-    state: v.union(
-      v.literal("ready_for_review"),
-      v.literal("needs_attention"),
-      v.literal("incomplete"),
-    ),
-    reasons: v.array(v.string()),
-  }),
-  coverageReasons: v.array(v.string()),
-};
-export const reviewAssessment = v.union(
-  v.object({
-    ...assessmentFields,
-    state: v.literal("complete"),
-    score: scrutinyScore,
-    dimensions: v.object({
-      impact: assessmentReason,
-      complexity: assessmentReason,
-      uncertainty: assessmentReason,
-      coverage: assessmentReason,
-    }),
-    evidence: v.array(
-      v.object({ path: v.string(), line: v.number(), quote: v.string() }),
-    ),
-  }),
-  v.object({
-    ...assessmentFields,
-    state: v.literal("incomplete"),
-    missingEvidence: v.array(v.string()),
-  }),
-);
-
-export const codeReference = v.object({
-  path: v.string(),
-  sourcePath: v.string(),
-  line: v.number(),
-  side: v.union(v.literal("LEFT"), v.literal("RIGHT")),
-  commitSha: v.string(),
-  blobSha: v.optional(v.string()),
-});
-export const reviewHotspot = v.object({
-  id: v.string(),
-  kind: v.union(v.literal("possible_issue"), v.literal("human_judgment")),
-  title: v.string(),
-  reason: v.string(),
-  references: v.array(codeReference),
-});
+export const reviewAssessment = zodValidator(persistedAssessmentSchema);
+export const codeReference = zodValidator(codeReferenceSchema);
+export const reviewHotspot = zodValidator(hotspotSchema);
 export const fileCoverageGap = v.object({
   kind: v.union(
     v.literal("text_patch_unavailable"),
@@ -144,22 +64,8 @@ export const fileCoverageGap = v.object({
   reason: v.string(),
 });
 
-export const changeHunk = v.object({
-  id: v.string(),
-  path: v.string(),
-  ordinal: v.number(),
-  leftStart: v.number(),
-  leftLines: v.number(),
-  rightStart: v.number(),
-  rightLines: v.number(),
-  heading: v.string(),
-});
-export const changeGroup = v.object({
-  id: v.string(),
-  title: v.string(),
-  purpose: v.string(),
-  hunkIds: v.array(v.string()),
-});
+export const changeHunk = zodValidator(changeHunkSchema);
+export const changeGroup = zodValidator(changeGroupSchema);
 
 export const reviewReassessment = v.object({
   sourceReviewId: v.string(),

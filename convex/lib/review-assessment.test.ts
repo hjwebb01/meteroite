@@ -122,6 +122,32 @@ describe("human scrutiny and readiness", () => {
       readiness: { state: "needs_attention" },
     });
   });
+  test("an incomplete assessment names each unverifiable evidence item", () => {
+    const draft = assessmentCalibrationFixtures[0].assessment;
+    const [supported] = draft.evidence;
+    const result = assess(
+      {
+        ...draft,
+        evidence: [
+          supported,
+          { path: "src/a.ts", line: 4, quote: "x".repeat(300) },
+          { path: "invented.ts", line: 1, quote: "fabricated evidence" },
+        ],
+      },
+      {},
+    );
+    expect(result.state).toBe("incomplete");
+    if (result.state !== "incomplete") return;
+    const [summary, ...items] = result.missingEvidence;
+    expect(summary).toMatch(/could not be validated/);
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatch(/^src\/a\.ts:4 /);
+    expect(items[0].length).toBeLessThanOrEqual(700);
+    expect(items[1]).toContain(
+      'invented.ts:1 does not contain "fabricated evidence"',
+    );
+    expect(persistedAssessmentSchema.safeParse(result).success).toBe(true);
+  });
   test("unknown CI remains explicit without inventing readiness or suppressing scrutiny", () => {
     const result = assess(assessmentCalibrationFixtures[0].assessment, {
       signals: {
