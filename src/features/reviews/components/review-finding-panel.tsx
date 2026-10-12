@@ -90,10 +90,12 @@ export function ReviewFindingPanel({
   return (
     <section
       aria-label="Finding discussion"
-      className="mt-6 rounded-xl border bg-sidebar p-5"
+      className="mt-2 rounded-md border bg-review-chrome p-4"
     >
       <h2 className="text-sm font-semibold">Discuss this finding</h2>
-      <p className="mt-2 text-sm">{finding.title}</p>
+      <p className="mt-2 font-serif text-[19px] leading-tight">
+        {finding.title}
+      </p>
       <p className="mt-2 text-xs text-muted-foreground">
         Private discussion at {review.headSha?.slice(0, 7)}. The original
         finding stays in the review.
@@ -130,7 +132,7 @@ export function ReviewFindingPanel({
         className="mt-4 max-h-80 overflow-y-auto space-y-4"
       >
         {thread?.messages.map((message) => (
-          <li key={message._id} className="rounded-lg border p-3 text-sm">
+          <li key={message._id} className="rounded-md border p-3 text-sm">
             <p className="text-xs font-medium text-muted-foreground">
               {message.role === "user" ? "You" : "Review agent"}
               {message.conclusion && ` · ${message.conclusion.verdict}`}
@@ -258,7 +260,7 @@ export function ReviewFindingPanel({
         </Button>
       )}
       <details
-        className="mt-5 rounded-lg border p-3"
+        className="mt-5 rounded-md border p-3"
         open={Boolean(active?.kind === "investigation")}
       >
         <summary className="text-sm font-medium">
@@ -276,7 +278,7 @@ export function ReviewFindingPanel({
           are deleted after work; saved evidence and checks remain private.
           Additional spending requires another explicit request.
         </p>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
+        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3 text-xs">
           <label>
             Model
             <select
@@ -316,7 +318,7 @@ export function ReviewFindingPanel({
           </label>
         </div>
         <Button
-          className="mt-3"
+          className="mt-3 bg-review-text text-review-bg hover:bg-review-text/90"
           size="sm"
           disabled={!capability || Boolean(active) || sending}
           onClick={async () => {
@@ -347,7 +349,7 @@ export function ReviewFindingPanel({
         .filter((w) => w.kind === "investigation")
         .slice(0, 3)
         .map((w) => (
-          <div key={w._id} className="mt-3 rounded-lg border p-3 text-xs">
+          <div key={w._id} className="mt-3 rounded-md border p-3 text-xs">
             <p>
               Investigation {w.status} · {w.maxDurationMs / 1000}s limit · $
               {(w.reservedCostMicros / 1_000_000).toFixed(2)} reserved maximum
@@ -384,7 +386,7 @@ export function ReviewFindingPanel({
           </div>
         ))}
       {Boolean(thread?.attempts.length) && (
-        <details className="mt-3 rounded-lg border p-3 text-xs">
+        <details className="mt-3 rounded-md border p-3 text-xs">
           <summary>Earlier attempts ({thread?.attempts.length})</summary>
           <div
             className="max-h-48 overflow-y-auto"
@@ -395,7 +397,7 @@ export function ReviewFindingPanel({
             {thread?.attempts.map((previous) => (
               <details
                 key={previous._id}
-                className="mt-3 rounded-lg border p-3 text-xs"
+                className="mt-3 rounded-md border p-3 text-xs"
               >
                 <summary>
                   Earlier attempt {previous.attempt}: {previous.status}{" "}

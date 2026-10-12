@@ -15,6 +15,8 @@ import { createReviewBudget, estimateTokens } from "./context-budget";
 
 const MAX_FILE_BYTES = 250_000;
 const MAX_READS = 60;
+const MAX_SEARCH_FILES = 25;
+const MAX_SEARCH_MATCHES = 20;
 // Keeps one stored diff well under Convex's 1 MiB document limit.
 const MAX_DISPLAY_PATCH_CHARS = 400_000;
 
@@ -31,6 +33,8 @@ export type ReviewFileDiff = {
   changedLineRanges?: ReturnType<typeof changedLineRanges>;
   hunks?: ChangeHunk[];
 };
+
+export type SearchCursor = { fileOffset: number; lineOffset: number };
 
 export async function loadReviewSignals(
   octokit: Octokit,
@@ -394,6 +398,10 @@ export function createRepositoryReader(
   const filesRead = new Set<string>();
   const warnings = new Set(snapshot.warnings);
   const contentCache = new Map<string, Promise<string | null>>();
+  const searchProgress = new Map<
+    string,
+    { next: SearchCursor | null; skipped: boolean }
+  >();
   let reads = 0,
     usedTokens = 0,
     turnTokens = Infinity;
@@ -416,7 +424,7 @@ export function createRepositoryReader(
     if (existing) return existing;
     if (++reads > MAX_READS) {
       warnings.add("Repository read limit reached; investigation is partial.");
-      return null;
+      return undefined;
     }
     const pending = (async () => {
       await beforeRead();
@@ -435,11 +443,21 @@ export function createRepositoryReader(
     return pending;
   }
 
-  function deliverLine(path: string, line: number, text: string) {
+  function deliverLine(
+    path: string,
+    line: number,
+    text: string,
+    tokenSource?: unknown,
+  ) {
     const quoted = evidence.get(path) ?? new Map<number, string>();
     const previous = quoted.get(line);
-    if (previous !== undefined && previous.startsWith(text)) return "duplicate";
-    const tokens = estimateTokens(JSON.stringify(`${line}: ${text}\n`));
+    if (previous !== undefined) {
+      if (previous.includes(text)) return "duplicate";
+      if (tokenSource !== undefined) return "conflict";
+    }
+    const tokens = estimateTokens(
+      JSON.stringify(tokenSource ?? `${line}: ${text}\n`),
+    );
     if (usedTokens + tokens > repositoryTokenBudget) {
       warnings.add(
         "Repository token budget reached; investigation is partial.",
@@ -467,6 +485,11 @@ export function createRepositoryReader(
     if (endLine < startLine)
       return { error: "End line must be at or after the start line." };
     const text = await content(path);
+    if (text === undefined)
+      return {
+        partial: true,
+        error: "Repository read limit reached; this file was not read.",
+      };
     if (text === null)
       return {
         error: "File is unavailable, binary, or exceeds review limits.",
@@ -497,59 +520,141 @@ export function createRepositoryReader(
       content: output.join("\n"),
       lastLine,
       ...(alreadyRead ? { alreadyRead } : {}),
+      ...(output.length === 0 && alreadyRead > 0
+        ? {
+            note: "The requested lines were already supplied in the diff or earlier tool results; consult the transcript. An error or partial flag means later requested lines could not be delivered.",
+          }
+        : {}),
       ...(partial
         ? { partial: true, error: "Repository token budget reached." }
         : {}),
     };
   }
 
-  async function searchText(query: string, pathPrefix: string) {
+  async function searchText(
+    query: string,
+    pathPrefix: string,
+    cursor: SearchCursor = { fileOffset: 0, lineOffset: 0 },
+  ) {
     await beforeRead();
     const candidates = snapshot.paths.filter(
       (f) => f.path.startsWith(pathPrefix) && f.size <= MAX_FILE_BYTES,
     );
-    if (candidates.length > 25)
-      warnings.add(
-        `Search for ${JSON.stringify(query)} examined only the first 25 files under ${pathPrefix || "/"}.`,
-      );
+    const startFileOffset = Math.max(0, Math.floor(cursor.fileOffset));
+    let fileOffset = startFileOffset;
+    let lineOffset = Math.max(0, Math.floor(cursor.lineOffset));
+    const coverageWarning = `Search for ${JSON.stringify(query)} under ${pathPrefix || "/"} is partial; follow nextCursor when available and inspect reported limits.`;
+    const key = JSON.stringify([query, pathPrefix]);
+    const restart = cursor.fileOffset === 0 && cursor.lineOffset === 0;
+    const progress = restart
+      ? { next: cursor as SearchCursor | null, skipped: false }
+      : searchProgress.get(key);
+    if (
+      !progress ||
+      (!restart &&
+        (progress.next?.fileOffset !== cursor.fileOffset ||
+          progress.next?.lineOffset !== cursor.lineOffset))
+    ) {
+      const partial = !progress || progress.next !== null || progress.skipped;
+      if (partial) warnings.add(coverageWarning);
+      return {
+        matches: [],
+        partial,
+        nextCursor: progress ? progress.next : { fileOffset: 0, lineOffset: 0 },
+        error:
+          "Use the returned nextCursor without skipping pages, or restart at zero.",
+      };
+    }
+    searchProgress.set(key, progress);
     const matches: { path: string; line: number; text: string }[] = [];
     let alreadyRead = 0;
-    for (const file of candidates.slice(0, 25)) {
+    let scannedFiles = 0;
+    let scannedLines = 0;
+    const result = (nextCursor: SearchCursor | null, error?: string) => {
+      progress.next = nextCursor;
+      const partial = nextCursor !== null || progress.skipped;
+      if (partial) warnings.add(coverageWarning);
+      else warnings.delete(coverageWarning);
+      return {
+        matches,
+        partial,
+        ...(alreadyRead ? { alreadyRead } : {}),
+        scannedFiles,
+        scannedLines,
+        nextCursor,
+        ...(error ? { error } : {}),
+      };
+    };
+    while (fileOffset < candidates.length && scannedFiles < MAX_SEARCH_FILES) {
+      const currentFileOffset = fileOffset;
+      const file = candidates[currentFileOffset];
+      const currentLineOffset =
+        currentFileOffset === startFileOffset ? lineOffset : 0;
+      scannedFiles++;
       const text = await content(file.path);
-      if (text === null) continue;
+      if (text === undefined)
+        return result(
+          { fileOffset: currentFileOffset, lineOffset: currentLineOffset },
+          "Repository read limit reached; remaining files were not searched.",
+        );
+      if (text === null) {
+        fileOffset++;
+        lineOffset = 0;
+        continue;
+      }
       const lines = text.split("\n");
-      for (let i = 0; i < lines.length; i++) {
+      for (
+        let i = Math.min(currentLineOffset, lines.length);
+        i < lines.length;
+        i++
+      ) {
+        scannedLines++;
         if (lines[i].includes(query)) {
-          const text = lines[i].slice(0, 500);
-          const delivered = deliverLine(file.path, i + 1, text);
+          const matchIndex = lines[i].indexOf(query);
+          const matchStart = Math.max(
+            0,
+            Math.min(
+              matchIndex - Math.floor((500 - query.length) / 2),
+              lines[i].length - 500,
+            ),
+          );
+          const matchText = lines[i].slice(matchStart, matchStart + 500);
+          const match = { path: file.path, line: i + 1, text: matchText };
+          const delivered = deliverLine(file.path, i + 1, matchText, match);
+          if (delivered === "conflict") {
+            progress.skipped = true;
+            return {
+              ...result(
+                { fileOffset: currentFileOffset, lineOffset: i + 1 },
+                "This match was skipped to preserve earlier source evidence on this line. Optionally read requiredRead with readFile; nextCursor continues after the skipped line. Restart the search after reading it to restore complete coverage.",
+              ),
+              requiredRead: { path: file.path, line: i + 1 },
+            };
+          }
           if (delivered === "exhausted")
-            return {
-              matches,
-              partial: true,
-              alreadyRead,
-              error: "Repository token budget reached.",
-            };
+            return result(
+              { fileOffset: currentFileOffset, lineOffset: i },
+              "Repository token budget reached.",
+            );
           if (delivered === "duplicate") alreadyRead++;
-          else
-            matches.push({
-              path: file.path,
-              line: i + 1,
-              text,
-            });
-          if (matches.length >= 20)
-            return {
-              matches,
-              partial: true,
-              ...(alreadyRead ? { alreadyRead } : {}),
-            };
+          else matches.push(match);
+          if (matches.length >= MAX_SEARCH_MATCHES) {
+            const nextCursor =
+              i + 1 < lines.length
+                ? { fileOffset: currentFileOffset, lineOffset: i + 1 }
+                : currentFileOffset + 1 < candidates.length
+                  ? { fileOffset: currentFileOffset + 1, lineOffset: 0 }
+                  : null;
+            return result(nextCursor);
+          }
         }
       }
+      fileOffset++;
+      lineOffset = 0;
     }
-    return {
-      matches,
-      partial: candidates.length > 25,
-      ...(alreadyRead ? { alreadyRead } : {}),
-    };
+    return result(
+      fileOffset < candidates.length ? { fileOffset, lineOffset } : null,
+    );
   }
 
   /** Caps lines delivered until the next call so one turn cannot overflow the model input. */

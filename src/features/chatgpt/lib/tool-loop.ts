@@ -38,8 +38,12 @@ type Finish =
       description: string;
       schema: z.ZodType;
       instruction: string;
-      /** Runs after investigation, before the final call. */
-      before?: () => Promise<void> | void;
+      /** Runs before each final call; receives any correction input being added. */
+      before?: (
+        additionalInput?: ResponseInput,
+      ) => Promise<boolean | void> | boolean | void;
+      /** Maximum structured final attempts. Defaults to one. */
+      maxAttempts?: 1 | 2;
     };
 
 const MAX_CALLS_PER_TURN = 16;
@@ -50,7 +54,7 @@ const NAMESPACE = "meteroite";
  * reasoning, are replayed across turns. Investigation ends when the model stops
  * calling tools, the budget leaves no room for another turn, or `maxTurns` is
  * reached. A text finish forces a tool-free answer on the last turn; a
- * structured finish makes one more call that must return `finish.name`, whose
+ * structured finish makes a final call that must return `finish.name`, whose
  * parsed arguments are `value` (undefined when malformed).
  */
 export async function runToolLoop<Value = unknown>({
@@ -176,27 +180,87 @@ export async function runToolLoop<Value = unknown>({
     throw new Error(
       "ChatGPT reached this turn's tool limit. Send a follow-up to continue.",
     );
-  await finish.before?.();
+  const finalTools = [
+    functionDefinition(finish.name, finish.description, finish.schema),
+  ];
+  const maxAttempts = finish.maxAttempts ?? 1;
+  let correctionOverhead: ResponseInput = [];
   input.push({ role: "user", content: finish.instruction });
-  const response = await infer("chatgpt-inference-final", {
-    input,
-    tools: [
-      functionNamespace(finish.description, [
-        functionDefinition(finish.name, finish.description, finish.schema),
-      ]),
-    ],
-    tool_choice: "required",
-  });
-  const calls = response.output.filter((item) => item.type === "function_call");
-  let value: Value | undefined;
-  if (calls.length === 1 && calls[0].name === finish.name) {
-    try {
-      value = finish.schema.parse(JSON.parse(calls[0].arguments)) as Value;
-    } catch {
-      // Malformed; callers supply their own fallback.
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const canContinue = await finish.before?.(
+      attempt === 0 ? undefined : correctionOverhead,
+    );
+    if (canContinue === false) return { turns, budgetStopped };
+    await beforeCall?.();
+    const response = await infer(
+      attempt === 0
+        ? "chatgpt-inference-final"
+        : "chatgpt-inference-final-correction",
+      { input, tools: finalTools, tool_choice: "required" },
+    );
+    const calls = response.output.filter(
+      (item) => item.type === "function_call",
+    );
+    let value: Value | undefined;
+    let rejection: string | undefined;
+    if (calls.length !== 1) {
+      rejection =
+        calls.length === 0
+          ? `The required ${finish.name} tool call was missing.`
+          : `Expected exactly one ${finish.name} tool call; received ${calls.length}.`;
+    } else {
+      const call = calls[0];
+      if (call.name !== finish.name) {
+        rejection = `Expected ${finish.name}; received ${call.name}.`;
+      } else if (call.namespace && call.namespace !== NAMESPACE) {
+        rejection = `Expected the ${NAMESPACE} namespace; received ${call.namespace}.`;
+      } else {
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(call.arguments);
+        } catch {
+          rejection = "Arguments were not valid JSON.";
+        }
+        if (!rejection) {
+          try {
+            value = finish.schema.parse(parsed) as Value;
+          } catch (error) {
+            rejection = `Arguments failed schema validation: ${
+              error instanceof z.ZodError
+                ? z.prettifyError(error)
+                : "invalid value"
+            }`;
+          }
+        }
+      }
     }
+    if (value !== undefined) return { value, turns, budgetStopped };
+
+    // Invalid structured responses still consume provider budget. Never retry
+    // transport or stream errors: they escape from infer above.
+    budget?.record(response, []);
+    if (attempt + 1 >= maxAttempts || !rejection)
+      return { turns, budgetStopped };
+    const reason = rejection.slice(0, 700);
+    const correction = `Your previous structured response was rejected: ${reason} Return exactly one ${finish.name} call with schema-valid JSON arguments.`;
+    const rejectedCalls = response.output.filter(
+      (item) => item.type === "function_call",
+    );
+    correctionOverhead = [
+      ...rejectedCalls.map((call) => ({
+        type: "function_call_output" as const,
+        call_id: call.call_id,
+        output: JSON.stringify({ error: reason.slice(0, 500) }),
+      })),
+      { role: "user" as const, content: correction },
+    ];
+    const correctionInput: ResponseInput = [
+      ...(response.output as ResponseInput),
+      ...correctionOverhead,
+    ];
+    input.push(...correctionInput);
   }
-  return { value, turns, budgetStopped };
+  return { turns, budgetStopped };
 }
 
 async function executeCall(

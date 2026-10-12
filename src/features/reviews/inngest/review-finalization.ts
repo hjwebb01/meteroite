@@ -62,8 +62,10 @@ export async function finalizeReview(
     latest.head.sha !== snapshot.headSha ||
     latest.base.sha !== snapshot.baseSha;
   const warnings = [
-    ...coverageWarnings,
-    ...output.limitations.slice(0, 10).map((l) => l.slice(0, 500)),
+    ...new Set([
+      ...coverageWarnings,
+      ...output.limitations.slice(0, 10).map((l) => l.slice(0, 500)),
+    ]),
   ];
   if (rejectedGroups)
     warnings.push(

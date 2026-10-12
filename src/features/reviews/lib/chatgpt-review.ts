@@ -1,17 +1,11 @@
 import { runToolLoop } from "@/features/chatgpt/lib/tool-loop";
 import type { ChatGPTSelection } from "@/features/chatgpt/lib/types";
 import { reviewOutputSchema, type ReviewOutput } from "./review";
-import {
-  assertReviewContext,
-  estimateTokens,
-  nextRequestTokens,
-  turnAllowance,
-  type ReviewBudget,
-} from "./context-budget";
+import { createReviewContextBudget, type ReviewBudget } from "./context-budget";
 import type { ReviewTool } from "./review-tools";
 
 export const FINAL_INSTRUCTION =
-  "Include only findings supported by the inspected code. List important limitations, including anything that needs execution to verify.";
+  "Return one complete review object with all six fields: assessment, hotspots, changeGroups, summary, findings, and limitations. Assessment alone is invalid. Empty arrays are allowed; use limitations to report scope gaps. Include only findings supported by the inspected code, and list anything that needs execution to verify.";
 
 /** Stands in for a final review whose structure is unusable; coverage is kept by the caller. */
 export function malformedReview(): ReviewOutput {
@@ -54,8 +48,14 @@ export async function runChatGPTReview({
   checkActive: () => Promise<void>;
   prepareFindings: () => Promise<void>;
 }) {
-  let requestTokens = estimateTokens(system) + estimateTokens(context);
   const instruction = `Call return_review with the final review. ${FINAL_INSTRUCTION}`;
+  const contextBudget = createReviewContextBudget({
+    budget,
+    system,
+    context,
+    finalInstruction: instruction,
+    limitTurn,
+  });
   const { value, budgetStopped } = await runToolLoop<ReviewOutput>({
     selection,
     instructions: system,
@@ -69,14 +69,9 @@ export async function runChatGPTReview({
     signal,
     beforeCall: checkActive,
     budget: {
-      allowance: () => {
-        const allowance = turnAllowance(budget, requestTokens);
-        if (allowance > 0) limitTurn?.(allowance);
-        return allowance;
-      },
+      allowance: contextBudget.allowance,
       record: (response, results) => {
-        requestTokens = nextRequestTokens(
-          requestTokens,
+        contextBudget.record(
           {
             inputTokens: response.usage?.input_tokens,
             outputTokens: response.usage?.output_tokens,
@@ -92,12 +87,10 @@ export async function runChatGPTReview({
       description: "Return final findings and assessment.",
       schema: reviewOutputSchema,
       instruction,
-      before: async () => {
+      maxAttempts: 2,
+      before: async (additionalInput) => {
         await prepareFindings();
-        assertReviewContext(
-          budget,
-          requestTokens + estimateTokens(instruction),
-        );
+        return contextBudget.prepareFinal(additionalInput);
       },
     },
   });

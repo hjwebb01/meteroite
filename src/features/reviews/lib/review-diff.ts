@@ -37,7 +37,19 @@ export function navigationLocation(target: ReviewNavigationTarget) {
   };
 }
 
+/**
+ * The diff side a code reference is annotated on. Only removed lines are
+ * "deletions"; a missing side reads as "additions".
+ */
+export function diffSideOf(side?: "LEFT" | "RIGHT") {
+  return side === "LEFT" ? ("deletions" as const) : ("additions" as const);
+}
+
 /** Identifies the diff annotation a target renders as; other targets have none. */
+export function annotationKey(target: ReviewAnnotation): string;
+export function annotationKey(
+  target: ReviewNavigationTarget,
+): string | undefined;
 export function annotationKey(target: ReviewNavigationTarget) {
   if (target.kind === "finding") return `finding:${target.finding.id}`;
   if (target.kind === "hotspot") {
@@ -106,7 +118,7 @@ export function buildDiffItems(
     const annotations = findings
       .filter((f) => f.path === path)
       .map((f): DiffLineAnnotation<ReviewAnnotation> => ({
-        side: f.side === "LEFT" ? "deletions" : "additions",
+        side: diffSideOf(f.side),
         lineNumber: f.line,
         metadata: { kind: "finding", finding: f },
       }));
@@ -115,7 +127,7 @@ export function buildDiffItems(
         hotspot.references
           .filter((reference) => reference.path === path)
           .map((reference): DiffLineAnnotation<ReviewAnnotation> => ({
-            side: reference.side === "LEFT" ? "deletions" : "additions",
+            side: diffSideOf(reference.side),
             lineNumber: reference.line,
             metadata: { kind: "hotspot", hotspot, reference },
           })),
@@ -147,4 +159,92 @@ function hashString(value: string) {
   for (let i = 0; i < value.length; i++)
     hash = (Math.imul(hash, 31) + value.charCodeAt(i)) | 0;
   return hash;
+}
+
+const CARD_GAP = 8;
+/** Cards start above their line so the streak meets the card's first row. */
+const CARD_LEAD = 14;
+
+/** Roughly one file header; the header counts as reached this close to the top. */
+const HEADER_REACH = 40;
+
+/** Positions margin cards and counts offscreen entries, including unrendered anchors. */
+export function calculateMarginLayout({
+  anchors,
+  height,
+  headers,
+  entries,
+}: {
+  anchors: { key: string; lineY: number; height: number }[];
+  height: number;
+  headers: { path: string; top: number }[];
+  entries: ReviewAnnotation[];
+}) {
+  const sorted = [...anchors].sort((a, b) => a.lineY - b.lineY);
+  const tops = stackCards(sorted, height);
+  const placements = new Map(
+    sorted.map(({ key, lineY }, i) => [key, { top: tops[i], lineY }]),
+  );
+  // Sticky headers count as reached; before that, the first file is current.
+  const passed = headers.filter((header) => header.top <= HEADER_REACH);
+  const path = (passed.at(-1) ?? headers[0])?.path ?? null;
+  const isVisible = (key: string) => {
+    const place = placements.get(key);
+    return place !== undefined && place.lineY >= 0 && place.lineY <= height;
+  };
+  const keys = entries.map((metadata) => annotationKey(metadata));
+  // Entries are in line order: the first at or below the top splits the list.
+  let pivot = keys.findIndex((key) => (placements.get(key)?.lineY ?? -1) >= 0);
+  if (pivot === -1) {
+    const lastPlaced = keys.reduce(
+      (last, key, i) => (placements.has(key) ? i : last),
+      -1,
+    );
+    pivot =
+      lastPlaced !== -1
+        ? lastPlaced + 1
+        : Math.max(
+            0,
+            entries.findIndex(
+              (entry) => navigationLocation(entry).path === path,
+            ),
+          );
+  }
+  const later = keys.slice(pivot).filter((key) => !isVisible(key));
+  return {
+    placements,
+    path,
+    hint: {
+      above: pivot,
+      aboveKey: pivot > 0 ? keys[pivot - 1] : undefined,
+      below: later.length,
+      belowKey: later[0],
+    },
+  };
+}
+
+/**
+ * Tops for margin cards, given anchors sorted by line position. A card sits at
+ * its line and is pushed down past any card above it. Anchors below the
+ * viewport keep their unclamped position, and the last visible cards slide up
+ * to stay on screen.
+ */
+export function stackCards(
+  anchors: { lineY: number; height: number }[],
+  viewport: number,
+) {
+  const tops: number[] = [];
+  let floor = -Infinity;
+  for (const { lineY, height } of anchors) {
+    const top = Math.max(lineY - CARD_LEAD, floor);
+    tops.push(top);
+    floor = top + height + CARD_GAP;
+  }
+  let ceiling = viewport - CARD_GAP;
+  for (let i = anchors.length - 1; i >= 0; i--) {
+    if (anchors[i].lineY > viewport) continue;
+    tops[i] = Math.max(0, Math.min(tops[i], ceiling - anchors[i].height));
+    ceiling = tops[i] - CARD_GAP;
+  }
+  return tops;
 }

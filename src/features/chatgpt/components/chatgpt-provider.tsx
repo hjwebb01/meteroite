@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronDownIcon, LoaderIcon } from "lucide-react";
+import ChevronDownIcon from "@boxicons/react/ChevronDown";
+import LoaderIcon from "@boxicons/react/LoaderLines";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -21,13 +22,24 @@ export function ChatGPTProvider({
     <Popover>
       <PopoverTrigger asChild>
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
-          className="w-full justify-between"
+          className="gap-2 text-review-body hover:text-foreground"
           aria-label="ChatGPT connection settings"
         >
-          <span>ChatGPT connection</span>
-          <ChevronDownIcon className="size-3.5" />
+          <span
+            aria-hidden="true"
+            className={
+              status.connected
+                ? "size-1.5 rounded-full bg-sev-resolved"
+                : "size-1.5 rounded-full border border-review-muted"
+            }
+          />
+          {status.connected ? "ChatGPT" : "Connect ChatGPT"}
+          <ChevronDownIcon
+            aria-hidden="true"
+            className="size-3.5 text-review-muted"
+          />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 space-y-4">
@@ -51,7 +63,10 @@ export function ChatGPTProvider({
         {pending && (
           <div className="space-y-2">
             <p role="status" className="flex items-center gap-2 text-xs">
-              <LoaderIcon className="size-3.5 animate-spin" />
+              <LoaderIcon
+                aria-hidden="true"
+                className="size-3.5 animate-spin motion-reduce:animate-none"
+              />
               Finish signing in in the new tab.
             </p>
             <Button
@@ -79,7 +94,12 @@ export function ChatGPTProvider({
             disabled={busy}
             type="submit"
           >
-            {busy && <LoaderIcon className="size-3.5 animate-spin" />}
+            {busy && (
+              <LoaderIcon
+                aria-hidden="true"
+                className="size-3.5 animate-spin motion-reduce:animate-none"
+              />
+            )}
             {status.connected ? "Reconnect ChatGPT" : "Continue with ChatGPT"}
           </Button>
         </form>

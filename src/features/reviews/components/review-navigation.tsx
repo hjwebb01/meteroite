@@ -52,7 +52,7 @@ export function ReviewNavigation({
         (focus?.kind === "hunk" || focus?.kind === "group") &&
         focus.hunk.id === hunk.id
       }
-      className="block w-full rounded px-2 py-1.5 text-left text-xs text-blue-300 hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+      className="block w-full rounded px-2 py-1.5 text-left text-xs text-review-link hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
     >
       <span className="break-all font-mono">{hunk.path}</span>
       <span className="block text-muted-foreground">
@@ -65,7 +65,7 @@ export function ReviewNavigation({
   return (
     <section
       aria-label="Change navigation"
-      className="mb-7 rounded-lg border bg-sidebar p-4"
+      className="mb-7 rounded-md border bg-sidebar p-4"
     >
       <h2 className="font-semibold">Explore changes</h2>
       <p className="mt-2 text-xs leading-5 text-muted-foreground">
@@ -142,7 +142,7 @@ export function ReviewNavigation({
             <button
               type="button"
               onClick={() => onNavigate({ kind: "file", path: file.filename })}
-              className="mt-2 rounded px-2 py-1 text-xs text-blue-300 underline focus-visible:outline-2 focus-visible:outline-ring"
+              className="mt-2 rounded px-2 py-1 text-xs text-review-link underline focus-visible:outline-2 focus-visible:outline-ring"
             >
               {file.patch ? "Open file diff" : "Show file coverage"}
             </button>

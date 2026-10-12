@@ -1,14 +1,36 @@
 // @vitest-environment node
 import { afterEach, expect, test, vi } from "vitest";
 import {
-  assertReviewContext,
+  ContextBudgetError,
   createReviewBudget,
+  createReviewContextBudget,
   estimateTokens,
-  nextRequestTokens,
-  turnAllowance,
 } from "./context-budget";
 
 afterEach(() => vi.unstubAllGlobals());
+
+test("counts code and Unicode tokens with headroom rather than charging every byte", () => {
+  expect(estimateTokens("Hello, world!")).toBe(5);
+  expect(estimateTokens("你好，世界🌍")).toBe(6);
+  const code = "const user = await loadUser(id);\n".repeat(100);
+  expect(estimateTokens(code)).toBeLessThan(Buffer.byteLength(code) / 2);
+  expect(estimateTokens("")).toBe(0);
+});
+
+test("token-like strings in repository content are counted as literal text", () => {
+  expect(estimateTokens("<|endoftext|>")).toBe(9);
+});
+
+test("bounds counting work on long repetitive source without losing compression", () => {
+  const source = "a".repeat(400_000);
+  const started = performance.now();
+  expect(estimateTokens(source)).toBe(57_500);
+  expect(performance.now() - started).toBeLessThan(2_000);
+  // A chunk boundary must not split a Unicode surrogate pair.
+  expect(
+    estimateTokens("a".repeat(4_095) + "🌍" + "a".repeat(4_095)),
+  ).toBeGreaterThan(0);
+});
 
 test("smaller model windows reduce source budgets while large models have a cost ceiling", () => {
   const small = createReviewBudget(32_000);
@@ -18,35 +40,100 @@ test("smaller model windows reduce source budgets while large models have a cost
   expect(small.inputTokens + small.outputTokens + 4_000).toBeLessThan(32_000);
   expect(large.inputTokens).toBe(256_000);
   expect(estimateTokens("é")).toBe(2);
-  expect(() => assertReviewContext(small, small.inputTokens + 1)).toThrow(
-    "model input budget",
-  );
 });
 
-test("the next request uses reported usage and falls back to estimates", () => {
+function contextBudget(
+  budget = createReviewBudget(1_050_000),
+  limitTurn?: (tokens: number) => void,
+) {
+  return createReviewContextBudget({
+    budget,
+    system: "Inspect source",
+    context: "Pull request",
+    finalInstruction: "Return the final review",
+    limitTurn,
+  });
+}
+
+test("reported usage replaces the estimate and tool results reduce source allowance", () => {
+  const state = contextBudget();
   const output = [{ type: "text", text: "abcd" }];
   const results = [{ lines: "1: x" }];
-  const appended = estimateTokens(JSON.stringify(results));
-  expect(
-    nextRequestTokens(
-      90_000,
-      { inputTokens: 1_000, outputTokens: 200 },
-      output,
-      results,
-    ),
-  ).toBe(1_200 + appended);
-  expect(nextRequestTokens(500, undefined, output, results)).toBe(
-    500 + estimateTokens(JSON.stringify(output)) + appended,
+  state.record({ inputTokens: 1_000, outputTokens: 200 }, output, results);
+  expect(state.allowance()).toBe(
+    256_000 - 16_000 - 1_200 - estimateTokens(JSON.stringify(results)),
+  );
+  expect(state.prepareFinal()).toBe(true);
+});
+
+test("missing usage accumulates output and tool results across turns", () => {
+  const state = contextBudget();
+  const initial = state.allowance();
+  const output = [{ type: "text", text: "Inspected the caller" }];
+  const results = [{ lines: "1: authorize(user)" }];
+  const added =
+    estimateTokens(JSON.stringify(output)) +
+    estimateTokens(JSON.stringify(results));
+  state.record(undefined, output, results);
+  state.record(undefined, output, results);
+  expect(state.allowance()).toBe(initial - 2 * added);
+  expect(state.prepareFinal()).toBe(true);
+});
+
+test("investigation exhaustion stops source delivery but leaves room for the final review", () => {
+  const limitTurn = vi.fn();
+  const state = contextBudget(undefined, limitTurn);
+  expect(state.allowance()).toBeGreaterThan(0);
+  state.record({ inputTokens: 240_000, outputTokens: 1_000 }, [], []);
+  expect(state.allowance()).toBeLessThanOrEqual(0);
+  expect(limitTurn).toHaveBeenCalledOnce();
+  expect(state.prepareFinal()).toBe(true);
+  expect(contextBudget(createReviewBudget(32_000)).allowance()).toBeGreaterThan(
+    0,
   );
 });
 
-test("a turn is allowed only while it leaves room for its output and the final call", () => {
-  const large = createReviewBudget(1_050_000);
-  expect(turnAllowance(large, 100_000)).toBe(256_000 - 100_000 - 16_000);
-  expect(turnAllowance(large, 240_000)).toBeLessThanOrEqual(0);
-  const small = createReviewBudget(32_000);
-  // Small windows scale the reserve down so they can still investigate.
-  expect(turnAllowance(small, 5_000)).toBeGreaterThan(0);
+test("the final instruction must fit even when no investigation ran", () => {
+  const state = createReviewContextBudget({
+    budget: createReviewBudget(32_000),
+    system: "Inspect source",
+    context: "const user = await loadUser(id);\n".repeat(10_000),
+    finalInstruction: "Return the final review",
+  });
+  expect(state.allowance()).toBeLessThanOrEqual(0);
+  expect(() => state.prepareFinal()).toThrow(ContextBudgetError);
+});
+
+test("correction overhead is charged after a rejected final call and skipped when it cannot fit", () => {
+  const budget = createReviewBudget(32_000);
+  const state = contextBudget(budget);
+  const correction = [{ role: "user", content: "Correct the rejected output" }];
+  expect(state.prepareFinal()).toBe(true);
+  state.record({ inputTokens: 1_000, outputTokens: 200 }, [], []);
+  expect(state.prepareFinal(correction)).toBe(true);
+  state.record({ inputTokens: budget.inputTokens, outputTokens: 0 }, [], []);
+  expect(state.prepareFinal(correction)).toBe(false);
+  expect(() => state.prepareFinal()).toThrow(ContextBudgetError);
+});
+
+test("final calls accept an exact fit and account for correction-only overflow", () => {
+  const budget = createReviewBudget(32_000);
+  const state = contextBudget(budget);
+  state.record(
+    {
+      inputTokens:
+        budget.inputTokens -
+        estimateTokens("Return the final review") -
+        estimateTokens(JSON.stringify([])),
+      outputTokens: 0,
+    },
+    [],
+    [],
+  );
+  expect(state.prepareFinal()).toBe(true);
+  expect(state.prepareFinal([{ role: "user", content: "Try again" }])).toBe(
+    false,
+  );
 });
 
 test("loads the selected model's live context window and caches the catalog", async () => {

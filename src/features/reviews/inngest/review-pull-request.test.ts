@@ -67,7 +67,7 @@ test.each(["small-model", "large-model"])(
               {
                 filename: "src/auth.ts",
                 status: "modified",
-                patch: `@@ -1 +1 @@\n-oldAuth();\n+${"newAuth();".padEnd(70_000, " ")}`,
+                patch: `@@ -1 +1 @@\n-oldAuth();\n+newAuth();${" const policy = validateAccess(user);".repeat(2500)}`,
               },
             ],
           }),
@@ -268,7 +268,8 @@ test.each(["small-model", "large-model"])(
 );
 
 test("a diff beyond one model context is reviewed in parts and merged from their evidence", async () => {
-  const pad = (line: string) => line.padEnd(70_000, " ");
+  const pad = (line: string) =>
+    line + " const policy = validateAccess(user);".repeat(350);
   mocks.query.mockImplementation((ref) =>
     getFunctionName(ref) === "reviewJobs:status"
       ? "running"
@@ -278,7 +279,7 @@ test("a diff beyond one model context is reviewed in parts and merged from their
             repoOwner: "owner",
             repoName: "app",
             pullNumber: 7,
-            model: "large-model",
+            model: "small-model",
             instructions: "",
           },
           previous: null,

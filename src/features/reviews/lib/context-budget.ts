@@ -1,3 +1,4 @@
+import { countTokens } from "gpt-tokenizer/encoding/o200k_base";
 import { chatGPTReviewSlug } from "../../../../convex/lib/review_models";
 
 const OUTPUT_TOKENS = 8_000;
@@ -17,10 +18,24 @@ export type ReviewBudget = {
   warning?: string;
 };
 
-// A byte per token is deliberately conservative across providers, including
-// punctuation-heavy code and Unicode. JSON escaping is counted by callers.
+// Modern OpenAI BPE is a closer estimate for source and JSON than byte length.
+// Other providers can tokenize differently; keep 15% headroom here and use
+// provider-reported usage after each call. Special-token strings in source
+// are ordinary text, never control tokens.
 export function estimateTokens(text: string) {
-  return Buffer.byteLength(text, "utf8");
+  // Bound BPE work on untrusted, repetitive lines. Chunk boundaries may add
+  // tokens, which is conservative for the context budget.
+  let tokens = 0;
+  for (let start = 0; start < text.length;) {
+    let end = Math.min(start + 4_096, text.length);
+    const last = text.charCodeAt(end - 1);
+    if (end < text.length && last >= 0xd800 && last <= 0xdbff) end--;
+    tokens += countTokens(text.slice(start, end), {
+      disallowedSpecial: new Set(),
+    });
+    start = end;
+  }
+  return Math.ceil(tokens * 1.15);
 }
 
 export function createReviewBudget(
@@ -82,42 +97,56 @@ export class ContextBudgetError extends Error {}
 export type CallUsage = { inputTokens?: number; outputTokens?: number };
 
 /**
- * Size of the next request in a tool loop: the provider-reported size of the
- * previous call plus its output and the tool results appended after it. Falls
- * back to estimates for anything the provider does not report.
+ * Owns one review's context accounting across investigation and final calls.
+ * Adapters translate usage and transcript additions; they do not track tokens.
  */
-export function nextRequestTokens(
-  previous: number,
-  usage: CallUsage | undefined,
-  output: unknown,
-  appended: unknown,
-) {
-  return (
-    (usage?.inputTokens ?? previous) +
-    (usage?.outputTokens ?? estimateTokens(JSON.stringify(output))) +
-    estimateTokens(JSON.stringify(appended))
-  );
-}
-
-/**
- * Repository tokens the next investigation turn may add while leaving room
- * for that turn's own output and the final review call. Zero or less means
- * the investigation should stop.
- */
-export function turnAllowance(budget: ReviewBudget, requestTokens: number) {
+export function createReviewContextBudget({
+  budget,
+  system,
+  context,
+  finalInstruction,
+  limitTurn,
+}: {
+  budget: ReviewBudget;
+  system: string;
+  context: string;
+  finalInstruction: string;
+  limitTurn?: (tokens: number) => void;
+}) {
+  let requestTokens = estimateTokens(system) + estimateTokens(context);
+  const finalTokens = estimateTokens(finalInstruction);
   const reserve = Math.min(
     TURN_RESERVE_TOKENS,
     Math.floor(budget.inputTokens * 0.15),
   );
-  return budget.inputTokens - requestTokens - reserve;
-}
 
-export function assertReviewContext(
-  budget: ReviewBudget,
-  requestTokens: number,
-) {
-  if (requestTokens > budget.inputTokens)
-    throw new ContextBudgetError(
-      "The review reached its model input budget. Narrow the review scope or select a model with a larger context window.",
-    );
+  return {
+    /** Zero or less stops investigation while retaining room for its final call. */
+    allowance() {
+      const allowance = budget.inputTokens - requestTokens - reserve;
+      if (allowance > 0) limitTurn?.(allowance);
+      return allowance;
+    },
+    /** Record a call's usage and any transcript additions not included in it. */
+    record(usage: CallUsage | undefined, output: unknown, appended: unknown) {
+      requestTokens =
+        (usage?.inputTokens ?? requestTokens) +
+        (usage?.outputTokens ?? estimateTokens(JSON.stringify(output))) +
+        estimateTokens(JSON.stringify(appended));
+    },
+    /** An oversized first final call fails; an oversized correction is skipped. */
+    prepareFinal(additionalInput?: unknown[]) {
+      const tokens =
+        requestTokens +
+        finalTokens +
+        (additionalInput?.length
+          ? estimateTokens(JSON.stringify(additionalInput))
+          : 0);
+      if (tokens <= budget.inputTokens) return true;
+      if (additionalInput?.length) return false;
+      throw new ContextBudgetError(
+        "The review reached its model input budget. Narrow the review scope or select a model with a larger context window.",
+      );
+    },
+  };
 }

@@ -15,11 +15,8 @@ import {
   runChatGPTReview,
 } from "../lib/chatgpt-review";
 import {
-  assertReviewContext,
   ContextBudgetError,
-  estimateTokens,
-  nextRequestTokens,
-  turnAllowance,
+  createReviewContextBudget,
   type ReviewBudget,
 } from "../lib/context-budget";
 import { reviewOutputSchema, type ReviewOutput } from "../lib/review";
@@ -129,11 +126,16 @@ async function runOpenRouterReview({
   signal: AbortSignal;
   prepareFindings: () => Promise<void>;
 }) {
-  let requestTokens = estimateTokens(system) + estimateTokens(context);
-  let allowance = turnAllowance(budget, requestTokens);
+  const contextBudget = createReviewContextBudget({
+    budget,
+    system,
+    context,
+    finalInstruction: FINAL_INSTRUCTION,
+    limitTurn,
+  });
+  let allowance = contextBudget.allowance();
   const investigate = maxTurns > 0 && allowance > 0;
   let budgetStopped = maxTurns > 0 && !investigate;
-  limitTurn?.(allowance);
   const investigation = investigate
     ? await generateText({
         model,
@@ -143,25 +145,16 @@ async function runOpenRouterReview({
         abortSignal: signal,
         stopWhen: [isStepCount(maxTurns), () => budgetStopped],
         onStepEnd: (step) => {
-          requestTokens = nextRequestTokens(
-            requestTokens,
-            step.usage,
-            step.content,
-            step.toolResults,
-          );
-          allowance = turnAllowance(budget, requestTokens);
+          contextBudget.record(step.usage, step.content, step.toolResults);
+          allowance = contextBudget.allowance();
           // A step without tool calls ends the investigation on its own.
           budgetStopped = allowance <= 0 && step.toolCalls.length > 0;
-          limitTurn?.(allowance);
         },
         tools: toAiSdkTools(tools, signal),
       })
     : { responseMessages: [] };
   await prepareFindings();
-  assertReviewContext(
-    budget,
-    requestTokens + estimateTokens(FINAL_INSTRUCTION),
-  );
+  contextBudget.prepareFinal();
   try {
     const { output } = await generateText({
       model,

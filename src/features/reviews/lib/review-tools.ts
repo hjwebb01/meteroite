@@ -2,6 +2,8 @@ import { z } from "zod";
 import { ToolInputError } from "@/features/chatgpt/lib/tool-loop";
 import type { createRepositoryReader, loadPullRequest } from "./github-context";
 
+const MAX_LISTED_PATHS = 50;
+
 /**
  * SDK-independent contract for read-only review tools. Provider adapters
  * (AI SDK, ChatGPT Responses) derive their definitions from these fields and
@@ -85,24 +87,31 @@ export function createRepositoryTools(
     defineReviewTool({
       name: "listFiles",
       description:
-        "Find repository files at the pinned head revision. Use prefixes to discover related code and tests.",
-      parameters: z.object({ prefix: z.string().max(500) }),
-      run: async ({ prefix }) => {
+        "Find repository files at the pinned head revision. Use prefixes to discover related code and tests. Returns at most 50 paths; continue with nextCursor when partial is true. Cursor is a zero-based offset into the pinned, prefix-filtered path list.",
+      parameters: z.object({
+        prefix: z.string().max(500),
+        cursor: z.number().int().nonnegative().optional(),
+      }),
+      run: async ({ prefix, cursor = 0 }) => {
         await checkActive();
         const paths = snapshot.paths
           .filter((f) => f.path.startsWith(prefix))
           .map((f) => f.path);
+        const page = paths.slice(cursor, cursor + MAX_LISTED_PATHS);
+        const nextCursor =
+          cursor + page.length < paths.length ? cursor + page.length : null;
         return {
-          paths: paths.slice(0, 200),
+          paths: page,
           total: paths.length,
-          truncated: paths.length > 200,
+          partial: nextCursor !== null,
+          nextCursor,
         };
       },
     }),
     defineReviewTool({
       name: "readFile",
       description:
-        "Read numbered source lines at the pinned head commit. Read additional windows for long files. Already delivered lines are omitted and counted in alreadyRead; consult the earlier transcript for them.",
+        "Read numbered source lines at the pinned head commit. Read additional windows for long files. Already delivered lines are omitted and counted in alreadyRead; consult the diff or earlier transcript for them. Empty content with alreadyRead means the requested lines were already supplied, not unavailable.",
       parameters: z.object({
         path: z.string().max(500),
         startLine: z.number().int().positive(),
@@ -114,12 +123,19 @@ export function createRepositoryTools(
     defineReviewTool({
       name: "searchText",
       description:
-        "Search a literal symbol or phrase in a narrow repository path prefix. At most 25 files are scanned per call; results explain partial coverage. Already delivered lines are omitted and counted in alreadyRead; consult the earlier transcript for them.",
+        "Search a literal symbol or phrase in a narrow repository path prefix. At most 25 files are scanned and 20 new matches are returned per call; continue with the returned nextCursor when partial is true. Cursor fileOffset and lineOffset are zero-based offsets in the pinned, prefix- and size-filtered path list and current file. Already delivered lines are omitted and counted in alreadyRead; consult the earlier transcript for them.",
       parameters: z.object({
         query: z.string().min(2).max(120),
         pathPrefix: z.string().max(500),
+        cursor: z
+          .object({
+            fileOffset: z.number().int().nonnegative(),
+            lineOffset: z.number().int().nonnegative(),
+          })
+          .optional(),
       }),
-      run: ({ query, pathPrefix }) => reader.searchText(query, pathPrefix),
+      run: ({ query, pathPrefix, cursor }) =>
+        reader.searchText(query, pathPrefix, cursor),
     }),
   ];
 }

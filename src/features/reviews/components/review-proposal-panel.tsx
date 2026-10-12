@@ -26,7 +26,7 @@ export default function ReviewProposalPanel({
   return (
     <section
       aria-label="Proposed fix"
-      className="mt-4 rounded-lg border p-3 text-xs"
+      className="mt-4 rounded-md border p-3 text-xs"
     >
       <h3 className="font-semibold">
         Proposed fix · {proposal.sourceSha.slice(0, 7)}
@@ -59,7 +59,7 @@ export default function ReviewProposalPanel({
                   ? null
                   : { name: file.path, contents: file.replacement },
               )}
-              options={{ diffStyle: "unified" }}
+              options={{ diffStyle: "unified", themeType: "dark" }}
             />
           </div>
         ))
@@ -101,7 +101,7 @@ export default function ReviewProposalPanel({
       {action !== "applied" && action !== "reassess" && (
         <Button
           size="sm"
-          className="mt-4"
+          className="mt-4 h-auto min-h-8 whitespace-normal break-words bg-review-text text-review-bg hover:bg-review-text/90"
           disabled={!inspected || applying || action === "wait"}
           onClick={async () => {
             setApplying(true);

@@ -6,6 +6,7 @@ import {
   codeReferenceSchema,
   hotspotSchema,
 } from "./review_navigation";
+import { reassessmentSchema } from "./review_reassessment";
 import { zodValidator } from "./zod_validator";
 
 export const FINDING_CATEGORIES = [
@@ -67,32 +68,7 @@ export const fileCoverageGap = v.object({
 export const changeHunk = zodValidator(changeHunkSchema);
 export const changeGroup = zodValidator(changeGroupSchema);
 
-export const reviewReassessment = v.object({
-  sourceReviewId: v.string(),
-  sourceHeadSha: v.optional(v.string()),
-  sourceBaseSha: v.optional(v.string()),
-  headSha: v.string(),
-  comparedAt: v.number(),
-  contexts: v.array(
-    v.object({
-      kind: v.union(
-        v.literal("finding"),
-        v.literal("hotspot"),
-        v.literal("group"),
-      ),
-      sourceId: v.string(),
-      state: v.union(
-        v.literal("unchanged"),
-        v.literal("changed"),
-        v.literal("ambiguous"),
-      ),
-      reason: v.string(),
-      currentPaths: v.array(v.string()),
-      currentId: v.optional(v.string()),
-    }),
-  ),
-  absentFindingIds: v.array(v.string()),
-});
+export const reviewReassessment = zodValidator(reassessmentSchema);
 export const reviewFreshness = v.union(
   v.object({
     state: v.union(v.literal("current"), v.literal("outdated")),

@@ -1,0 +1,671 @@
+<!--
+Topic: Fusion crust design refactor (prototype, change to an existing app).
+Lands in: review workspace page (reviews-workspace.tsx: rail + review header) with the
+diff panel (review-diff-panel.tsx: file tabs with minimap ticks, stacked file diffs,
+margin column of finding cards joined by streaks). Tokens copied from src/app/globals.css.
+
+Questions reflected:
+  Q1 answered B  - code sits on a darker, less saturated well (#121110) inside the warm chrome;
+                   file headers, tabs, rail and margin stay on the fusion crust.
+  Q2 answered B  - cooling on dismiss runs ~400ms (200ms under reduced motion).
+  Q3 answered C  - Hedvig serif also on collapsed finding titles.
+  Q4 OPEN (rec B) - 1px --review-border rule under each file header, where the well begins.   [assumed]
+  Q5 OPEN (rec B) - collapsed titles Hedvig 14px, wrap to at most two lines.                 [assumed]
+  Q6 OPEN (rec A) - only the reviewer's own dismiss cools; a reassessment ("Review latest
+                    commits" in the ··· menu) resolves findings instantly, no cooling.       [assumed]
+
+Assumed regions carry a dashed magenta "assumed · Qn open" tag (toggle at bottom right).
+Fonts: the app loads Hedvig Letters Serif, Schibsted Grotesk and Spline Sans Mono from
+next/font/google; the frame has no network, so each falls back to a local install if present,
+else Georgia / system-ui / ui-monospace.
+Not decided by any question, drawn as today: hunk rows (re-toned neutral so they read inside
+the well), resolved rows in the UI face, expanded titles Hedvig 19px.
+First cut.
+-->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Meteroite · Private code review</title>
+<style>
+:root{
+  --review-bg:#16120e; --review-chrome:#1d1813; --review-file-header:#241e18; --review-hunk:#1a1511;
+  --review-border:#342b23; --review-border-strong:#4c4136;
+  --review-text:#f2e9db; --review-text-body:#d3c7b5; --review-text-muted:#a49784; --review-text-dim:#918573;
+  --review-link:#c5d17c;
+  --diff-add-fg:#9fd3a0; --diff-del-fg:#f2909f;
+  --sev-high:#ff7a45; --sev-high-bg:#26170f; --sev-medium:#e9ad4f; --sev-low:#a49784; --sev-judgment:#c5d17c;
+  --sev-resolved:#9fd3a0; --verdict-confirmed:#a8dfb6;
+  --ease-out:cubic-bezier(0.23,1,0.32,1);
+  /* Q1 -> B: the code well */
+  --code-well:#121110;
+  --well-hunk:#171513;
+  --font-serif:"Hedvig Letters Serif",Georgia,"Iowan Old Style","Times New Roman",serif;
+  --font-ui:"Schibsted Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --font-mono:"Spline Sans Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --assumed:#f0abfc;
+}
+[hidden]{display:none!important}
+*{box-sizing:border-box;border:0 solid var(--review-border);margin:0;padding:0}
+html,body{background:var(--review-bg);color:var(--review-text)}
+body{font-family:var(--font-ui);font-feature-settings:"ss01","tnum";-webkit-font-smoothing:antialiased;min-width:1340px;font-size:14px}
+button{font:inherit;color:inherit;background:none;cursor:pointer;transition:color 150ms var(--ease-out),background-color 150ms var(--ease-out),border-color 150ms var(--ease-out),transform 150ms var(--ease-out)}
+button:active{transform:scale(.97)}
+:where(button,a,[tabindex]):focus-visible{outline:2px solid var(--review-link);outline-offset:3px}
+a{color:inherit;text-decoration:none}
+::selection{background:rgb(255 122 69/32%);color:var(--review-text)}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{border-radius:9999px;background:var(--review-border);border:1px solid transparent;background-clip:padding-box}
+.mono{font-family:var(--font-mono)}
+.serif{font-family:var(--font-serif);font-weight:400}
+svg.i{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+
+/* Shell */
+.shell{display:grid;grid-template-columns:256px minmax(0,1fr);min-height:100vh}
+aside{position:sticky;top:0;height:100vh;display:flex;flex-direction:column;border-right:1px solid var(--review-border)}
+.rail-top{height:48px;display:flex;align-items:center;padding:0 16px}
+.wordmark{display:inline-flex;align-items:center;gap:8px;font-family:var(--font-serif);font-size:19px;line-height:1;letter-spacing:-.015em;color:var(--review-text)}
+.rail-nav{flex:1;min-height:0;display:flex;flex-direction:column;padding:0 8px 12px}
+.rail-row{display:flex;height:32px;width:100%;align-items:center;gap:12px;border-radius:6px;padding:0 8px;text-align:left;font-size:13px;color:var(--review-text-body)}
+.rail-row:hover{background:var(--review-file-header);color:var(--review-text)}
+.rail-row.sel{background:var(--review-file-header);color:var(--review-text)}
+.rail-row .t{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.rail-row .n{font-size:12px;color:var(--review-text-dim)}
+.new{font-weight:500;gap:8px}
+.rail-h{padding:0 8px 4px;font-size:11px;font-weight:500;color:var(--review-text-dim)}
+.runs{margin:4px 0 4px 14px;border-left:1px solid var(--review-border);padding-left:6px;list-style:none}
+.runs button{display:flex;height:28px;width:100%;align-items:center;gap:12px;border-radius:6px;padding:0 8px;font-size:12px;color:var(--review-text-muted);text-align:left}
+.runs button:hover{background:var(--review-file-header);color:var(--review-text)}
+.runs button.sel{color:var(--review-text)}
+.runs .n{font-size:12px;color:var(--review-text-dim)}
+.rail-foot{height:56px;display:flex;align-items:center;gap:12px;border-top:1px solid var(--review-border);padding:0 16px}
+.avatar{width:28px;height:28px;border-radius:9999px;background:linear-gradient(135deg,#7a5a3d,#3a2b1f);display:grid;place-items:center;font-size:12px;font-weight:600;color:var(--review-text)}
+.private{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--review-text-muted)}
+.private svg{width:14px;height:14px}
+main{min-width:0;padding:32px}
+
+/* Review header */
+.rh{display:flex;align-items:flex-start;gap:16px;border-bottom:1px solid var(--review-border);padding-bottom:16px;margin-bottom:20px}
+.meta{display:flex;flex-wrap:wrap;align-items:center;column-gap:6px;font-size:12px;line-height:20px;color:var(--review-text-muted)}
+.meta a{color:var(--review-text-body)} .meta a:hover{color:var(--review-text)}
+h1.pr{margin-top:4px;font-family:var(--font-serif);font-weight:400;font-size:19px;line-height:1.25;letter-spacing:-.01em}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:32px;padding:0 12px;border-radius:6px;font-size:12px;font-weight:500;white-space:nowrap}
+.btn-light{background:var(--review-text);color:var(--review-bg)} .btn-light:hover{background:rgb(242 233 219/90%)}
+.btn-ghost:hover{background:rgb(36 30 24/50%)}
+.btn-icon{width:32px;padding:0}
+.hstatus{display:flex;align-items:center;gap:6px;margin-right:8px;font-size:12px;color:var(--review-text-muted)}
+.spin{animation:spin 1s linear infinite;width:14px;height:14px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.menu{position:absolute;right:0;top:36px;z-index:60;min-width:208px;border:1px solid var(--review-border);background:var(--review-chrome);border-radius:6px;padding:4px;box-shadow:0 4px 6px -1px rgb(0 0 0/.3),0 2px 4px -2px rgb(0 0 0/.3)}
+.menu button,.menu a{display:flex;width:100%;height:32px;align-items:center;gap:8px;border-radius:4px;padding:0 8px;font-size:13px;color:var(--review-text-body);text-align:left;position:relative}
+.menu button:hover,.menu a:hover{background:var(--review-file-header);color:var(--review-text)}
+.menu svg{color:var(--review-text-muted)}
+.menu hr{height:1px;background:var(--review-border);margin:4px -4px;border:0}
+
+/* Diff panel */
+.panel{height:calc(100vh - 6rem);min-height:560px;margin-bottom:40px;overflow:hidden;border-radius:6px;border:1px solid var(--review-border);display:flex;flex-direction:column;background:var(--review-bg)}
+.tabsbar{display:flex;align-items:stretch;gap:16px;border-bottom:1px solid var(--review-border);background:var(--review-chrome);padding-right:12px}
+.tabs{display:flex;min-width:0;flex:1;overflow-x:auto}
+.tab{position:relative;display:flex;flex-direction:column;gap:6px;flex-shrink:0;border-bottom:2px solid transparent;padding:10px 12px 8px;text-align:left;font-family:var(--font-mono);font-size:12.5px;color:var(--review-text-muted)}
+.tab:hover{color:var(--review-text)}
+.tab.on{color:var(--review-text)}
+.tab .nm{display:flex;align-items:center;gap:6px}
+.tab .nm svg{width:14px;height:14px;color:var(--sev-resolved)}
+.mini{position:relative;display:block;height:6px;width:100%;min-width:64px;border-radius:2px;background:var(--review-border)}
+.tick{position:absolute;top:0;height:100%;width:3px;border-radius:2px}
+.counts{display:flex;flex-shrink:0;align-items:center;gap:8px;padding:8px 0}
+.counts .c{margin-right:4px;font-size:12px;white-space:nowrap;color:var(--review-text-muted)}
+.ib{display:grid;place-items:center;width:32px;height:32px;border-radius:6px;border:1px solid var(--review-border-strong);color:var(--review-text)}
+.ib:hover{background:rgb(255 255 255/5%)}
+.ib svg{width:18px;height:18px}
+.body{position:relative;flex:1;min-height:0}
+.scroller{position:absolute;inset:0;overflow:auto}
+.row{display:flex;min-height:100%}
+.codecol{flex:1;min-width:0;padding:0 8px 16px;display:flex;flex-direction:column;gap:8px}
+.margin{position:relative;width:420px;flex-shrink:0;border-left:1px solid var(--review-border)}
+.margin svg.streaks{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+
+/* File section */
+.file{position:relative}
+.fh{position:sticky;top:0;z-index:5;display:flex;min-height:36px;align-items:center;gap:12px;padding:6px 12px;font-size:12.5px;background:var(--review-file-header);border:1px solid var(--review-border);border-bottom:0;border-radius:6px 6px 0 0}
+.file.open .fh{border-bottom:1px solid var(--review-border)} /* Q4 -> rec B (assumed): hairline where the well begins */
+.file.closed .fh{background:transparent;border-bottom:1px solid var(--review-border);border-radius:6px;position:relative}
+.fh .path{flex:1;min-width:0;font-family:var(--font-mono);overflow-wrap:anywhere}
+.fh .dir{color:var(--review-text-muted)} .fh .base{color:var(--review-text)}
+.fh .note{flex-shrink:0;font-family:var(--font-serif);font-size:14px;color:var(--review-text-muted)}
+.fh .omit{flex-shrink:0;white-space:nowrap;color:var(--review-text-muted)}
+.fh .ad{flex-shrink:0;font-family:var(--font-mono);font-size:12px}
+.add{color:var(--diff-add-fg)} .del{color:var(--diff-del-fg)}
+.lnk{flex-shrink:0;border-radius:4px;padding:2px 6px;color:var(--review-link)} .lnk:hover{text-decoration:underline}
+.well{background:var(--code-well);border:1px solid var(--review-border);border-top:0;border-radius:0 0 6px 6px;overflow:hidden;font-family:var(--font-mono);font-size:12.5px;line-height:20px}
+.file.closed .well{display:none}
+.ln{display:grid;grid-template-columns:40px 40px 24px minmax(0,1fr);min-height:20px;color:var(--review-text)}
+.ln .no{text-align:right;padding-right:8px;color:var(--review-text-dim);user-select:none}
+.ln .sg{text-align:center;user-select:none;color:var(--review-text-dim)}
+.ln .tx{white-space:pre-wrap;overflow-wrap:anywhere;padding-right:12px}
+.ln.a{background-color:color-mix(in oklab,var(--code-well) 92%,var(--diff-add-fg))}
+.ln.a .sg{color:var(--diff-add-fg)}
+.ln.d{background-color:color-mix(in oklab,var(--code-well) 90%,var(--diff-del-fg))}
+.ln.d .sg{color:var(--diff-del-fg)}
+.hunk{background:var(--well-hunk);color:var(--review-text-dim);padding:0 12px 0 104px;font-size:12px;line-height:24px}
+/* Scorch */
+.ln.scorch{--t1:13%;--t2:9%;--t3:26%;box-shadow:inset 3px 0 0 var(--c);background-image:linear-gradient(90deg,color-mix(in oklab,var(--c) var(--t1),transparent),color-mix(in oklab,var(--c) var(--t2),transparent) 55%,color-mix(in oklab,var(--c) var(--t3),transparent))}
+.ln.scorch.hot{--t1:20%;--t2:14%;--t3:38%}
+.k{color:#f2a0c4}.s{color:#e7c787}.nu{color:#f5a76c}.f{color:#a9c9f5}.ty{color:#8fd4cf}.cm{color:#7d7468}
+
+/* Margin cards */
+.slot{position:absolute;left:16px;right:12px}
+.cc{display:flex;width:100%;align-items:baseline;gap:8px;border-radius:6px;border:1px solid var(--review-border-strong);background:var(--review-bg);padding:6px 12px;text-align:left}
+.cc:hover{background:rgb(255 255 255/5%)}
+.cc.judgment{border-color:var(--sev-judgment);border-style:dashed}
+.lbl{flex-shrink:0;font-family:var(--font-mono);font-size:11px;font-weight:600}
+.lbl.high{color:var(--sev-high)}.lbl.medium{color:var(--sev-medium)}.lbl.low{color:var(--sev-low)}.lbl.judgment{color:var(--sev-judgment)}
+/* Q3 -> C, Q5 -> rec B (assumed): Hedvig 14px, at most two lines */
+.cc .ct{min-width:0;font-family:var(--font-serif);font-size:14px;line-height:18px;color:var(--review-text);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.ec{border-radius:6px;border:1px solid;padding:10px 12px;box-shadow:0 10px 15px -3px rgb(0 0 0/.3),0 4px 6px -4px rgb(0 0 0/.3);background:var(--review-chrome)}
+.ec.high{border-color:var(--sev-high);background:var(--sev-high-bg)}
+.ec.medium{border-color:var(--sev-medium)} .ec.low{border-color:var(--review-border-strong)}
+.ec.judgment{border-color:var(--sev-judgment);border-style:dashed}
+.ec .top{display:flex;align-items:center;gap:8px}
+.verdict{font-size:11.5px;color:var(--review-text-muted)} .verdict.ok{color:var(--verdict-confirmed)}
+.collapse{margin-left:auto;display:grid;place-items:center;width:28px;height:28px;border-radius:4px;color:var(--review-text-muted)}
+.collapse:hover{background:rgb(255 255 255/5%);color:var(--review-text)}
+.ec h3{margin:4px 0 8px;font-family:var(--font-serif);font-weight:400;font-size:19px;line-height:1.25;letter-spacing:-.01em;color:var(--review-text)}
+.expl{font-size:13.5px;line-height:20px;color:var(--review-text-body)}
+.expl.clamp{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:5;overflow:hidden}
+.more{margin-top:4px;border-radius:4px;font-size:12.5px;color:var(--review-link)} .more:hover{text-decoration:underline}
+code.ic{border-radius:4px;background:rgb(255 255 255/8%);padding:1px 4px;font-family:var(--font-mono);font-size:.82em;font-weight:400;color:var(--review-text)}
+.acts{margin-top:12px;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.ob{height:32px;border-radius:6px;border:1px solid var(--review-border-strong);padding:0 12px;font-size:12.5px;font-weight:500;color:var(--review-text)} .ob:hover{background:rgb(255 255 255/5%)}
+.tb{height:32px;border-radius:6px;padding:0 8px;font-size:12.5px;color:var(--review-link)} .tb:hover{text-decoration:underline}
+.rr{display:flex;align-items:center;gap:8px;border-radius:6px;padding:6px 12px;font-size:12.5px;color:var(--review-text-muted)}
+.rr svg{color:var(--sev-resolved)}
+.rr .l{font-family:var(--font-mono);font-size:11px;color:var(--review-text-dim)}
+.rr .t{min-width:0;flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-decoration:line-through}
+.rr .x{flex-shrink:0;color:var(--review-text-dim)}
+/* Q2 -> B: cooling ~400ms */
+@keyframes cool{from{color:var(--heat)}}
+.cooling{animation:cool 400ms var(--ease-out)}
+@media (prefers-reduced-motion:reduce){.cooling{animation-duration:200ms}}
+.pill{position:absolute;z-index:10;right:210px;transform:translateX(50%);display:flex;height:28px;align-items:center;gap:6px;border-radius:9999px;border:1px solid var(--review-border-strong);background:var(--review-chrome);padding:0 12px;font-size:12px;color:var(--review-text-muted);box-shadow:0 10px 15px -3px rgb(0 0 0/.3)}
+.pill:hover{color:var(--review-text)} .pill svg{width:14px;height:14px}
+.pill.up{top:8px}.pill.down{bottom:8px}
+
+/* Design-interview annotations */
+.tag{position:absolute;z-index:30;pointer-events:none;white-space:nowrap;font:500 10px/14px var(--font-mono);letter-spacing:.02em;color:var(--assumed);background:rgb(24 12 26/.92);border:1px dashed var(--assumed);border-radius:3px;padding:1px 5px}
+.ann-off .tag,.ann-off .ann-outline{display:none}
+.ann-outline{position:absolute;inset:-3px;border:1px dashed var(--assumed);border-radius:8px;pointer-events:none;z-index:29}
+.legend{position:fixed;left:12px;bottom:64px;z-index:100;display:flex;align-items:center;gap:10px;font:11px/16px var(--font-mono);color:var(--assumed);background:rgb(24 12 26/.94);border:1px dashed var(--assumed);border-radius:4px;padding:6px 10px;max-width:232px;flex-wrap:wrap}
+.legend button{color:var(--assumed);text-decoration:underline;font-size:11px}
+.legend .ok{color:#d9c9e0}
+</style>
+</head>
+<body>
+<div class="shell">
+  <aside>
+    <div class="rail-top">
+      <a href="#" class="wordmark" aria-label="Meteroite">
+        <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+          <defs><linearGradient id="wm" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff7a45" stop-opacity="0"/><stop offset="1" stop-color="#ff7a45"/></linearGradient></defs>
+          <path d="M2 3 L13.5 14.5" stroke="url(#wm)" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="15" cy="16" r="2.75" fill="#f2e9db"/>
+        </svg>Meteroite</a>
+    </div>
+    <nav class="rail-nav" aria-label="Reviews">
+      <button class="rail-row new"><svg class="i" viewBox="0 0 24 24" style="color:var(--review-text-muted)"><path d="M12 5v14M5 12h14"/></svg>New review</button>
+      <div style="margin-top:16px;overflow-y:auto;flex:1;min-height:0">
+        <section style="margin-bottom:16px"><h2 class="rail-h">Today</h2>
+          <button class="rail-row sel" aria-current="page"><span class="t">Add discount codes at checkout</span><span class="n" id="histCount">6</span></button>
+          <ul class="runs" aria-label="Runs">
+            <li><button class="sel" aria-current="page"><span style="flex:1">Oct 11, 6:02 PM</span><span class="n">6</span></button></li>
+            <li><button><span style="flex:1">Oct 11, 2:40 PM</span><span class="n">7</span></button></li>
+          </ul>
+          <button class="rail-row"><span class="t">Fix flaky checkout total test</span><span class="n">2</span></button>
+          <button class="rail-row"><span class="t">Move session storage to Convex</span><span class="size-dot" style="width:6px;height:6px;border-radius:9999px;background:var(--review-link)"></span></button>
+        </section>
+        <section style="margin-bottom:16px"><h2 class="rail-h">Yesterday</h2>
+          <button class="rail-row"><span class="t">Migrate sign-in to Clerk</span><span class="n">4</span></button>
+          <button class="rail-row"><span class="t">Bump next to 16.2</span><span class="n">0</span></button>
+        </section>
+        <section style="margin-bottom:16px"><h2 class="rail-h">Previous 7 days</h2>
+          <button class="rail-row"><span class="t">Paginate order history</span><span class="n">3</span></button>
+          <button class="rail-row"><span class="t">Webhook retries for Stripe events</span><span class="n" style="color:var(--diff-del-fg)">failed</span></button>
+          <button class="rail-row"><span class="t">Cart line item refactor</span><span class="n">9</span></button>
+        </section>
+      </div>
+    </nav>
+    <div class="rail-foot"><span class="avatar">H</span><span class="private"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Private workspace</span></div>
+  </aside>
+
+  <main>
+    <header class="rh">
+      <div style="flex:1;min-width:0">
+        <p class="meta"><a href="#">hjwebb01/meteroite-review-fixture #1</a><span>·</span><span>Completed</span><span>·</span><span>Oct 11, 6:02 PM</span><span>·</span><span class="mono" id="sha">4f2c9a1</span><span id="reassessNote"></span></p>
+        <h1 class="pr">Add discount codes at checkout</h1>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px;position:relative">
+        <span class="hstatus" id="hstatus" hidden><svg class="i spin" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>Reviewing latest commits…</span>
+        <button class="btn btn-light">Publish review</button>
+        <button class="btn btn-ghost btn-icon" id="moreBtn" aria-label="More actions" aria-haspopup="menu"><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></svg></button>
+        <div class="menu" id="menu" role="menu" hidden>
+          <button role="menuitem" id="rerun"><svg class="i" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>Review latest commits<span class="tag" style="right:-6px;top:-10px">assumed · Q6 open</span></button>
+          <button role="menuitem"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Check PR freshness</button>
+          <hr>
+          <a role="menuitem" href="#"><svg class="i" viewBox="0 0 24 24"><path d="M7 7h10v10M7 17 17 7"/></svg>Open on GitHub</a>
+        </div>
+      </div>
+    </header>
+
+    <div class="panel" id="panel">
+      <div class="tabsbar">
+        <nav class="tabs" aria-label="Changed files" id="tabs"></nav>
+        <div class="counts">
+          <span class="c" id="counts"></span>
+          <button class="ib" aria-label="Previous finding (K)" id="prev"><svg class="i" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg></button>
+          <button class="ib" aria-label="Next finding (J)" id="next"><svg class="i" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg></button>
+        </div>
+      </div>
+      <div class="body" id="body">
+        <div class="scroller" id="scroller">
+          <div class="row" id="row">
+            <div class="codecol" id="codecol"></div>
+            <div class="margin" id="margin" role="region" aria-label="Findings"></div>
+          </div>
+        </div>
+        <div id="pills"></div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="legend" id="legend">
+  <span><span style="border:1px dashed var(--assumed);padding:0 4px;border-radius:3px">assumed · Qn open</span> <span class="ok">= recommendation drawn, not yet answered. Q1 B · Q2 B · Q3 C answered.</span></span>
+  <button id="annToggle">Hide</button>
+</div>
+
+<script>
+const ICON_CHECK='<svg class="i" viewBox="0 0 24 24" width="16" height="16"><path d="M20 6 9 17l-5-5"/></svg>';
+const ICON_UP='<svg class="i" viewBox="0 0 24 24"><path d="m18 15-6-6-6 6"/></svg>';
+const ICON_DOWN='<svg class="i" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></svg>';
+const SEV_VAR={high:'var(--sev-high)',medium:'var(--sev-medium)',low:'var(--sev-low)',judgment:'var(--sev-judgment)'};
+const SEV_LABEL={high:'HIGH',medium:'MED',low:'LOW',judgment:'JUDGMENT'};
+
+// Files: hunks of [sign, text]; sign ' ' context, '+' add, '-' delete.
+const FILES=[
+ {path:'src/checkout/discounts.ts',hunks:[
+  {old:1,neu:1,lines:[
+   [' ','import type { Cart } from "./cart";'],
+   [' ','import { roundToCent } from "../lib/money";'],
+   ['+',''],
+   ['+','export type DiscountCode = {'],
+   ['+','  code: string;'],
+   ['+','  kind: "percent" | "fixed";'],
+   ['+','  amount: number;'],
+   ['+','  minimumSubtotal?: number;'],
+   ['+','  expiresAt?: Date | null;'],
+   ['+','};'],
+   ['+',''],
+   ['+','export function isEligible(cart: Cart, code: DiscountCode) {'],
+   ['+','  if (code.minimumSubtotal === undefined) return true;'],
+   ['+','  return cart.subtotal > code.minimumSubtotal;'],
+   ['+','}'],
+   ['+',''],
+   [' ','export function applyDiscount(cart: Cart, code: DiscountCode) {'],
+   ['-','  return cart.total;'],
+   ['+','  if (!isEligible(cart, code)) return cart.total;'],
+   ['+','  const before = cart.subtotal - cart.saleSavings;'],
+   ['+',''],
+   ['+','  if (code.kind === "fixed") {'],
+   ['+','    return roundToCent(Math.max(0, before - code.amount));'],
+   ['+','  }'],
+   ['+',''],
+   ['+','  const rate = code.amount / 100;'],
+   ['+','  const saleRate = cart.saleSavings / cart.subtotal;'],
+   ['+','  // Sale items already carry their markdown.'],
+   ['+','  const effective = rate + saleRate;'],
+   ['+','  return roundToCent(before * (1 - effective));'],
+   [' ','}'],
+  ]},
+  {old:24,neu:50,lines:[
+   [' ','export function formatSavings(cart: Cart, total: number) {'],
+   ['-','  return `−${cart.total - total}`;'],
+   ['+','  const saved = cart.total - total;'],
+   ['+','  return `−$${roundToCent(saved).toFixed(2)}`;'],
+   [' ','}'],
+  ]},
+ ]},
+ {path:'src/checkout/cart.ts',hunks:[
+  {old:5,neu:5,lines:[
+   [' ','export type Cart = {'],
+   [' ','  items: CartItem[];'],
+   [' ','  subtotal: number;'],
+   ['+','  saleSavings: number;'],
+   [' ','  total: number;'],
+   ['+','  code?: string;'],
+   [' ','};'],
+   [' ',''],
+   [' ','export function applyCode(cart: Cart, input: string) {'],
+   ['-','  return { ...cart, code: input };'],
+   ['+','  const code = input.trim();'],
+   ['+','  const match = CODES.find((c) => c.code === code);'],
+   ['+','  if (!match) return { ...cart, error: "Unknown code" };'],
+   ['+','  return { ...cart, code: match.code, total: applyDiscount(cart, match) };'],
+   [' ','}'],
+  ]},
+ ]},
+ {path:'src/app/api/apply-code/route.ts',hunks:[
+  {old:0,neu:1,lines:[
+   ['+','import { NextResponse } from "next/server";'],
+   ['+','import { findCode } from "@/checkout/codes";'],
+   ['+','import { applyCode } from "@/checkout/cart";'],
+   ['+','import { getCart, saveCart } from "@/checkout/session";'],
+   ['+',''],
+   ['+','export async function POST(request: Request) {'],
+   ['+','  const { code } = await request.json();'],
+   ['+','  const cart = await getCart(request);'],
+   ['+','  const match = await findCode(code);'],
+   ['+',''],
+   ['+','  if (!match) {'],
+   ['+','    return NextResponse.json({ error: "Unknown code" }, { status: 404 });'],
+   ['+','  }'],
+   ['+','  if (match.expiresAt && match.expiresAt < new Date()) {'],
+   ['+','    return NextResponse.json({ error: "Expired" }, { status: 410 });'],
+   ['+','  }'],
+   ['+',''],
+   ['+','  const next = applyCode(cart, code);'],
+   ['+','  await saveCart(request, next);'],
+   ['+','  return NextResponse.json(next);'],
+   ['+','}'],
+  ]},
+ ]},
+ {path:'tests/discounts.test.ts',hunks:[
+  {old:0,neu:1,lines:[
+   ['+','import { describe, expect, it } from "vitest";'],
+   ['+','import { applyDiscount } from "@/checkout/discounts";'],
+   ['+',''],
+   ['+','describe("applyDiscount", () => {'],
+   ['+','  it("takes a fixed amount off the subtotal", () => {'],
+   ['+','    const cart = { subtotal: 80, saleSavings: 0, total: 80, items: [] };'],
+   ['+','    expect(applyDiscount(cart, { code: "TEN", kind: "fixed", amount: 10 })).toBe(70);'],
+   ['+','  });'],
+   ['+','});'],
+  ]},
+ ]},
+ {path:'package-lock.json',omitted:'generated',hunks:[
+  {old:1204,neu:1204,lines:[
+   [' ','    "node_modules/decimal.js": {'],
+   ['-','      "version": "10.4.3",'],
+   ['+','      "version": "10.5.0",'],
+   [' ','      "license": "MIT"'],
+  ]},
+ ]},
+];
+
+const FINDINGS=[
+ {id:'f1',file:0,line:14,sev:'high',verdict:'confirmed',title:'BULK25 excludes carts at its configured minimum',
+  expl:'`isEligible` compares with `>`, so a cart whose subtotal equals `minimumSubtotal` is rejected. BULK25 is configured with a minimum of 250.00, and the fixture cart at exactly 250.00 falls through to `cart.total` with no discount and no error. The checkout copy promises 25% off "orders of $250 or more". Compare with `>=` and add the boundary case to `discounts.test.ts`, which currently covers only fixed codes.'},
+ {id:'f2',file:0,line:28,sev:'medium',verdict:'confirmed',title:'Percent codes subtract the sale markdown a second time on sale items',
+  expl:'`before` already removes `saleSavings`, then `effective` adds `saleRate` on top of the code rate, so a 20% code on a cart with 10% in markdowns charges 70% of the already-reduced price.'},
+ {id:'h1',file:0,line:52,sev:'judgment',title:'Is rounding savings to the cent before display the intended policy?',
+  expl:'`formatSavings` rounds the saved amount independently of the total, so the displayed savings and the charged total can disagree by a cent on percent codes. Whether that matters depends on how receipts are reconciled.'},
+ {id:'f3',file:1,line:10,sev:'low',status:'resolved',resolvedBy:'dismiss',title:'`code` stays on the cart after the code is removed',expl:''},
+ {id:'f4',file:1,line:15,sev:'low',verdict:'inconclusive',title:'`applyCode` trims the input but the lookup is still case-sensitive, so "bulk25" is unknown',
+  expl:'Codes are stored upper-case in `CODES`, and the input field does not transform case. Typing the code as printed on the flyer works; typing it from a lower-cased email link does not.'},
+ {id:'f5',file:2,line:14,sev:'high',verdict:'confirmed',title:'Retired codes with a null `expiresAt` still apply',
+  expl:'Codes retired by support are stored with `expiresAt: null` and `active: false`, but the route only checks expiry. Any retired code that was never given a date is accepted and applied to the cart.'},
+ {id:'f6',file:2,line:18,sev:'medium',verdict:'not reproduced',title:'The raw `code` from the request is applied instead of the normalized `match.code`',
+  expl:'`applyCode` re-runs the lookup with the untrimmed request body, so a code with a trailing space passes `findCode` here and then fails inside `applyCode`, returning a cart with an error but a 200 status.'},
+];
+FINDINGS.forEach(f=>{f.status=f.status||'open';});
+
+const state={active:'f1',collapsed:new Set([3,4]),clamp:{},current:0,cooling:null,reassessed:false};
+
+function esc(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function inline(s){return esc(s).replace(/`([^`]+)`/g,'<code class="ic">$1</code>');}
+const KW=new Set(['import','from','export','type','function','return','if','const','async','await','new','true','false','undefined','null','describe','it']);
+function hl(text){
+  const re=/(\/\/.*$)|("(?:[^"\\]|\\.)*"|`(?:[^`\\]|\\.)*`)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_$][\w$]*)(\s*\()?|([^\w"`\/]+|\/)/g;
+  let out='',m;
+  while((m=re.exec(text))){
+    if(m[1])out+='<span class="cm">'+esc(m[1])+'</span>';
+    else if(m[2])out+='<span class="s">'+esc(m[2])+'</span>';
+    else if(m[3])out+='<span class="nu">'+m[3]+'</span>';
+    else if(m[4]){const w=m[4];
+      if(KW.has(w))out+='<span class="k">'+w+'</span>';
+      else if(m[5])out+='<span class="f">'+w+'</span>';
+      else if(/^[A-Z]/.test(w))out+='<span class="ty">'+w+'</span>';
+      else out+=esc(w);
+      if(m[5])out+=esc(m[5]);}
+    else out+=esc(m[0]);
+  }
+  return out;
+}
+function counts(file){let a=0,d=0;file.hunks.forEach(h=>h.lines.forEach(([s])=>{if(s==='+')a++;if(s==='-')d++;}));return [a,d];}
+function fileLength(file){let n=1;file.hunks.forEach(h=>{n=Math.max(n,h.neu+h.lines.filter(l=>l[0]!=='-').length);});return n;}
+const isOpen=f=>f.status==='open';
+const ordered=()=>FINDINGS.slice().sort((a,b)=>a.file-b.file||a.line-b.line);
+
+function renderFiles(){
+  const col=document.getElementById('codecol');
+  col.innerHTML=FILES.map((file,fi)=>{
+    const [a,d]=counts(file);const slash=file.path.lastIndexOf('/');
+    const fFind=FINDINGS.filter(f=>f.file===fi);
+    const quiet=fFind.length===0&&!file.omitted;const closed=state.collapsed.has(fi);
+    let rows='';
+    file.hunks.forEach(h=>{
+      let o=h.old,n=h.neu;
+      const oc=h.lines.filter(l=>l[0]!=='+').length,nc=h.lines.filter(l=>l[0]!=='-').length;
+      rows+=`<div class="hunk">@@ -${h.old},${oc} +${h.neu},${nc} @@</div>`;
+      h.lines.forEach(([s,t])=>{
+        const cls=s==='+'?'a':s==='-'?'d':'';
+        const on=s==='+'?'':o, nn=s==='-'?'':n;
+        rows+=`<div class="ln ${cls}" data-file="${fi}" data-new="${s==='-'?'':n}"><span class="no">${on}</span><span class="no">${nn}</span><span class="sg">${s===' '?'':s==='-'?'−':'+'}</span><span class="tx">${hl(t)||' '}</span></div>`;
+        if(s!=='+')o++; if(s!=='-')n++;
+      });
+    });
+    const tag=fi===0?'<span class="tag" style="right:96px;bottom:-8px">assumed · Q4 open · 1px rule where the well begins</span>':'';
+    return `<section class="file ${closed?'closed':'open'}" id="file-${fi}" data-file="${fi}">
+      <div class="fh">${tag}
+        <span class="path">${slash>=0?`<span class="dir">${esc(file.path.slice(0,slash+1))}</span>`:''}<span class="base">${esc(file.path.slice(slash+1))}</span></span>
+        ${file.omitted?`<span class="omit" title="The reviewer could locate changed lines but did not receive this diff (${file.omitted}).">Not sent · ${file.omitted}</span>`:''}
+        ${quiet&&closed?'<span class="note">Read in full — nothing to note.</span>':''}
+        <span class="ad"><span class="add">+${a}</span> <span class="del">−${d}</span></span>
+        <button class="lnk" data-toggle="${fi}" aria-expanded="${!closed}">${closed?'Show diff':'Hide'}</button>
+      </div>
+      <div class="well">${rows}</div>
+    </section>`;
+  }).join('');
+}
+
+function lineEl(f){return document.querySelector(`#file-${f.file} .ln[data-new="${f.line}"]`);}
+
+function applyScorch(){
+  document.querySelectorAll('.ln.scorch').forEach(el=>{el.classList.remove('scorch','hot');el.style.removeProperty('--c');});
+  const order=['judgment','low','medium','high'];
+  FINDINGS.filter(isOpen).sort((a,b)=>order.indexOf(a.sev)-order.indexOf(b.sev)).forEach(f=>{
+    const el=lineEl(f);if(!el)return;
+    el.classList.add('scorch');el.style.setProperty('--c',SEV_VAR[f.sev]);
+    if(f.id===state.active)el.classList.add('hot');
+  });
+}
+
+function renderTabs(){
+  const names=FILES.map(f=>f.path.split('/').pop());
+  document.getElementById('tabs').innerHTML=FILES.map((file,fi)=>{
+    const marks=FINDINGS.filter(f=>f.file===fi&&f.sev!=='judgment');
+    const judg=FINDINGS.filter(f=>f.file===fi&&f.sev==='judgment'&&isOpen(f));
+    const open=marks.filter(isOpen);
+    const worst=open.some(f=>f.sev==='high')?'high':open.some(f=>f.sev==='medium')?'medium':open.length?'low':judg.length?'judgment':null;
+    const under=worst==='high'?'var(--sev-high)':worst==='medium'?'var(--sev-medium)':worst==='judgment'?'var(--sev-judgment)':'var(--review-text-muted)';
+    const len=fileLength(file);const on=fi===state.current;
+    const ambiguous=names.filter(n=>n===names[fi]).length>1;
+    const name=ambiguous?file.path.split('/').slice(-2).join('/'):names[fi];
+    const ticks=FINDINGS.filter(f=>f.file===fi).map(f=>{
+      const left=Math.min(96,f.line/len*100);
+      const bg=!isOpen(f)?'background:var(--review-text-dim)':f.sev==='high'?'background:var(--sev-high);box-shadow:0 0 6px var(--sev-high)':`background:${SEV_VAR[f.sev]}`;
+      return `<span class="tick" style="left:${left}%;${bg}"></span>`;}).join('');
+    return `<button class="tab${on?' on':''}" data-tab="${fi}" title="${file.path}" ${on?'aria-current="location"':''} style="${on?'border-bottom-color:'+under:''}">
+      <span class="nm">${esc(name)}${worst?'':ICON_CHECK}</span><span class="mini">${ticks}</span></button>`;
+  }).join('');
+  const f=FINDINGS.filter(x=>x.sev!=='judgment');
+  document.getElementById('counts').textContent=`${f.filter(isOpen).length} open · ${f.length-f.filter(isOpen).length} resolved`;
+}
+
+function cardHTML(f){
+  if(!isOpen(f)){
+    const by=f.resolvedBy==='reassess'
+      ? `<span class="x">Resolved at a91e3d0</span>`
+      : `<button class="lnk" style="padding:0" data-reopen="${f.id}">Reopen</button>`;
+    const q6=f.resolvedBy==='reassess'?'<span class="tag" style="right:0;top:-12px">assumed · Q6 open · arrived without cooling</span>':'';
+    return `<div class="rr${state.cooling===f.id?' cooling':''}" style="--heat:${SEV_VAR[f.sev]}" tabindex="-1" data-card="${f.id}">${q6}${ICON_CHECK}<span class="l">L${f.line}</span><span class="t">${inline(f.title)}</span>${by}</div>`;
+  }
+  const label=`${SEV_LABEL[f.sev]} L${f.line}`;
+  if(f.id!==state.active)
+    return `<button class="cc ${f.sev==='judgment'?'judgment':''}" aria-expanded="false" data-card="${f.id}" data-expand="${f.id}"><span class="lbl ${f.sev}">${label}</span><span class="ct">${inline(f.title)}</span></button>`;
+  const clamp=!state.clamp[f.id];
+  const actions=f.sev==='judgment'?'':`<div class="acts"><button class="ob">Propose fix &amp; discuss</button><button class="tb" data-dismiss="${f.id}">Dismiss</button></div>`;
+  return `<section class="ec ${f.sev}" tabindex="-1" aria-label="${esc(f.title)}" data-card="${f.id}">
+    <div class="top"><span class="lbl ${f.sev}">${label}</span>${f.verdict?`<span class="verdict${f.verdict==='confirmed'?' ok':''}">${f.verdict}</span>`:''}
+    <button class="collapse" aria-expanded="true" aria-label="Collapse finding" data-collapse="1">${ICON_UP}</button></div>
+    <h3>${inline(f.title)}</h3>
+    <p class="expl${clamp?' clamp':''}" data-expl="${f.id}">${inline(f.expl)}</p>
+    <button class="more" data-more="${f.id}" aria-expanded="${!clamp}" hidden>${clamp?'Show more':'Show less'}</button>
+    ${actions}</section>`;
+}
+
+function renderMargin(){
+  const m=document.getElementById('margin');
+  const list=ordered().filter(f=>!state.collapsed.has(f.file));
+  let tagged=false;
+  m.innerHTML='<svg class="streaks" id="streaks" aria-hidden="true"><defs>'+
+    ['high','medium','low','judgment'].map(t=>`<linearGradient id="streak-${t}" gradientUnits="userSpaceOnUse" x1="0" x2="16"><stop offset="0" stop-color="${getVar(t)}"/><stop offset="1" stop-color="${getVar(t)}" stop-opacity=".3"/></linearGradient>`).join('')+
+    '</defs></svg>'+
+    list.map(f=>{
+      let extra='';
+      if(!tagged&&isOpen(f)&&f.id!==state.active&&f.sev!=='judgment'){tagged=true;extra='<span class="tag" style="right:0;top:-12px">assumed · Q5 open · Hedvig 14px, up to two lines</span>';}
+      return `<div class="slot" data-slot="${f.id}" style="visibility:hidden">${extra}${cardHTML(f)}</div>`;}).join('');
+  // Show more only when clamped text overflows
+  m.querySelectorAll('[data-expl]').forEach(p=>{const b=m.querySelector(`[data-more="${p.dataset.expl}"]`);
+    if(state.clamp[p.dataset.expl]||p.scrollHeight>p.clientHeight+1)b.hidden=false;});
+}
+function getVar(t){return getComputedStyle(document.documentElement).getPropertyValue({high:'--sev-high',medium:'--sev-medium',low:'--sev-low',judgment:'--sev-judgment'}[t]).trim();}
+
+function layout(){
+  const row=document.getElementById('row').getBoundingClientRect();
+  const svg=document.getElementById('streaks');
+  let paths='',prevBottom=-Infinity;
+  ordered().forEach(f=>{
+    const slot=document.querySelector(`[data-slot="${f.id}"]`);if(!slot)return;
+    const el=lineEl(f);if(!el){slot.style.visibility='hidden';return;}
+    const lineY=el.getBoundingClientRect().top-row.top+10;
+    const top=Math.max(lineY-16,prevBottom+8);
+    slot.style.top=top+'px';slot.style.visibility='visible';
+    prevBottom=top+slot.offsetHeight;
+    const cardY=top+16;
+    const d=`M0 ${lineY} H8 V${cardY} H16`;
+    if(!isOpen(f))paths+=`<path d="${d}" fill="none" stroke="var(--review-text-dim)" stroke-width="1" stroke-linecap="round" stroke-dasharray="1 3"/>`;
+    else paths+=`<path d="${d}" fill="none" stroke="url(#streak-${f.sev})" stroke-width="1.5" stroke-linecap="round"${f.sev==='judgment'?' stroke-dasharray="3 3"':''}/>`;
+  });
+  const defs=svg.querySelector('defs').outerHTML;
+  svg.innerHTML=defs+paths;
+  const m=document.getElementById('margin');
+  m.style.minHeight=(prevBottom+24)+'px';
+  updatePills();
+}
+
+function updatePills(){
+  const sc=document.getElementById('scroller');
+  const top=sc.scrollTop,bottom=top+sc.clientHeight;
+  let above=[],below=[];
+  ordered().filter(isOpen).forEach(f=>{
+    const s=document.querySelector(`[data-slot="${f.id}"]`);if(!s||s.style.visibility==='hidden')return;
+    const t=parseFloat(s.style.top),b=t+s.offsetHeight;
+    if(b<top)above.push(f);else if(t>bottom)below.push(f);
+  });
+  const p=document.getElementById('pills');let h='';
+  if(above.length)h+=`<button class="pill up" data-jump="${above[above.length-1].id}">${ICON_UP}${above.length} ${above.length===1?'finding':'findings'} above</button>`;
+  if(below.length)h+=`<button class="pill down" data-jump="${below[0].id}">${ICON_DOWN}${below.length} ${below.length===1?'finding':'findings'} below</button>`;
+  p.innerHTML=h;
+  // Active tab follows scrolling
+  let cur=0;
+  FILES.forEach((_,fi)=>{const s=document.getElementById('file-'+fi);if(s.offsetTop<=top+40)cur=fi;});
+  if(!state.pinned&&cur!==state.current){state.current=cur;renderTabs();}
+}
+
+function render(keepScroll=true){
+  const sc=document.getElementById('scroller');const st=sc.scrollTop;
+  renderFiles();applyScorch();renderTabs();renderMargin();layout();
+  if(keepScroll)sc.scrollTop=st;
+}
+function refreshMargin(){applyScorch();renderTabs();renderMargin();layout();}
+
+function focusFinding(id){
+  const f=FINDINGS.find(x=>x.id===id);if(!f)return;
+  if(state.collapsed.has(f.file)){state.collapsed.delete(f.file);state.active=id;render();}
+  else{state.active=id;refreshMargin();}
+  const el=lineEl(f),sc=document.getElementById('scroller');
+  const y=el.getBoundingClientRect().top-sc.getBoundingClientRect().top+sc.scrollTop;
+  sc.scrollTop=y-sc.clientHeight/2;
+  document.querySelector(`[data-card="${id}"]`)?.focus({preventScroll:true});
+}
+function step(dir){
+  const open=ordered().filter(isOpen);if(!open.length)return;
+  let i=open.findIndex(f=>f.id===state.active);
+  i=i<0?(dir>0?0:open.length-1):(i+dir+open.length)%open.length;
+  focusFinding(open[i].id);
+}
+
+document.addEventListener('click',e=>{
+  const t=e.target.closest('button,a');
+  if(!t){if(!e.target.closest('#menu'))document.getElementById('menu').hidden=true;return;}
+  if(t.tagName==='A')e.preventDefault();
+  const d=t.dataset;
+  if(t.id!=='moreBtn'&&!t.closest('#menu'))document.getElementById('menu').hidden=true;
+  if(d.toggle!==undefined){const fi=+d.toggle;state.collapsed.has(fi)?state.collapsed.delete(fi):state.collapsed.add(fi);render();}
+  else if(d.expand){state.active=d.expand;refreshMargin();document.querySelector(`[data-card="${d.expand}"]`)?.focus({preventScroll:true});}
+  else if(d.collapse){state.active=null;refreshMargin();}
+  else if(d.more){state.clamp[d.more]=!state.clamp[d.more];refreshMargin();}
+  else if(d.dismiss){
+    const f=FINDINGS.find(x=>x.id===d.dismiss);f.status='resolved';f.resolvedBy='dismiss';
+    state.cooling=f.id;if(state.active===f.id)state.active=null;refreshMargin();
+    setTimeout(()=>{if(state.cooling===f.id)state.cooling=null;},450);
+  }
+  else if(d.reopen){const f=FINDINGS.find(x=>x.id===d.reopen);f.status='open';delete f.resolvedBy;state.cooling=null;refreshMargin();}
+  else if(d.jump){focusFinding(d.jump);}
+  else if(d.tab!==undefined){
+    const fi=+d.tab;state.current=fi;state.pinned=true;renderTabs();
+    const sc=document.getElementById('scroller');sc.scrollTop=document.getElementById('file-'+fi).offsetTop;
+    setTimeout(()=>{state.pinned=false;},150);
+  }
+  else if(t.id==='prev')step(-1);
+  else if(t.id==='next')step(1);
+  else if(t.id==='moreBtn'){const m=document.getElementById('menu');m.hidden=!m.hidden;}
+  else if(t.id==='rerun'){
+    document.getElementById('menu').hidden=true;
+    if(state.reassessed)return;
+    const hs=document.getElementById('hstatus');hs.hidden=false;
+    setTimeout(()=>{
+      hs.hidden=true;state.reassessed=true;
+      const f=FINDINGS.find(x=>x.id==='f6');
+      if(f.status==='open'){f.status='resolved';f.resolvedBy='reassess';if(state.active===f.id)state.active=null;}
+      document.getElementById('sha').textContent='a91e3d0';
+      document.getElementById('reassessNote').innerHTML='<span>·</span> <span style="color:var(--review-text-body)">Reassessed: 1 finding resolved</span>';
+      refreshMargin();
+    },1100);
+  }
+  else if(t.id==='annToggle'){document.body.classList.toggle('ann-off');t.textContent=document.body.classList.contains('ann-off')?'Show':'Hide';}
+});
+document.addEventListener('keydown',e=>{
+  if(e.metaKey||e.ctrlKey||e.altKey)return;
+  if(e.key==='j'||e.key==='J'){e.preventDefault();step(1);}
+  if(e.key==='k'||e.key==='K'){e.preventDefault();step(-1);}
+  if(e.key==='Escape')document.getElementById('menu').hidden=true;
+});
+document.getElementById('scroller').addEventListener('scroll',updatePills,{passive:true});
+window.addEventListener('resize',()=>layout());
+render(false);
+document.fonts&&document.fonts.ready.then(()=>layout());
+</script>
+</body>
+</html>

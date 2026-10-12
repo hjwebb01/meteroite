@@ -1,5 +1,5 @@
 import { v, type GenericValidator, type Validator } from "convex/values";
-import type { z } from "zod";
+import { z } from "zod";
 
 /**
  * Derives the Convex validator for a Zod schema so a stored shape has one
@@ -12,52 +12,43 @@ export function zodValidator<T extends z.ZodType>(
   return convert(schema) as Validator<z.output<T>, "required", string>;
 }
 
-type Def = {
-  type: string;
-  shape?: Record<string, z.ZodType>;
-  values?: unknown[];
-  entries?: Record<string, string | number>;
-  options?: z.ZodType[];
-  element?: z.ZodType;
-  innerType?: z.ZodType;
-};
-
 function literals(values: unknown[]): GenericValidator {
   const each = values.map((value) => v.literal(value as string | number));
   return each.length === 1 ? each[0] : v.union(...each);
 }
 
-function convert(schema: z.ZodType): GenericValidator {
-  const def = schema._zod.def as Def;
-  switch (def.type) {
-    case "string":
+function convert(schema: z.core.$ZodType): GenericValidator {
+  switch (true) {
+    case schema instanceof z.ZodString:
       return v.string();
-    case "number":
+    case schema instanceof z.ZodNumber:
       return v.number();
-    case "boolean":
+    case schema instanceof z.ZodBoolean:
       return v.boolean();
-    case "literal":
-      return literals(def.values!);
-    case "enum":
-      return literals(Object.values(def.entries!));
-    case "array":
-      return v.array(convert(def.element!));
-    case "nullable":
-      return v.union(convert(def.innerType!), v.null());
-    case "optional":
-      return v.optional(convert(def.innerType!));
-    case "union":
-      return v.union(...def.options!.map(convert));
-    case "object":
+    case schema instanceof z.ZodLiteral:
+      return literals([...schema.values]);
+    case schema instanceof z.ZodEnum:
+      return literals(Object.values(schema.enum));
+    case schema instanceof z.ZodArray:
+      return v.array(convert(schema.element));
+    case schema instanceof z.ZodNullable:
+      return v.union(convert(schema.unwrap()), v.null());
+    case schema instanceof z.ZodOptional:
+      return v.optional(convert(schema.unwrap()));
+    case schema instanceof z.ZodUnion:
+      return v.union(...schema.options.map(convert));
+    case schema instanceof z.ZodObject:
       return v.object(
         Object.fromEntries(
-          Object.entries(def.shape!).map(([key, field]) => [
+          Object.entries(schema.shape).map(([key, field]) => [
             key,
             convert(field),
           ]),
         ),
       );
     default:
-      throw new Error(`Zod type "${def.type}" has no Convex validator`);
+      throw new Error(
+        `Zod type "${schema._zod.def.type}" has no Convex validator`,
+      );
   }
 }

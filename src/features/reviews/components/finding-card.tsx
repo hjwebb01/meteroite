@@ -1,5 +1,7 @@
 import { useState } from "react";
-import { Check, Copy, FileDiff } from "lucide-react";
+import Check from "@boxicons/react/Check";
+import Copy from "@boxicons/react/Copy";
+import FileDiff from "@boxicons/react/FileCode";
 import type { Doc } from "../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -34,15 +36,12 @@ export function FindingCard({
   onDiscuss: () => void;
   context?: boolean;
 }) {
-  const [copied, setCopied] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<"" | "copied" | "failed">("");
   const copyPrompt = () => {
     void navigator.clipboard
       .writeText(findingAgentPrompt(f, review))
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      })
-      .catch(() => {});
+      .then(() => setCopyStatus("copied"))
+      .catch(() => setCopyStatus("failed"));
   };
   const anchor = fileAtCommitUrl(
     f.side === "LEFT"
@@ -59,14 +58,16 @@ export function FindingCard({
     <article
       id={`${context ? "context-finding" : "finding"}-${f.id}`}
       className={cn(
-        "scroll-mt-6 overflow-hidden rounded-xl border bg-sidebar",
-        active && "border-ring",
+        "scroll-mt-6 overflow-hidden rounded-md border bg-review-bg",
+        active && "border-review-link",
       )}
     >
-      <div className="flex flex-wrap items-center gap-3 border-b px-5 py-3">
-        <Button size="sm" variant="outline" onClick={onDiscuss}>
-          Discuss finding
-        </Button>
+      <div className="flex flex-wrap items-center gap-3 border-b px-4 py-2">
+        {!context && (
+          <Button size="sm" variant="outline" onClick={onDiscuss}>
+            Discuss finding
+          </Button>
+        )}
         <SeverityBadge severity={f.severity} />
         {f.category && (
           <span className="shrink-0 rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
@@ -74,11 +75,8 @@ export function FindingCard({
           </span>
         )}
         {f.confidence && (
-          <span
-            className="shrink-0 text-xs text-muted-foreground"
-            title="How sure the reviewer is that this is a real defect"
-          >
-            Confidence {f.confidence}/5
+          <span className="shrink-0 text-xs text-muted-foreground">
+            Reviewer confidence {f.confidence}/5
           </span>
         )}
         <FindingVerdictBadge verdict={verdict} />
@@ -106,14 +104,16 @@ export function FindingCard({
             className="ml-auto"
             onClick={onShowInDiff}
           >
-            <FileDiff className="size-3.5" />
+            <FileDiff aria-hidden="true" className="size-3.5" />
             Show in diff
           </Button>
         )}
       </div>
-      <div className="p-5">
-        <h3 className="font-semibold">{f.title}</h3>
-        <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-muted-foreground">
+      <div className="p-4">
+        <h3 className="font-serif text-[19px] leading-tight tracking-[-0.01em]">
+          {f.title}
+        </h3>
+        <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-review-body">
           {f.explanation}
         </p>
         <details className="mt-4 text-sm">
@@ -133,7 +133,7 @@ export function FindingCard({
                   )}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="break-all font-mono text-xs text-blue-300"
+                  className="break-all font-mono text-xs text-review-link"
                 >
                   {e.path}:{e.line}
                 </a>
@@ -149,19 +149,21 @@ export function FindingCard({
           <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
             {f.suggestion}
           </p>
-          <Button
-            size="xs"
-            variant="outline"
-            className="mt-3"
-            onClick={copyPrompt}
-          >
-            {copied ? (
-              <Check className="size-3.5" />
-            ) : (
-              <Copy className="size-3.5" />
-            )}
-            {copied ? "Copied" : "Copy prompt for AI agent"}
-          </Button>
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <Button size="xs" variant="outline" onClick={copyPrompt}>
+              {copyStatus === "copied" ? (
+                <Check aria-hidden="true" className="size-3.5" />
+              ) : (
+                <Copy aria-hidden="true" className="size-3.5" />
+              )}
+              Copy prompt for AI agent
+            </Button>
+            <span role="status" className="text-xs text-muted-foreground">
+              {copyStatus === "copied" && "Prompt copied."}
+              {copyStatus === "failed" &&
+                "Unable to copy the prompt. Try again."}
+            </span>
+          </div>
         </div>
       </div>
     </article>

@@ -197,6 +197,22 @@ async function startAndRun() {
 }
 
 describe("authenticated persisted review assessment", () => {
+  test("persists repeated coverage limitations only once", async () => {
+    output = {
+      ...reviewOutputSchema.parse(output),
+      limitations: [
+        "Execution was not performed.",
+        "Execution was not performed.",
+      ],
+    };
+    const saved = await startAndRun();
+    expect(
+      saved.result?.coverage.warnings.filter(
+        (warning) => warning === "Execution was not performed.",
+      ),
+    ).toHaveLength(1);
+  });
+
   test("a zero-finding sensitive PR keeps high scrutiny, pinned observations and owner isolation", async () => {
     const saved = await startAndRun();
     expect(saved).toMatchObject({

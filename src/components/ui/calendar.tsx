@@ -1,11 +1,9 @@
 "use client";
 
 import * as React from "react";
-import {
-  ChevronDownIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-} from "lucide-react";
+import ChevronDown from "@boxicons/react/ChevronDown";
+import ChevronLeft from "@boxicons/react/ChevronLeft";
+import ChevronRight from "@boxicons/react/ChevronRight";
 import {
   DayPicker,
   getDefaultClassNames,
@@ -142,24 +140,20 @@ function Calendar({
             />
           );
         },
-        Chevron: ({ className, orientation, ...props }) => {
-          if (orientation === "left") {
-            return (
-              <ChevronLeftIcon className={cn("size-4", className)} {...props} />
-            );
-          }
-
-          if (orientation === "right") {
-            return (
-              <ChevronRightIcon
-                className={cn("size-4", className)}
-                {...props}
-              />
-            );
-          }
-
+        Chevron: ({ className, orientation, size, ...props }) => {
+          const Icon =
+            orientation === "left"
+              ? ChevronLeft
+              : orientation === "right"
+                ? ChevronRight
+                : ChevronDown;
           return (
-            <ChevronDownIcon className={cn("size-4", className)} {...props} />
+            <Icon
+              className={cn("size-4", className)}
+              width={size}
+              height={size}
+              {...props}
+            />
           );
         },
         DayButton: CalendarDayButton,

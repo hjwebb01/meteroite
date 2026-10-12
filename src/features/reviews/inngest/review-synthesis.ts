@@ -44,6 +44,6 @@ export async function synthesizeParts(
     output,
     evidence,
     filesRead: summaries.flatMap((s) => s.filesRead),
-    warnings: summaries.flatMap((s) => s.warnings),
+    warnings: [...new Set(summaries.flatMap((s) => s.warnings))],
   };
 }

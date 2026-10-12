@@ -3,6 +3,7 @@ import { z } from "zod";
 import type {
   Response,
   ResponseCreateParamsStreaming,
+  ResponseOutputItem,
 } from "openai/resources/responses/responses";
 import { getChatGPTCredentials } from "./local-account";
 import type { ChatGPTSelection } from "./types";
@@ -67,8 +68,11 @@ export async function completeChatGPTResponse(
       options,
     );
     let completed: Response | undefined;
+    const outputItems = new Map<number, ResponseOutputItem>();
     for await (const event of stream) {
       if (event.type === "response.completed") completed = event.response;
+      if (event.type === "response.output_item.done")
+        outputItems.set(event.output_index, event.item);
       if (event.type === "response.failed")
         throw new Error(chatGPTError(event.response.error?.code));
       if (event.type === "response.incomplete" || event.type === "error")
@@ -78,6 +82,14 @@ export async function completeChatGPTResponse(
     }
     if (!completed)
       throw new Error("ChatGPT's response was interrupted. Please try again.");
+    if (completed.output.length === 0 && outputItems.size > 0) {
+      return {
+        ...completed,
+        output: [...outputItems.entries()]
+          .sort(([a], [b]) => a - b)
+          .map(([, item]) => item),
+      };
+    }
     return completed;
   } catch (error) {
     // SDK errors can carry request metadata. Return only a user-facing reason.

@@ -29,7 +29,7 @@ export function ReviewAssessment({
   return (
     <section
       aria-labelledby={headingId}
-      className="mb-7 rounded-xl border bg-sidebar p-6"
+      className="mb-7 rounded-md border bg-review-bg p-4"
     >
       <h2
         id={headingId}
@@ -131,7 +131,7 @@ export function ReviewAssessment({
                           )}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="break-all font-mono text-xs text-blue-300 underline underline-offset-4"
+                          className="break-all font-mono text-xs text-review-link underline underline-offset-4"
                         >
                           {item.path}:{item.line}
                         </a>

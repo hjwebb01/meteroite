@@ -47,7 +47,7 @@ export function ReviewReassessment({
   ).length;
   return (
     <section
-      className="mb-7 rounded-lg border bg-sidebar p-5"
+      className="mb-7 rounded-md border bg-review-bg p-4"
       aria-label="Snapshot reassessment"
     >
       <h2 className="font-semibold">Compared with the prior snapshot</h2>
@@ -137,7 +137,7 @@ export function ReviewReassessment({
                             : undefined,
                         )
                       }
-                      className="mt-2 rounded text-xs text-blue-300 underline focus-visible:outline-2 focus-visible:outline-ring"
+                      className="mt-2 rounded text-xs text-review-link underline focus-visible:outline-2 focus-visible:outline-ring"
                     >
                       Open prior{" "}
                       {context.kind === "finding"
@@ -153,7 +153,7 @@ export function ReviewReassessment({
                             key={path}
                             type="button"
                             onClick={() => onNavigate({ kind: "file", path })}
-                            className="block rounded break-all font-mono text-xs text-blue-300 underline focus-visible:outline-2 focus-visible:outline-ring"
+                            className="block rounded break-all font-mono text-xs text-review-link underline focus-visible:outline-2 focus-visible:outline-ring"
                           >
                             Current diff: {path}
                           </button>
@@ -163,7 +163,7 @@ export function ReviewReassessment({
                             href={contextSourceUrl(path)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="block break-all font-mono text-xs text-blue-300 underline"
+                            className="block break-all font-mono text-xs text-review-link underline"
                           >
                             {contextSourceUrl(path)
                               ? "Current pinned source"

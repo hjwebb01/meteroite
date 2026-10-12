@@ -215,11 +215,331 @@ describe("runToolLoop", () => {
       expect(result.value).toEqual(expected);
       expect(before).toHaveBeenCalledOnce();
       expect(requests[1]).toMatchObject({ tool_choice: "required" });
+      const finalTools = requests[1].tools as Record<string, unknown>[];
+      expect(finalTools).toHaveLength(1);
+      expect(finalTools[0]).toMatchObject({ type: "function", name: "answer" });
+      expect(finalTools[0]).not.toHaveProperty("tools");
+      if (expected) expect(result.value).toEqual(expected);
       expect(requests[1].input).toContainEqual({
         role: "user",
         content: "Answer now.",
       });
     }
+  });
+
+  it("retries one invalid structured finish and reports each rejected call", async () => {
+    const schema = z.object({ summary: z.string() });
+    const reasoning = {
+      type: "reasoning",
+      id: "final-reasoning",
+      encrypted_content: "opaque",
+      summary: [],
+    };
+    const invalid = {
+      output: [
+        reasoning,
+        {
+          type: "function_call",
+          name: "answer",
+          namespace: "meteroite",
+          call_id: "bad-answer",
+          arguments: "{",
+        },
+        {
+          type: "function_call",
+          name: "echo",
+          namespace: "meteroite",
+          call_id: "unaccepted-tool",
+          arguments: "{}",
+        },
+      ],
+    } as unknown as Response;
+    const valid = {
+      output: [
+        {
+          type: "function_call",
+          name: "answer",
+          namespace: "meteroite",
+          call_id: "good-answer",
+          arguments: '{"summary":"ok"}',
+        },
+      ],
+    } as unknown as Response;
+    const { complete, requests } = fakeClient(text(""), invalid, valid);
+    const execute = vi.fn();
+    const result = await runToolLoop({
+      selection,
+      instructions: "Review",
+      input: [],
+      toolset: "Tools",
+      tools: [echoTool(execute)],
+      finish: {
+        kind: "structured",
+        name: "answer",
+        description: "Answer",
+        schema,
+        instruction: "Return answer.",
+        maxAttempts: 2,
+      },
+      complete,
+    });
+
+    expect(result.value).toEqual({ summary: "ok" });
+    expect(complete).toHaveBeenCalledTimes(3);
+    expect(execute).not.toHaveBeenCalled();
+    const correctionInput = requests[2].input as Record<string, unknown>[];
+    expect(correctionInput).toContainEqual(reasoning);
+    expect(correctionInput).toContainEqual(
+      expect.objectContaining({
+        type: "function_call_output",
+        call_id: "bad-answer",
+      }),
+    );
+    expect(correctionInput).toContainEqual(
+      expect.objectContaining({
+        type: "function_call_output",
+        call_id: "unaccepted-tool",
+      }),
+    );
+    expect(correctionInput.at(-1)).toMatchObject({
+      role: "user",
+      content: expect.stringContaining("valid JSON"),
+    });
+    expect(requests[2].tool_choice).toBe("required");
+  });
+
+  it.each([
+    [
+      "malformed JSON",
+      [
+        {
+          type: "function_call",
+          name: "answer",
+          call_id: "bad-json",
+          arguments: "{",
+        },
+      ],
+    ],
+    [
+      "schema mismatch",
+      [
+        {
+          type: "function_call",
+          name: "answer",
+          call_id: "bad-schema",
+          arguments: '{"summary":1}',
+        },
+      ],
+    ],
+    [
+      "wrong tool",
+      [
+        {
+          type: "function_call",
+          name: "other",
+          call_id: "wrong-tool",
+          arguments: "{}",
+        },
+      ],
+    ],
+    ["missing tool", []],
+  ])("corrects a %s final response", async (_label, output) => {
+    const valid = {
+      output: [
+        {
+          type: "function_call",
+          name: "answer",
+          namespace: "meteroite",
+          call_id: "good-answer",
+          arguments: '{"summary":"ok"}',
+        },
+      ],
+    } as unknown as Response;
+    const bad = { output } as unknown as Response;
+    const { complete } = fakeClient(text(""), bad, valid);
+    const result = await runToolLoop({
+      selection,
+      instructions: "Review",
+      input: [],
+      toolset: "Tools",
+      tools: [],
+      finish: {
+        kind: "structured",
+        name: "answer",
+        description: "Answer",
+        schema: z.object({ summary: z.string() }),
+        instruction: "Return answer.",
+        maxAttempts: 2,
+      },
+      complete,
+    });
+    expect(result.value).toEqual({ summary: "ok" });
+    expect(complete).toHaveBeenCalledTimes(3);
+  });
+
+  it("bounds structured correction to two invalid final attempts", async () => {
+    const bad = {
+      output: [
+        {
+          type: "function_call",
+          name: "wrong",
+          namespace: "meteroite",
+          call_id: "bad",
+          arguments: "{}",
+        },
+      ],
+    } as unknown as Response;
+    const { complete } = fakeClient(text(""), bad, bad);
+    const result = await runToolLoop({
+      selection,
+      instructions: "",
+      input: [],
+      toolset: "Tools",
+      tools: [],
+      finish: {
+        kind: "structured",
+        name: "answer",
+        description: "Answer",
+        schema: z.object({}),
+        instruction: "Answer.",
+        maxAttempts: 2,
+      },
+      complete,
+    });
+    expect(result.value).toBeUndefined();
+    expect(complete).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not use investigation allowance to suppress a final correction", async () => {
+    const bad = {
+      output: [
+        {
+          type: "function_call",
+          name: "answer",
+          call_id: "bad",
+          arguments: "{",
+        },
+      ],
+    } as unknown as Response;
+    const valid = {
+      output: [
+        {
+          type: "function_call",
+          name: "answer",
+          call_id: "good",
+          arguments: "{}",
+        },
+      ],
+    } as unknown as Response;
+    const { complete } = fakeClient(text(""), bad, valid);
+    const allowances = [1, 0];
+    const record = vi.fn();
+    const result = await runToolLoop({
+      selection,
+      instructions: "",
+      input: [],
+      toolset: "Tools",
+      tools: [],
+      finish: {
+        kind: "structured",
+        name: "answer",
+        description: "Answer",
+        schema: z.object({}),
+        instruction: "Answer.",
+        maxAttempts: 2,
+      },
+      budget: { allowance: () => allowances.shift()!, record },
+      complete,
+    });
+    expect(result.value).toEqual({});
+    expect(result.budgetStopped).toBe(false);
+    expect(complete).toHaveBeenCalledTimes(3);
+    expect(record).toHaveBeenCalledTimes(2);
+    expect(record).toHaveBeenLastCalledWith(bad, []);
+  });
+
+  it("allows final correction after investigation has no turn allowance", async () => {
+    const bad = {
+      output: [
+        {
+          type: "function_call",
+          name: "answer",
+          call_id: "bad",
+          arguments: "{",
+        },
+      ],
+    } as unknown as Response;
+    const valid = {
+      output: [
+        {
+          type: "function_call",
+          name: "answer",
+          call_id: "good",
+          arguments: "{}",
+        },
+      ],
+    } as unknown as Response;
+    const { complete } = fakeClient(bad, valid);
+    const result = await runToolLoop({
+      selection,
+      instructions: "",
+      input: [],
+      toolset: "Tools",
+      tools: [],
+      finish: {
+        kind: "structured",
+        name: "answer",
+        description: "Answer",
+        schema: z.object({}),
+        instruction: "Answer.",
+        maxAttempts: 2,
+      },
+      budget: { allowance: () => 0, record: vi.fn() },
+      complete,
+    });
+    expect(result.value).toEqual({});
+    expect(result.budgetStopped).toBe(true);
+    expect(complete).toHaveBeenCalledTimes(2);
+  });
+
+  it("checks cancellation before each structured correction inference", async () => {
+    const bad = {
+      output: [
+        {
+          type: "function_call",
+          name: "answer",
+          call_id: "bad",
+          arguments: "{",
+        },
+      ],
+    } as unknown as Response;
+    const { complete } = fakeClient(text(""), bad);
+    const beforeCall = vi
+      .fn<() => Promise<void>>()
+      .mockResolvedValueOnce()
+      .mockResolvedValueOnce()
+      .mockRejectedValueOnce(new Error("cancelled"));
+    await expect(
+      runToolLoop({
+        selection,
+        instructions: "",
+        input: [],
+        toolset: "Tools",
+        tools: [],
+        finish: {
+          kind: "structured",
+          name: "answer",
+          description: "Answer",
+          schema: z.object({}),
+          instruction: "Answer.",
+          maxAttempts: 2,
+        },
+        beforeCall,
+        complete,
+      }),
+    ).rejects.toThrow("cancelled");
+    expect(complete).toHaveBeenCalledTimes(2);
+    expect(beforeCall).toHaveBeenCalledTimes(3);
   });
 
   it("checks cancellation before inference and stops investigating when the budget runs out", async () => {

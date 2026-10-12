@@ -29,8 +29,8 @@ export function ReviewHotspots({
         a validated defect.
       </p>
       {hotspots.map((hotspot) => (
-        <article key={hotspot.id} className="mt-3 rounded-lg border p-4">
-          <p className="text-xs text-blue-300">
+        <article key={hotspot.id} className="mt-3 rounded-md border p-4">
+          <p className="text-xs text-review-link">
             {hotspot.kind === "human_judgment"
               ? "Human judgment"
               : "Possible issue"}
@@ -59,7 +59,7 @@ export function ReviewHotspots({
                     onClick={() =>
                       onSelect({ kind: "hotspot", hotspot, reference })
                     }
-                    className="rounded px-1 py-1 text-blue-300 underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
+                    className="rounded px-1 py-1 text-review-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
                   >
                     {available ? "Show in diff" : "Show context"}:{" "}
                     {reference.path}:{reference.line} ({reference.side})
@@ -86,7 +86,7 @@ export function ReviewHotspots({
         </article>
       ))}
       {files.some((file) => fileCoverageGaps(file).length) && (
-        <details className="mt-4 rounded-lg border p-4 text-xs text-muted-foreground">
+        <details className="mt-4 rounded-md border p-4 text-xs text-muted-foreground">
           <summary className="cursor-pointer">File coverage limits</summary>
           <ul className="mt-3 space-y-3">
             {files.flatMap((file) =>

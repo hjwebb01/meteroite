@@ -61,9 +61,102 @@ describe("ChatGPT Responses execution", () => {
     expect(parameters).not.toHaveProperty("previous_response_id");
   });
 
+  it("keeps completed output items when the completed response omits them", async () => {
+    const functionCall = {
+      type: "function_call",
+      id: "call-1",
+      call_id: "call-1",
+      name: "return_review",
+      arguments: '{"findings":[]}',
+      status: "completed",
+    };
+    const reasoning = {
+      type: "reasoning",
+      id: "reasoning-1",
+      summary: [],
+      encrypted_content: "opaque-encrypted-value",
+    };
+    const message = {
+      type: "message",
+      id: "message-1",
+      role: "assistant",
+      status: "completed",
+      content: [{ type: "output_text", text: "Review complete." }],
+    };
+    const response = {
+      id: "response",
+      output: [],
+      status: "completed",
+      usage: { input_tokens: 12, output_tokens: 7, total_tokens: 19 },
+    };
+    mocks.create.mockResolvedValue(
+      events(
+        { type: "response.output_item.done", output_index: 2, item: message },
+        {
+          type: "response.output_item.done",
+          output_index: 0,
+          item: functionCall,
+        },
+        { type: "response.output_item.done", output_index: 1, item: reasoning },
+        { type: "response.completed", response },
+      ),
+    );
+
+    const completed = await completeChatGPTResponse(selection, { input: [] });
+
+    expect(completed.output).toEqual([functionCall, reasoning, message]);
+    expect(completed).toMatchObject({
+      status: "completed",
+      usage: response.usage,
+    });
+  });
+
+  it("does not duplicate completed items already present in the response", async () => {
+    const functionCall = {
+      type: "function_call",
+      id: "call-1",
+      call_id: "call-1",
+      name: "return_review",
+      arguments: '{"findings":[]}',
+      status: "completed",
+    };
+    const response = {
+      id: "response",
+      output: [functionCall],
+      status: "completed",
+    };
+    mocks.create.mockResolvedValue(
+      events(
+        {
+          type: "response.output_item.done",
+          output_index: 0,
+          item: functionCall,
+        },
+        { type: "response.completed", response },
+      ),
+    );
+
+    const completed = await completeChatGPTResponse(selection, { input: [] });
+
+    expect(completed.output).toEqual([functionCall]);
+  });
+
   it("does not treat partial text or a truncated stream as success", async () => {
     mocks.create.mockResolvedValue(
       events({ type: "response.output_text.delta", delta: "Partial" }),
+    );
+    await expect(
+      completeChatGPTResponse(selection, { input: [] }),
+    ).rejects.toThrow("interrupted");
+  });
+
+  it("does not treat completed items from an interrupted stream as success", async () => {
+    mocks.create.mockResolvedValue(
+      events({
+        type: "response.output_item.done",
+        output_index: 0,
+        item: { type: "function_call", name: "return_review" },
+      }),
     );
     await expect(
       completeChatGPTResponse(selection, { input: [] }),

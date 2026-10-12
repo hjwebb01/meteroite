@@ -8,12 +8,12 @@ export function SeverityBadge({
   return (
     <span
       className={cn(
-        "shrink-0 rounded px-2 py-1 text-xs font-medium capitalize",
+        "shrink-0 rounded px-2 py-1 font-mono text-[11px] font-semibold uppercase",
         severity === "high"
-          ? "bg-red-400/10 text-red-300"
+          ? "bg-sev-high/10 text-sev-high"
           : severity === "medium"
-            ? "bg-amber-400/10 text-amber-300"
-            : "bg-blue-400/10 text-blue-300",
+            ? "bg-sev-medium/10 text-sev-medium"
+            : "bg-review-link/10 text-review-link",
       )}
     >
       {severity}

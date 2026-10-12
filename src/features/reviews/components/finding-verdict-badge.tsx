@@ -3,11 +3,17 @@ import { cn } from "@/lib/utils";
 export type FindingVerdict =
   "supported" | "incorrect" | "could-not-reproduce" | "inconclusive";
 
-const LABELS: Record<FindingVerdict, string> = {
-  supported: "Confirmed",
-  incorrect: "Retracted (incorrect)",
-  "could-not-reproduce": "Could not reproduce",
-  inconclusive: "Inconclusive",
+export const FINDING_VERDICT_LABELS: Record<
+  FindingVerdict,
+  { badge: string; compact: string }
+> = {
+  supported: { badge: "Confirmed", compact: "confirmed" },
+  incorrect: { badge: "Retracted (incorrect)", compact: "retracted" },
+  "could-not-reproduce": {
+    badge: "Could not reproduce",
+    compact: "not reproduced",
+  },
+  inconclusive: { badge: "Inconclusive", compact: "inconclusive" },
 };
 
 export function FindingVerdictBadge({ verdict }: { verdict?: FindingVerdict }) {
@@ -17,13 +23,13 @@ export function FindingVerdictBadge({ verdict }: { verdict?: FindingVerdict }) {
       className={cn(
         "shrink-0 rounded px-2 py-1 text-xs font-medium",
         verdict === "supported"
-          ? "bg-emerald-400/10 text-emerald-300"
+          ? "bg-verdict-confirmed/10 text-verdict-confirmed"
           : verdict === "incorrect"
-            ? "bg-zinc-400/10 text-zinc-300"
-            : "bg-zinc-400/10 text-muted-foreground",
+            ? "bg-review-border text-review-body"
+            : "bg-review-border text-muted-foreground",
       )}
     >
-      {LABELS[verdict]}
+      {FINDING_VERDICT_LABELS[verdict].badge}
     </span>
   );
 }

@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, test, vi } from "vitest";
 import type { Octokit } from "octokit";
+import { buildHunks } from "../../../../convex/lib/review_navigation";
 import {
   assignReviewParts,
   createRepositoryReader,
@@ -71,6 +72,48 @@ function github() {
   return { client, pr, get, getTree, getBlob, listFiles, compare };
 }
 
+async function snapshotWithContents(
+  g: ReturnType<typeof github>,
+  contents: Record<string, string>,
+) {
+  g.listFiles.mockResolvedValue({ data: [] });
+  g.compare.mockRejectedValue(new Error("comparison unavailable"));
+  g.getTree.mockResolvedValue({
+    data: {
+      truncated: false,
+      tree: Object.entries(contents)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([path, text]) => ({
+          type: "blob",
+          mode: "100644",
+          path,
+          sha: path,
+          size: Buffer.byteLength(text),
+        })),
+    },
+  });
+  g.getBlob.mockImplementation(async ({ file_sha }) => {
+    const text = contents[file_sha];
+    return {
+      data: {
+        encoding: "base64",
+        size: Buffer.byteLength(text),
+        content: Buffer.from(text).toString("base64"),
+      },
+    } as never;
+  });
+  return loadPullRequest(g.client, "owner", "app", 7);
+}
+
+function realisticPatch(label: string, count = 1_400) {
+  const additions = Array.from(
+    { length: count },
+    (_, index) =>
+      `export function ${label}Policy${index}(user: User, resource: Resource) { return canAccess(user, resource, "review:source:${index}"); }`,
+  );
+  return `@@ -1 +1,${count} @@\n-oldAuth();\n${additions.map((line) => `+${line}`).join("\n")}`;
+}
+
 describe("pinned repository investigation", () => {
   test("preserves anchors for a diff omitted from the prompt and accepts inspected evidence", async () => {
     const g = github();
@@ -79,7 +122,7 @@ describe("pinned repository investigation", () => {
         {
           filename: "src/auth.ts",
           status: "modified",
-          patch: `@@ -1 +1 @@\n-oldAuth();\n+${"x".repeat(70_000)}`,
+          patch: realisticPatch("authorization"),
         },
       ],
     });
@@ -111,7 +154,7 @@ describe("pinned repository investigation", () => {
     expect(result.findings).toHaveLength(1);
     expect(
       validateFindings(
-        [{ ...result.findings[0], line: 2 }],
+        [{ ...result.findings[0], line: 2_000 }],
         snapshot.files,
         reader.evidence,
         [],
@@ -126,7 +169,7 @@ describe("pinned repository investigation", () => {
         {
           filename: "src/auth.ts",
           status: "modified",
-          patch: `@@ -1 +1 @@\n-oldAuth();\n+${"x".repeat(70_000)}`,
+          patch: realisticPatch("authorization"),
         },
       ],
     });
@@ -146,14 +189,14 @@ describe("pinned repository investigation", () => {
     );
     expect(small.files[0].patch).toBeUndefined();
     expect(small.files[0].anchors).toEqual(large.files[0].anchors);
-    expect(large.files[0].patch).toContain("x".repeat(70_000));
+    expect(large.files[0].patch).toContain("authorizationPolicy1399");
     expect(small.warnings[0]).toContain("diff token budget");
     expect(large.warnings).toEqual([]);
   });
   test("a diff beyond one context is packed into review parts instead of omitted", async () => {
     const g = github();
     const patch = (body: string) =>
-      `@@ -1 +1 @@\n-old();\n+${body.padEnd(40_000, " ")}`;
+      realisticPatch(`part${body.replace(/\W/g, "")}`, 300);
     g.listFiles.mockResolvedValue({
       data: [
         { filename: "src/a.ts", status: "modified", patch: patch("a();") },
@@ -162,7 +205,19 @@ describe("pinned repository investigation", () => {
         { filename: "package-lock.json", status: "modified", patch: "@@" },
       ],
     });
-    const capacity = 100_000;
+    const patchCost = (body: string) => {
+      const value = patch(body);
+      return estimateTokens(
+        JSON.stringify({
+          patch: value,
+          hunks: buildHunks(
+            { filename: "src/a.ts", patch: value },
+            "head:base",
+          ),
+        }),
+      );
+    };
+    const capacity = patchCost("a();") * 2 + 100;
     const single = await loadPullRequest(g.client, "o", "app", 7, capacity);
     expect(single.files.map((f) => f.part)).toEqual([
       0,
@@ -175,7 +230,7 @@ describe("pinned repository investigation", () => {
     );
     const split = await loadPullRequest(g.client, "o", "app", 7, capacity, 4);
     expect(split.files.map((f) => f.part)).toEqual([0, 0, 1, undefined]);
-    expect(split.files[2].patch).toContain("c();");
+    expect(split.files[2].patch).toContain("partcPolicy0");
     expect(split.warnings).toEqual([
       "Diff omitted: package-lock.json (lockfile).",
     ]);
@@ -194,19 +249,27 @@ describe("pinned repository investigation", () => {
   });
   test("a turn allowance caps reads until it is reset", async () => {
     const g = github();
+    const text = "newAuth();\nreturn user;\nreturn other;";
+    g.getBlob.mockResolvedValue({
+      data: {
+        encoding: "base64",
+        size: Buffer.byteLength(text),
+        content: Buffer.from(text).toString("base64"),
+      },
+    });
     const snapshot = await loadPullRequest(g.client, "owner", "app", 7);
     const reader = createRepositoryReader(g.client, snapshot, async () => {});
-    reader.limitTurn(estimateTokens(JSON.stringify("1: newAuth();\n")));
-    expect(await reader.readFile("src/auth.ts", 1, 2)).toMatchObject({
-      lastLine: 1,
+    reader.limitTurn(estimateTokens(JSON.stringify("2: return user;\n")));
+    expect(await reader.readFile("src/auth.ts", 1, 3)).toMatchObject({
+      lastLine: 2,
       partial: true,
     });
     expect(reader.warnings).toContain(
       "Model input budget reached; investigation is partial.",
     );
     reader.limitTurn(Infinity);
-    expect(await reader.readFile("src/auth.ts", 2, 2)).toMatchObject({
-      content: "2: return user;",
+    expect(await reader.readFile("src/auth.ts", 3, 3)).toMatchObject({
+      content: "3: return other;",
     });
   });
   test("overlapping and repeated windows only consume budget for newly delivered lines", async () => {
@@ -239,6 +302,9 @@ describe("pinned repository investigation", () => {
       expect(await reader.readFile("src/auth.ts", 1, 2)).toMatchObject({
         content: "",
         alreadyRead: 2,
+        note: expect.stringContaining(
+          "supplied in the diff or earlier tool results",
+        ),
         lastLine: 2,
       });
     expect(await reader.readFile("src/auth.ts", 2, 3)).toMatchObject({
@@ -270,32 +336,233 @@ describe("pinned repository investigation", () => {
       "Repository token budget reached; investigation is partial.",
     );
   });
-  test("search delivers truncated evidence once and a full read can upgrade it", async () => {
+  test("search returns a query-centered evidence window that a full read can upgrade", async () => {
     const g = github();
-    const line = `return user;${"x".repeat(1_000)}`;
+    const query = "lookupTarget";
+    const line = `const record = { ${Array.from(
+      { length: 80 },
+      (_, index) => `field${index}: "meaningful source value ${index}"`,
+    ).join(", ")} }; // ${query}`;
+    const start = Math.max(
+      0,
+      Math.min(
+        line.indexOf(query) - Math.floor((500 - query.length) / 2),
+        line.length - 500,
+      ),
+    );
+    const snippet = line.slice(start, start + 500);
     g.getBlob.mockResolvedValue({
       data: {
         encoding: "base64",
-        size: line.length + 11,
+        size: Buffer.byteLength(`newAuth();\n${line}`),
         content: Buffer.from(`newAuth();\n${line}`).toString("base64"),
       },
     });
     const snapshot = await loadPullRequest(g.client, "owner", "app", 7);
     const reader = createRepositoryReader(g.client, snapshot, async () => {});
-    expect(await reader.searchText("user", "src/")).toMatchObject({
-      matches: [{ path: "src/auth.ts", line: 2, text: line.slice(0, 500) }],
+    expect(await reader.searchText(query, "src/")).toMatchObject({
+      matches: [{ path: "src/auth.ts", line: 2, text: snippet }],
+      scannedFiles: 1,
+      nextCursor: null,
     });
-    expect(reader.evidence.get("src/auth.ts")?.get(2)).toBe(line.slice(0, 500));
-    expect(await reader.searchText("user", "src/")).toEqual({
+    expect(snippet).toContain(query);
+    expect(reader.evidence.get("src/auth.ts")?.get(2)).toBe(snippet);
+    expect(await reader.searchText(query, "src/")).toEqual({
       matches: [],
       partial: false,
       alreadyRead: 1,
+      scannedFiles: 1,
+      scannedLines: 2,
+      nextCursor: null,
     });
     expect(await reader.readFile("src/auth.ts", 2, 2)).toMatchObject({
       content: `2: ${line}`,
     });
     expect(reader.evidence.get("src/auth.ts")?.get(2)).toBe(line);
+    expect(await reader.searchText(query, "src/")).toMatchObject({
+      matches: [],
+      partial: false,
+      alreadyRead: 1,
+    });
   });
+  test("a distant search preserves evidence and advances past the line until a full read", async () => {
+    const g = github();
+    const middle = Array.from(
+      { length: 90 },
+      (_, index) => `field${index}: "meaningful source value ${index}"`,
+    ).join(", ");
+    const line = `const record = { firstTarget: "start", ${middle}, secondTarget: "end" };`;
+    const text = `newAuth();\n${line}`;
+    g.getBlob.mockResolvedValue({
+      data: {
+        encoding: "base64",
+        size: Buffer.byteLength(text),
+        content: Buffer.from(text).toString("base64"),
+      },
+    });
+    const snapshot = await loadPullRequest(g.client, "owner", "app", 7);
+    const reader = createRepositoryReader(g.client, snapshot, async () => {});
+
+    await reader.searchText("firstTarget", "src/");
+    const firstEvidence = reader.evidence.get("src/auth.ts")?.get(2);
+    expect(firstEvidence).toContain("firstTarget");
+    const second = await reader.searchText("secondTarget", "src/");
+    expect(second).toMatchObject({
+      matches: [],
+      partial: true,
+      nextCursor: { fileOffset: 0, lineOffset: 2 },
+      requiredRead: { path: "src/auth.ts", line: 2 },
+      error: expect.stringContaining("readFile"),
+    });
+    expect(reader.evidence.get("src/auth.ts")?.get(2)).toBe(firstEvidence);
+
+    await reader.readFile("src/auth.ts", 2, 2);
+    expect(reader.evidence.get("src/auth.ts")?.get(2)).toBe(line);
+    expect(await reader.searchText("secondTarget", "src/")).toMatchObject({
+      matches: [],
+      partial: false,
+      alreadyRead: 1,
+    });
+  });
+  test("a conflicting oversized line does not trap search continuation", async () => {
+    const g = github();
+    const longLine = `firstTarget ${"source value ".repeat(15_000)} secondTarget`;
+    const snapshot = await snapshotWithContents(g, {
+      "src/large.ts": `${longLine}\nsecondTarget on the next line`,
+    });
+    const reader = createRepositoryReader(
+      g.client,
+      snapshot,
+      async () => {},
+      50_000,
+    );
+    reader.limitTurn(5_000);
+    await reader.searchText("firstTarget", "src/");
+    const conflict = await reader.searchText("secondTarget", "src/");
+    expect(conflict).toMatchObject({
+      partial: true,
+      nextCursor: { fileOffset: 0, lineOffset: 1 },
+    });
+    expect(await reader.readFile("src/large.ts", 1, 1)).toMatchObject({
+      partial: true,
+    });
+    const continued = await reader.searchText(
+      "secondTarget",
+      "src/",
+      conflict.nextCursor!,
+    );
+    expect(continued).toMatchObject({
+      partial: true,
+      nextCursor: null,
+      matches: [expect.objectContaining({ line: 2 })],
+    });
+    expect(reader.evidence.get("src/large.ts")?.get(1)).toContain(
+      "firstTarget",
+    );
+    expect(
+      [...reader.warnings].some((w) =>
+        w.startsWith('Search for "secondTarget"'),
+      ),
+    ).toBe(true);
+  });
+
+  test("search read exhaustion preserves the first unread file cursor and partial coverage", async () => {
+    const g = github();
+    const contents = Object.fromEntries(
+      Array.from({ length: 70 }, (_, i) => [
+        `src/file${String(i).padStart(2, "0")}.ts`,
+        i === 65 ? "lateTarget" : "unrelated",
+      ]),
+    );
+    const snapshot = await snapshotWithContents(g, contents);
+    const reader = createRepositoryReader(g.client, snapshot, async () => {});
+    const first = await reader.searchText("lateTarget", "src/");
+    const second = await reader.searchText(
+      "lateTarget",
+      "src/",
+      first.nextCursor!,
+    );
+    const third = await reader.searchText(
+      "lateTarget",
+      "src/",
+      second.nextCursor!,
+    );
+    expect(await reader.readFile("src/file65.ts", 1, 1)).toMatchObject({
+      partial: true,
+      error: "Repository read limit reached; this file was not read.",
+    });
+    expect(third).toMatchObject({
+      partial: true,
+      matches: [],
+      nextCursor: { fileOffset: 60, lineOffset: 0 },
+      error: expect.stringContaining("read limit"),
+    });
+    expect(
+      [...reader.warnings].some((w) => w.startsWith('Search for "lateTarget"')),
+    ).toBe(true);
+  });
+
+  test("a skipped or forged cursor cannot clear an unfinished search warning", async () => {
+    const g = github();
+    const snapshot = await snapshotWithContents(
+      g,
+      Object.fromEntries(
+        Array.from({ length: 30 }, (_, i) => [`src/file${i}.ts`, "unrelated"]),
+      ),
+    );
+    const reader = createRepositoryReader(g.client, snapshot, async () => {});
+    const first = await reader.searchText("missingTarget", "src/");
+    expect(
+      await reader.searchText("missingTarget", "src/", {
+        fileOffset: 100,
+        lineOffset: 0,
+      }),
+    ).toMatchObject({
+      partial: true,
+      nextCursor: first.nextCursor,
+      error: expect.stringContaining("without skipping"),
+    });
+    expect(
+      [...reader.warnings].some((w) =>
+        w.startsWith('Search for "missingTarget"'),
+      ),
+    ).toBe(true);
+    expect(
+      await reader.searchText("missingTarget", "src/", first.nextCursor!),
+    ).toMatchObject({ partial: false });
+    expect(
+      [...reader.warnings].some((w) =>
+        w.startsWith('Search for "missingTarget"'),
+      ),
+    ).toBe(false);
+  });
+
+  test("a stale cursor cannot mark a completed search partial", async () => {
+    const g = github();
+    const snapshot = await snapshotWithContents(g, {
+      "src/file.ts": "unrelated",
+    });
+    const reader = createRepositoryReader(g.client, snapshot, async () => {});
+    expect(await reader.searchText("missingTarget", "src/")).toMatchObject({
+      partial: false,
+    });
+    expect(
+      await reader.searchText("missingTarget", "src/", {
+        fileOffset: 99,
+        lineOffset: 0,
+      }),
+    ).toMatchObject({
+      partial: false,
+      nextCursor: null,
+      error: expect.stringContaining("without skipping"),
+    });
+    expect(
+      [...reader.warnings].some((w) =>
+        w.startsWith('Search for "missingTarget"'),
+      ),
+    ).toBe(false);
+  });
+
   test("cancellation is checked even for cached files", async () => {
     const g = github();
     const active = vi.fn().mockResolvedValue(undefined);
@@ -304,6 +571,17 @@ describe("pinned repository investigation", () => {
     await reader.readFile("src/auth.ts", 1, 2);
     active.mockRejectedValue(new Error("Cancelled"));
     await expect(reader.readFile("src/auth.ts", 1, 2)).rejects.toThrow(
+      "Cancelled",
+    );
+  });
+  test("search checks cancellation even when its file is cached", async () => {
+    const g = github();
+    const active = vi.fn().mockResolvedValue(undefined);
+    const snapshot = await loadPullRequest(g.client, "owner", "app", 7);
+    const reader = createRepositoryReader(g.client, snapshot, active);
+    await reader.searchText("user", "src/");
+    active.mockRejectedValue(new Error("Cancelled"));
+    await expect(reader.searchText("user", "src/")).rejects.toThrow(
       "Cancelled",
     );
   });
@@ -322,18 +600,125 @@ describe("pinned repository investigation", () => {
     });
     const snapshot = await loadPullRequest(g.client, "owner", "app", 7);
     const reader = createRepositoryReader(g.client, snapshot, async () => {});
-    expect(await reader.searchText("match", "src/")).toMatchObject({
+    const firstPage = await reader.searchText("match", "src/");
+    const matchWarning =
+      'Search for "match" under src/ is partial; follow nextCursor when available and inspect reported limits.';
+    expect(reader.warnings).toContain(matchWarning);
+    expect(firstPage).toMatchObject({
       matches: Array.from({ length: 20 }, (_, i) => ({
         path: "src/auth.ts",
         line: i + 2,
         text: `match ${i}`,
       })),
       partial: true,
+      nextCursor: { fileOffset: 0, lineOffset: 21 },
     });
-    expect(await reader.searchText("match", "src/")).toEqual({
+    expect(
+      await reader.searchText("match", "src/", firstPage.nextCursor!),
+    ).toEqual({
       matches: [{ path: "src/auth.ts", line: 22, text: "match 20" }],
       partial: false,
-      alreadyRead: 20,
+      scannedFiles: 1,
+      scannedLines: 1,
+      nextCursor: null,
+    });
+    expect(reader.warnings).not.toContain(matchWarning);
+  });
+  test("search pagination reaches files beyond the first 25 in pinned path order", async () => {
+    const g = github();
+    const contents = Object.fromEntries(
+      Array.from({ length: 26 }, (_, index) => [
+        `src/file-${String(index).padStart(2, "0")}.ts`,
+        index === 25
+          ? 'export const result = "lateTarget";'
+          : `export const value${index} = "ordinary source ${index}";`,
+      ]),
+    );
+    const snapshot = await snapshotWithContents(g, contents);
+    const reader = createRepositoryReader(g.client, snapshot, async () => {});
+
+    const first = await reader.searchText("lateTarget", "src/");
+    const lateWarning =
+      'Search for "lateTarget" under src/ is partial; follow nextCursor when available and inspect reported limits.';
+    expect(reader.warnings).toContain(lateWarning);
+    expect(first).toMatchObject({
+      matches: [],
+      partial: true,
+      scannedFiles: 25,
+      nextCursor: { fileOffset: 25, lineOffset: 0 },
+    });
+    expect(
+      await reader.searchText("lateTarget", "src/", first.nextCursor!),
+    ).toMatchObject({
+      matches: [
+        {
+          path: "src/file-25.ts",
+          line: 1,
+          text: 'export const result = "lateTarget";',
+        },
+      ],
+      partial: false,
+      scannedFiles: 1,
+      nextCursor: null,
+    });
+    expect(reader.warnings).not.toContain(lateWarning);
+  });
+  test("completed searches clear only their own partial coverage warning", async () => {
+    const g = github();
+    const contents = Object.fromEntries(
+      Array.from({ length: 26 }, (_, index) => [
+        `src/file-${String(index).padStart(2, "0")}.ts`,
+        `export const value${index} = "ordinary source ${index}";`,
+      ]),
+    );
+    const snapshot = await snapshotWithContents(g, contents);
+    const reader = createRepositoryReader(g.client, snapshot, async () => {});
+    const warning = (query: string) =>
+      `Search for ${JSON.stringify(query)} under src/ is partial; follow nextCursor when available and inspect reported limits.`;
+
+    const alpha = await reader.searchText("alphaSearch", "src/");
+    const beta = await reader.searchText("betaSearch", "src/");
+    expect(reader.warnings).toContain(warning("alphaSearch"));
+    expect(reader.warnings).toContain(warning("betaSearch"));
+
+    await reader.searchText("alphaSearch", "src/", alpha.nextCursor!);
+    expect(reader.warnings).not.toContain(warning("alphaSearch"));
+    expect(reader.warnings).toContain(warning("betaSearch"));
+
+    await reader.searchText("betaSearch", "src/", beta.nextCursor!);
+    expect(reader.warnings).not.toContain(warning("betaSearch"));
+  });
+  test("search resumes inside a file when the turn budget is exhausted", async () => {
+    const g = github();
+    const path = "src/search.ts";
+    const snapshot = await snapshotWithContents(g, {
+      [path]: "match first;\nmatch second;",
+    });
+    const firstMatchTokens = estimateTokens(
+      JSON.stringify({ path, line: 1, text: "match first;" }),
+    );
+    const reader = createRepositoryReader(
+      g.client,
+      snapshot,
+      async () => {},
+      firstMatchTokens * 2 + 100,
+    );
+    reader.limitTurn(firstMatchTokens);
+
+    const first = await reader.searchText("match", "src/");
+    expect(first).toMatchObject({
+      matches: [{ path, line: 1, text: "match first;" }],
+      partial: true,
+      error: "Repository token budget reached.",
+      nextCursor: { fileOffset: 0, lineOffset: 1 },
+    });
+    reader.limitTurn(Infinity);
+    expect(
+      await reader.searchText("match", "src/", first.nextCursor!),
+    ).toMatchObject({
+      matches: [{ path, line: 2, text: "match second;" }],
+      partial: false,
+      nextCursor: null,
     });
   });
   test("rejects a PR that changes while its diff is being fetched", async () => {
@@ -368,6 +753,9 @@ describe("pinned repository investigation", () => {
     expect(await reader.searchText("user", "src/")).toEqual({
       matches: [{ path: "src/auth.ts", line: 2, text: "return user;" }],
       partial: false,
+      scannedFiles: 1,
+      scannedLines: 2,
+      nextCursor: null,
     });
     expect([...reader.filesRead]).toEqual(["src/auth.ts"]);
   });

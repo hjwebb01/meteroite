@@ -6,8 +6,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-inter);
-  --font-mono: var(--font-plex-mono);
+  --font-sans: var(--font-ui-face);
+  --font-mono: var(--font-code-face);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -43,75 +43,42 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-:root {
-  --radius: 0.475rem;
-  --background: oklch(0.2925 0.0157 264.3);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.25 0.012 264.34);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.3404 0.0205 265.97);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --separator-border: oklch(1 0 0 / 10%);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.6562 0.1826 262.74);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.25 0.012 264.34);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
+/* The workspace shares the review palette in both app appearances. */
+:root,
 .dark {
-  --background: oklch(0.2925 0.0157 264.3);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.25 0.012 264.34);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.25 0.012 264.34);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.25 0.012 264.34);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.25 0.012 264.34);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.3404 0.0205 265.97);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --separator-border: oklch(1 0 0 / 10%);
-  --ring: oklch(0.6562 0.1826 262.74);
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.25 0.012 264.34);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --radius: 0.375rem;
+  --background: var(--review-bg);
+  --foreground: var(--review-text);
+  --card: var(--review-chrome);
+  --card-foreground: var(--review-text);
+  --popover: var(--review-chrome);
+  --popover-foreground: var(--review-text);
+  --primary: var(--review-text);
+  --primary-foreground: var(--review-bg);
+  --secondary: var(--review-file-header);
+  --secondary-foreground: var(--review-text);
+  --muted: var(--review-chrome);
+  --muted-foreground: var(--review-text-muted);
+  --accent: var(--review-file-header);
+  --accent-foreground: var(--review-text);
+  --destructive: var(--diff-del-fg);
+  --border: var(--review-border);
+  --separator-border: var(--review-border);
+  --input: var(--review-border-strong);
+  --ring: var(--review-link);
+  --chart-1: var(--review-link);
+  --chart-2: var(--diff-add-fg);
+  --chart-3: var(--sev-medium);
+  --chart-4: var(--sev-high);
+  --chart-5: var(--review-text-muted);
+  --sidebar: var(--review-chrome);
+  --sidebar-foreground: var(--review-text);
+  --sidebar-primary: var(--review-link);
+  --sidebar-primary-foreground: var(--review-bg);
+  --sidebar-accent: var(--review-file-header);
+  --sidebar-accent-foreground: var(--review-text);
+  --sidebar-border: var(--review-border);
+  --sidebar-ring: var(--review-link);
 }
 
 @layer base {
@@ -162,36 +129,37 @@
   @apply rounded-full bg-border border-[1px] border-transparent border-solid bg-clip-padding;
 }
 
-/* Review screen tokens (DESIGN.md). Dark in both app themes. */
+/* Fusion crust palette (DESIGN.md). Dark in both app themes: the ground is
+   the burnt shell of a meteorite, and severity is how hot a mark burns. */
 :root {
-  --review-bg: #15171c;
-  --review-chrome: #1b1e25;
-  --review-file-header: #1f232b;
-  --review-hunk: #191c22;
-  --review-border: #2c3039;
-  --review-border-strong: #3a3f4c;
-  --review-text: #e6e8ee;
-  --review-text-body: #c4c8d2;
-  --review-text-muted: #8a90a0;
-  --review-text-dim: #7d8393;
-  --review-link: #8fb4ff;
-  --diff-add-bg: rgb(46 160 67 / 12%);
-  --diff-add-fg: #7ee0a0;
-  --diff-del-bg: rgb(248 81 73 / 10%);
-  --diff-del-fg: #ff9b94;
-  --sev-high: #ffb380;
-  --sev-high-bg: #1f1c1a;
-  --sev-high-line: rgb(255 159 90 / 14%);
-  --sev-medium: #e8c46a;
-  --sev-judgment: #8fb4ff;
-  --sev-resolved: #7ee0a0;
-  --verdict-confirmed: #9be6b4;
+  --review-bg: #16120e;
+  --review-code: #121110;
+  --review-chrome: #1d1813;
+  --review-file-header: #241e18;
+  --review-border: #342b23;
+  --review-border-strong: #4c4136;
+  --review-text: #f2e9db;
+  --review-text-body: #d3c7b5;
+  --review-text-muted: #a49784;
+  --review-text-dim: #918573;
+  --review-link: #c5d17c;
+  --diff-add-fg: #9fd3a0;
+  --diff-del-fg: #f2909f;
+  --sev-high: #ff7a45;
+  --sev-high-bg: #26170f;
+  --sev-medium: #e9ad4f;
+  --sev-low: #a49784;
+  --sev-judgment: #c5d17c;
+  --sev-resolved: #9fd3a0;
+  --verdict-confirmed: #a8dfb6;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
 @theme inline {
-  --font-ui: var(--font-plex-sans);
-  --font-serif: var(--font-newsreader);
+  --font-ui: var(--font-ui-face);
+  --font-serif: var(--font-display-face);
   --color-review-bg: var(--review-bg);
+  --color-review-code: var(--review-code);
   --color-review-chrome: var(--review-chrome);
   --color-review-file-header: var(--review-file-header);
   --color-review-border: var(--review-border);
@@ -206,7 +174,63 @@
   --color-sev-high: var(--sev-high);
   --color-sev-high-bg: var(--sev-high-bg);
   --color-sev-medium: var(--sev-medium);
+  --color-sev-low: var(--sev-low);
   --color-sev-judgment: var(--sev-judgment);
   --color-sev-resolved: var(--sev-resolved);
   --color-verdict-confirmed: var(--verdict-confirmed);
+}
+
+@layer base {
+  body {
+    font-family: var(--font-ui-face, Arial), sans-serif;
+    font-feature-settings: "ss01", "tnum";
+  }
+  :where(
+    button,
+    a,
+    input,
+    textarea,
+    select,
+    summary,
+    [tabindex]
+  ):focus-visible {
+    outline: 2px solid var(--review-link);
+    outline-offset: 3px;
+  }
+  select {
+    color-scheme: dark;
+  }
+}
+
+/* A dismissed finding cools from its severity color to ash. */
+@keyframes cool {
+  from {
+    color: var(--heat);
+  }
+}
+
+.cooling {
+  animation: cool 400ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cooling {
+    animation-duration: 200ms;
+  }
+}
+
+/* Every pressable control answers a press, except where it would move text. */
+@layer base {
+  :where(button, [role="button"], a[data-slot="button"]):not(:disabled) {
+    transition-property: color, background-color, border-color, transform;
+    transition-duration: 150ms;
+    transition-timing-function: var(--ease-out);
+  }
+  :where(button, [role="button"], a[data-slot="button"]):not(:disabled):active {
+    transform: scale(0.97);
+  }
+  ::selection {
+    background: rgb(255 122 69 / 32%);
+    color: var(--review-text);
+  }
 }
