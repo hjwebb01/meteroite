@@ -1,8 +1,8 @@
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
-import type { Doc } from "./_generated/dataModel";
 import { getOwnedReview } from "./lib/owned_review";
+import { latestVerdicts } from "./lib/review_verdicts";
 import { resolveCodingModelId } from "./lib/coding_models";
 import {
   assertNoActiveFindingWork,
@@ -82,22 +82,7 @@ export const verdicts = query({
   handler: async (ctx, { reviewId }) => {
     const identity = await verifyAuth(ctx);
     const review = await getOwnedReview(ctx, reviewId, identity.subject);
-    const latest: Record<
-      string,
-      NonNullable<Doc<"reviewMessages">["conclusion"]>["verdict"]
-    > = {};
-    for (const finding of review.result?.findings ?? []) {
-      const message = await ctx.db
-        .query("reviewMessages")
-        .withIndex("by_finding", (q) =>
-          q.eq("reviewId", reviewId).eq("findingId", finding.id),
-        )
-        .order("desc")
-        .filter((q) => q.neq(q.field("conclusion"), undefined))
-        .first();
-      if (message?.conclusion) latest[finding.id] = message.conclusion.verdict;
-    }
-    return latest;
+    return latestVerdicts(ctx, review);
   },
 });
 
