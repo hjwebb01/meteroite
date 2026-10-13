@@ -1,0 +1,1562 @@
+{
+ "url": "http://localhost:3000/",
+ "at": "2026-10-13T16:47:14.738Z",
+ "allow": [],
+ "viewports": [
+  {
+   "width": 1440,
+   "height": 900,
+   "load": "load",
+   "screens": 8,
+   "filled": [
+    0.31,
+    0.64,
+    0.69,
+    0.81,
+    0.25,
+    0.4,
+    0.31,
+    0.39
+   ],
+   "motion": {
+    "elements": 45,
+    "css": 44,
+    "transitions": 0,
+    "scripted": 1,
+    "videos": 0,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 1440,
+     "h": 900
+    },
+    "page": {
+     "height": 6478,
+     "screens": 7.2,
+     "words": 904,
+     "img": 4,
+     "video": 0,
+     "canvas": 0,
+     "svg": 1,
+     "sections": 8,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 8,
+     "uiAbuse": false,
+     "realPictures": 4,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [
+      "image?url=%2Fmeteorites%2Fwillamette.jpg&w=750&q",
+      "image?url=%2Fmeteorites%2Fdronino.jpg&w=384&q=75",
+      "image?url=%2Fmeteorites%2Fweekeroo.jpg&w=384&q=7",
+      "image?url=%2Fmeteorites%2Flaguna-manantiales.jpg"
+     ],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": []
+    },
+    "hero": {
+     "text": "Read the pull request by purpose",
+     "words": 6,
+     "chars": 32,
+     "lines": 2,
+     "size": 74.9,
+     "vw": 5.2,
+     "font": "Hanken Grotesk",
+     "weight": 500,
+     "tracking": -0.05,
+     "leading": 0.92,
+     "upper": false,
+     "italic": false,
+     "mono": false,
+     "align": "left",
+     "position": "left",
+     "widthRatio": 0.47,
+     "top": 222,
+     "tag": "h1",
+     "kind": "heading"
+    },
+    "h1": {
+     "text": "Read the pull request by purpose",
+     "words": 6,
+     "lines": 2,
+     "size": 74.9,
+     "font": "Hanken Grotesk"
+    },
+    "headings": [
+     {
+      "text": "Read the pull request by purpose",
+      "words": 6,
+      "chars": 32,
+      "lines": 2,
+      "size": 74.9,
+      "vw": 5.2,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.05,
+      "leading": 0.92,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.47,
+      "top": 222,
+      "tag": "h1",
+      "kind": "heading"
+     },
+     {
+      "text": "Cut it open first",
+      "words": 4,
+      "chars": 17,
+      "lines": 1,
+      "size": 63.4,
+      "vw": 4.4,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.05,
+      "leading": 0.92,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.45,
+      "top": 1533,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "An iron meteorite looks like any dark stone until its face is cut and etched. Then the structure shows.",
+      "words": 19,
+      "chars": 103,
+      "lines": 3,
+      "size": 28,
+      "vw": 1.9,
+      "font": "Hanken Grotesk",
+      "weight": 400,
+      "tracking": -0.02,
+      "leading": 1.25,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.33,
+      "top": 1623,
+      "tag": "p",
+      "kind": "statement"
+     },
+     {
+      "text": "Built for the reader",
+      "words": 4,
+      "chars": 20,
+      "lines": 1,
+      "size": 63.4,
+      "vw": 4.4,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.05,
+      "leading": 0.92,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.94,
+      "top": 2589,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "How a review runs",
+      "words": 4,
+      "chars": 17,
+      "lines": 1,
+      "size": 63.4,
+      "vw": 4.4,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.05,
+      "leading": 0.92,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.58,
+      "top": 3676,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "See it before it posts",
+      "words": 5,
+      "chars": 22,
+      "lines": 1,
+      "size": 63.4,
+      "vw": 4.4,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.05,
+      "leading": 0.92,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.58,
+      "top": 5162,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Paste a pull request you were asked to review and read it by purpose.",
+      "words": 14,
+      "chars": 69,
+      "lines": 2,
+      "size": 36,
+      "vw": 2.5,
+      "font": "Hanken Grotesk",
+      "weight": 400,
+      "tracking": -0.03,
+      "leading": 1.15,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.58,
+      "top": 5950,
+      "tag": "p",
+      "kind": "statement"
+     }
+    ],
+    "headingSummary": {
+     "count": 7,
+     "maxLines": 3,
+     "over2Lines": 0,
+     "statements": 2,
+     "centered": 0,
+     "medianWords": 5,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Hanken Grotesk",
+       "share": 0.96,
+       "mono": false
+      },
+      {
+       "family": "Spline Sans Mono",
+       "share": 0.04,
+       "mono": true
+      }
+     ],
+     "familyCount": 2,
+     "sizes": [
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      26,
+      28,
+      36,
+      63,
+      75
+     ],
+     "sizeCount": 13,
+     "notLoaded": [],
+     "body": {
+      "font": "Hanken Grotesk",
+      "size": 17,
+      "leading": 1.5,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 9.9
+     },
+     "measureChars": 58,
+     "max": {
+      "size": 74.9,
+      "vw": 5.2,
+      "font": "Hanken Grotesk",
+      "text": "Read the pull request by purpose"
+     },
+     "monoShare": 0.04,
+     "monoProseShare": 0,
+     "monoFamilies": [
+      "Spline Sans Mono"
+     ],
+     "monoSamples": [],
+     "microLabels": 0,
+     "microLabelShare": 0,
+     "microSamples": [],
+     "upperShare": 0,
+     "centerShare": 0.02,
+     "smallText": 0
+    },
+    "eyebrows": [],
+    "numbered": [],
+    "color": {
+     "bodyBg": "#1c1c1c",
+     "bodyBgHsl": {
+      "h": 0,
+      "s": 0,
+      "l": 0.11
+     },
+     "dark": true,
+     "sectionBgs": [
+      {
+       "color": "#1c1c1c",
+       "top": 0,
+       "hsl": {
+        "h": 0,
+        "s": 0,
+        "l": 0.11
+       }
+      },
+      {
+       "color": "#c8c5ba",
+       "top": 589,
+       "hsl": {
+        "h": 47,
+        "s": 0.11,
+        "l": 0.76
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#f1f1ef",
+       "share": 0.45
+      },
+      {
+       "color": "#c4c5bf",
+       "share": 0.14
+      },
+      {
+       "color": "#d0d1cb",
+       "share": 0.14
+      },
+      {
+       "color": "#1c1c1c",
+       "share": 0.12
+      },
+      {
+       "color": "#a3a49e",
+       "share": 0.12
+      }
+     ],
+     "button": {
+      "bg": "#8fa68e",
+      "hsl": {
+       "h": 118,
+       "s": 0.12,
+       "l": 0.6
+      },
+      "fg": "#1c1c1c"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 7,
+     "inHero": 3,
+     "radius": 0,
+     "height": 44,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "Skip to the sample review",
+      "Review a real PR",
+      "Mark read : Calculate the discounted tot"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 0,
+     "shadowOverlay": 0,
+     "shadowSamples": [],
+     "gradients": 0,
+     "scrims": 0,
+     "gradientSamples": [],
+     "gradientText": 0,
+     "hairlines": 0,
+     "hairlineSamples": [],
+     "outlinedBoxes": 0,
+     "dashed": 0,
+     "blurred": 0,
+     "roundedBoxes": 0,
+     "boxRadius": 0,
+     "squareMedia": 4,
+     "roundedMedia": 0,
+     "mediaRadius": 0,
+     "textShadow": 0,
+     "cardRows": [
+      {
+       "count": 6,
+       "iconTopped": false,
+       "rounded": false,
+       "top": 2703
+      }
+     ]
+    },
+    "heroMedia": [],
+    "nav": {
+     "links": 4,
+     "fixed": false,
+     "height": 72,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "hanken grotesk",
+     "spline sans mono"
+    ]
+   },
+   "consoleErrors": []
+  },
+  {
+   "width": 768,
+   "height": 1024,
+   "load": "load",
+   "screens": 7,
+   "filled": [
+    0.42,
+    0.79,
+    0.63,
+    0.81,
+    0.62,
+    0.69,
+    0.55
+   ],
+   "motion": {
+    "elements": 45,
+    "css": 44,
+    "transitions": 0,
+    "scripted": 1,
+    "videos": 0,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 768,
+     "h": 1024
+    },
+    "page": {
+     "height": 6918,
+     "screens": 6.8,
+     "words": 904,
+     "img": 4,
+     "video": 0,
+     "canvas": 0,
+     "svg": 1,
+     "sections": 8,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 8,
+     "uiAbuse": false,
+     "realPictures": 4,
+     "videoCount": 0,
+     "uiPictures": 0,
+     "pictureSamples": [
+      "image?url=%2Fmeteorites%2Fwillamette.jpg&w=384&q",
+      "image?url=%2Fmeteorites%2Fdronino.jpg&w=256&q=75",
+      "image?url=%2Fmeteorites%2Fweekeroo.jpg&w=256&q=7",
+      "image?url=%2Fmeteorites%2Flaguna-manantiales.jpg"
+     ],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": []
+    },
+    "hero": {
+     "text": "Read the pull request by purpose",
+     "words": 6,
+     "chars": 32,
+     "lines": 2,
+     "size": 52,
+     "vw": 6.8,
+     "font": "Hanken Grotesk",
+     "weight": 500,
+     "tracking": -0.05,
+     "leading": 0.92,
+     "upper": false,
+     "italic": false,
+     "mono": false,
+     "align": "left",
+     "position": "center",
+     "widthRatio": 0.89,
+     "top": 222,
+     "tag": "h1",
+     "kind": "heading"
+    },
+    "h1": {
+     "text": "Read the pull request by purpose",
+     "words": 6,
+     "lines": 2,
+     "size": 52,
+     "font": "Hanken Grotesk"
+    },
+    "headings": [
+     {
+      "text": "Read the pull request by purpose",
+      "words": 6,
+      "chars": 32,
+      "lines": 2,
+      "size": 52,
+      "vw": 6.8,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.05,
+      "leading": 0.92,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.89,
+      "top": 222,
+      "tag": "h1",
+      "kind": "heading"
+     },
+     {
+      "text": "Cut it open first",
+      "words": 4,
+      "chars": 17,
+      "lines": 1,
+      "size": 40,
+      "vw": 5.2,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.05,
+      "leading": 0.92,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.41,
+      "top": 1515,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Built for the reader",
+      "words": 4,
+      "chars": 20,
+      "lines": 1,
+      "size": 40,
+      "vw": 5.2,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.05,
+      "leading": 0.92,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.9,
+      "top": 2571,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Read by purpose",
+      "words": 3,
+      "chars": 15,
+      "lines": 1,
+      "size": 26,
+      "vw": 3.4,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.02,
+      "leading": 1.15,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.39,
+      "top": 2762,
+      "tag": "h3",
+      "kind": "heading"
+     },
+     {
+      "text": "Findings open at their line",
+      "words": 5,
+      "chars": 27,
+      "lines": 1,
+      "size": 26,
+      "vw": 3.4,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.02,
+      "leading": 1.15,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.39,
+      "top": 3012,
+      "tag": "h3",
+      "kind": "heading"
+     },
+     {
+      "text": "Mark what you have read",
+      "words": 5,
+      "chars": 23,
+      "lines": 1,
+      "size": 26,
+      "vw": 3.4,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.02,
+      "leading": 1.15,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.39,
+      "top": 3252,
+      "tag": "h3",
+      "kind": "heading"
+     },
+     {
+      "text": "Every hunk, on demand",
+      "words": 4,
+      "chars": 21,
+      "lines": 1,
+      "size": 26,
+      "vw": 3.4,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.02,
+      "leading": 1.15,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.39,
+      "top": 3476,
+      "tag": "h3",
+      "kind": "heading"
+     },
+     {
+      "text": "New commits wait for you",
+      "words": 5,
+      "chars": 24,
+      "lines": 1,
+      "size": 26,
+      "vw": 3.4,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.02,
+      "leading": 1.15,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "left",
+      "widthRatio": 0.39,
+      "top": 3721,
+      "tag": "h3",
+      "kind": "heading"
+     },
+     {
+      "text": "Nothing posts unseen",
+      "words": 3,
+      "chars": 20,
+      "lines": 1,
+      "size": 26,
+      "vw": 3.4,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.02,
+      "leading": 1.15,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "right",
+      "widthRatio": 0.39,
+      "top": 3960,
+      "tag": "h3",
+      "kind": "heading"
+     },
+     {
+      "text": "How a review runs",
+      "words": 4,
+      "chars": 17,
+      "lines": 1,
+      "size": 40,
+      "vw": 5.2,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.05,
+      "leading": 0.92,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.9,
+      "top": 4290,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "See it before it posts",
+      "words": 5,
+      "chars": 22,
+      "lines": 1,
+      "size": 40,
+      "vw": 5.2,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.05,
+      "leading": 0.92,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.9,
+      "top": 5647,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Paste a pull request you were asked to review and read it by purpose.",
+      "words": 14,
+      "chars": 69,
+      "lines": 2,
+      "size": 28,
+      "vw": 3.6,
+      "font": "Hanken Grotesk",
+      "weight": 400,
+      "tracking": -0.03,
+      "leading": 1.15,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.9,
+      "top": 6432,
+      "tag": "p",
+      "kind": "statement"
+     }
+    ],
+    "headingSummary": {
+     "count": 12,
+     "maxLines": 2,
+     "over2Lines": 0,
+     "statements": 1,
+     "centered": 0,
+     "medianWords": 4,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Hanken Grotesk",
+       "share": 0.96,
+       "mono": false
+      },
+      {
+       "family": "Spline Sans Mono",
+       "share": 0.04,
+       "mono": true
+      }
+     ],
+     "familyCount": 2,
+     "sizes": [
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      22,
+      26,
+      28,
+      40,
+      52
+     ],
+     "sizeCount": 13,
+     "notLoaded": [],
+     "body": {
+      "font": "Hanken Grotesk",
+      "size": 17,
+      "leading": 1.5,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 9.9
+     },
+     "measureChars": 37,
+     "max": {
+      "size": 52,
+      "vw": 6.8,
+      "font": "Hanken Grotesk",
+      "text": "Read the pull request by purpose"
+     },
+     "monoShare": 0.04,
+     "monoProseShare": 0,
+     "monoFamilies": [
+      "Spline Sans Mono"
+     ],
+     "monoSamples": [],
+     "microLabels": 0,
+     "microLabelShare": 0,
+     "microSamples": [],
+     "upperShare": 0,
+     "centerShare": 0.02,
+     "smallText": 0
+    },
+    "eyebrows": [],
+    "numbered": [],
+    "color": {
+     "bodyBg": "#1c1c1c",
+     "bodyBgHsl": {
+      "h": 0,
+      "s": 0,
+      "l": 0.11
+     },
+     "dark": true,
+     "sectionBgs": [
+      {
+       "color": "#1c1c1c",
+       "top": 0,
+       "hsl": {
+        "h": 0,
+        "s": 0,
+        "l": 0.11
+       }
+      },
+      {
+       "color": "#c8c5ba",
+       "top": 547,
+       "hsl": {
+        "h": 47,
+        "s": 0.11,
+        "l": 0.76
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#f1f1ef",
+       "share": 0.45
+      },
+      {
+       "color": "#c4c5bf",
+       "share": 0.14
+      },
+      {
+       "color": "#d0d1cb",
+       "share": 0.14
+      },
+      {
+       "color": "#1c1c1c",
+       "share": 0.12
+      },
+      {
+       "color": "#a3a49e",
+       "share": 0.12
+      }
+     ],
+     "button": {
+      "bg": "#8fa68e",
+      "hsl": {
+       "h": 118,
+       "s": 0.12,
+       "l": 0.6
+      },
+      "fg": "#1c1c1c"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 7,
+     "inHero": 4,
+     "radius": 0,
+     "height": 44,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "Skip to the sample review",
+      "Review a real PR",
+      "Mark read : Calculate the discounted tot",
+      "Mark read : Accept a code at checkout"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 0,
+     "shadowOverlay": 0,
+     "shadowSamples": [],
+     "gradients": 0,
+     "scrims": 0,
+     "gradientSamples": [],
+     "gradientText": 0,
+     "hairlines": 0,
+     "hairlineSamples": [],
+     "outlinedBoxes": 0,
+     "dashed": 0,
+     "blurred": 0,
+     "roundedBoxes": 0,
+     "boxRadius": 0,
+     "squareMedia": 2,
+     "roundedMedia": 0,
+     "mediaRadius": 0,
+     "textShadow": 0,
+     "cardRows": [
+      {
+       "count": 6,
+       "iconTopped": false,
+       "rounded": false,
+       "top": 2663
+      }
+     ]
+    },
+    "heroMedia": [],
+    "nav": {
+     "links": 4,
+     "fixed": false,
+     "height": 72,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "hanken grotesk",
+     "spline sans mono"
+    ]
+   },
+   "consoleErrors": []
+  },
+  {
+   "width": 390,
+   "height": 844,
+   "load": "load",
+   "screens": 10,
+   "filled": [
+    0.62,
+    0.81,
+    0.93,
+    0.76,
+    0.65,
+    0.66,
+    0.77,
+    0.72,
+    0.55,
+    0.52
+   ],
+   "motion": {
+    "elements": 45,
+    "css": 44,
+    "transitions": 0,
+    "scripted": 1,
+    "videos": 0,
+    "playingVideos": 0
+   },
+   "metrics": {
+    "viewport": {
+     "w": 390,
+     "h": 844
+    },
+    "page": {
+     "height": 7806,
+     "screens": 9.2,
+     "words": 898,
+     "img": 4,
+     "video": 0,
+     "canvas": 0,
+     "svg": 1,
+     "sections": 8,
+     "horizontalOverflow": 0,
+     "overflowCulprits": [],
+     "uiFragments": 8,
+     "uiAbuse": false,
+     "realPictures": 3,
+     "videoCount": 0,
+     "uiPictures": 1,
+     "pictureSamples": [
+      "image?url=%2Fmeteorites%2Fdronino.jpg&w=640&q=75",
+      "image?url=%2Fmeteorites%2Fweekeroo.jpg&w=640&q=7",
+      "image?url=%2Fmeteorites%2Flaguna-manantiales.jpg"
+     ],
+     "blendText": 0,
+     "sideScrollers": 0,
+     "brokenImages": [],
+     "emoji": []
+    },
+    "hero": {
+     "text": "Read the pull request by purpose",
+     "words": 6,
+     "chars": 32,
+     "lines": 2,
+     "size": 39,
+     "vw": 10,
+     "font": "Hanken Grotesk",
+     "weight": 500,
+     "tracking": -0.05,
+     "leading": 0.92,
+     "upper": false,
+     "italic": false,
+     "mono": false,
+     "align": "left",
+     "position": "center",
+     "widthRatio": 0.92,
+     "top": 128,
+     "tag": "h1",
+     "kind": "heading"
+    },
+    "h1": {
+     "text": "Read the pull request by purpose",
+     "words": 6,
+     "lines": 2,
+     "size": 39,
+     "font": "Hanken Grotesk"
+    },
+    "headings": [
+     {
+      "text": "Read the pull request by purpose",
+      "words": 6,
+      "chars": 32,
+      "lines": 2,
+      "size": 39,
+      "vw": 10,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.05,
+      "leading": 0.92,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.92,
+      "top": 128,
+      "tag": "h1",
+      "kind": "heading"
+     },
+     {
+      "text": "Cut it open first",
+      "words": 4,
+      "chars": 17,
+      "lines": 1,
+      "size": 40,
+      "vw": 10.3,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.05,
+      "leading": 0.92,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.92,
+      "top": 1437,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "An iron meteorite looks like any dark stone until its face is cut and etched. Then the structure shows.",
+      "words": 19,
+      "chars": 103,
+      "lines": 3,
+      "size": 22,
+      "vw": 5.6,
+      "font": "Hanken Grotesk",
+      "weight": 400,
+      "tracking": -0.02,
+      "leading": 1.25,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.92,
+      "top": 1506,
+      "tag": "p",
+      "kind": "statement"
+     },
+     {
+      "text": "Built for the reader",
+      "words": 4,
+      "chars": 20,
+      "lines": 1,
+      "size": 40,
+      "vw": 10.3,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.05,
+      "leading": 0.92,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.92,
+      "top": 2582,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Read by purpose",
+      "words": 3,
+      "chars": 15,
+      "lines": 1,
+      "size": 26,
+      "vw": 6.7,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.02,
+      "leading": 1.15,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.79,
+      "top": 2723,
+      "tag": "h3",
+      "kind": "heading"
+     },
+     {
+      "text": "Findings open at their line",
+      "words": 5,
+      "chars": 27,
+      "lines": 1,
+      "size": 26,
+      "vw": 6.7,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.02,
+      "leading": 1.15,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.79,
+      "top": 3122,
+      "tag": "h3",
+      "kind": "heading"
+     },
+     {
+      "text": "Mark what you have read",
+      "words": 5,
+      "chars": 23,
+      "lines": 1,
+      "size": 26,
+      "vw": 6.7,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.02,
+      "leading": 1.15,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.79,
+      "top": 3482,
+      "tag": "h3",
+      "kind": "heading"
+     },
+     {
+      "text": "Every hunk, on demand",
+      "words": 4,
+      "chars": 21,
+      "lines": 1,
+      "size": 26,
+      "vw": 6.7,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.02,
+      "leading": 1.15,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.79,
+      "top": 3815,
+      "tag": "h3",
+      "kind": "heading"
+     },
+     {
+      "text": "New commits wait for you",
+      "words": 5,
+      "chars": 24,
+      "lines": 1,
+      "size": 26,
+      "vw": 6.7,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.02,
+      "leading": 1.15,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.79,
+      "top": 4192,
+      "tag": "h3",
+      "kind": "heading"
+     },
+     {
+      "text": "Nothing posts unseen",
+      "words": 3,
+      "chars": 20,
+      "lines": 1,
+      "size": 26,
+      "vw": 6.7,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.02,
+      "leading": 1.15,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.79,
+      "top": 4520,
+      "tag": "h3",
+      "kind": "heading"
+     },
+     {
+      "text": "How a review runs",
+      "words": 4,
+      "chars": 17,
+      "lines": 1,
+      "size": 40,
+      "vw": 10.3,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.05,
+      "leading": 0.92,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.92,
+      "top": 4972,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "See it before it posts",
+      "words": 5,
+      "chars": 22,
+      "lines": 1,
+      "size": 40,
+      "vw": 10.3,
+      "font": "Hanken Grotesk",
+      "weight": 500,
+      "tracking": -0.05,
+      "leading": 0.92,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.92,
+      "top": 6193,
+      "tag": "h2",
+      "kind": "heading"
+     },
+     {
+      "text": "Paste a pull request you were asked to review and read it by purpose.",
+      "words": 14,
+      "chars": 69,
+      "lines": 3,
+      "size": 24,
+      "vw": 6.2,
+      "font": "Hanken Grotesk",
+      "weight": 400,
+      "tracking": -0.03,
+      "leading": 1.15,
+      "upper": false,
+      "italic": false,
+      "mono": false,
+      "align": "left",
+      "position": "center",
+      "widthRatio": 0.92,
+      "top": 7290,
+      "tag": "p",
+      "kind": "statement"
+     }
+    ],
+    "headingSummary": {
+     "count": 13,
+     "maxLines": 3,
+     "over2Lines": 0,
+     "statements": 2,
+     "centered": 0,
+     "medianWords": 5,
+     "mixedFontHeadings": 0
+    },
+    "type": {
+     "families": [
+      {
+       "family": "Hanken Grotesk",
+       "share": 0.96,
+       "mono": false
+      },
+      {
+       "family": "Spline Sans Mono",
+       "share": 0.04,
+       "mono": true
+      }
+     ],
+     "familyCount": 2,
+     "sizes": [
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      22,
+      24,
+      26,
+      39,
+      40
+     ],
+     "sizeCount": 13,
+     "notLoaded": [],
+     "body": {
+      "font": "Hanken Grotesk",
+      "size": 17,
+      "leading": 1.5,
+      "weight": 400,
+      "tracking": 0,
+      "contrast": 9.9
+     },
+     "measureChars": 42,
+     "max": {
+      "size": 40,
+      "vw": 10.3,
+      "font": "Hanken Grotesk",
+      "text": "Cut it open first"
+     },
+     "monoShare": 0.04,
+     "monoProseShare": 0,
+     "monoFamilies": [
+      "Spline Sans Mono"
+     ],
+     "monoSamples": [],
+     "microLabels": 0,
+     "microLabelShare": 0,
+     "microSamples": [],
+     "upperShare": 0,
+     "centerShare": 0.02,
+     "smallText": 0
+    },
+    "eyebrows": [],
+    "numbered": [],
+    "color": {
+     "bodyBg": "#1c1c1c",
+     "bodyBgHsl": {
+      "h": 0,
+      "s": 0,
+      "l": 0.11
+     },
+     "dark": true,
+     "sectionBgs": [
+      {
+       "color": "#1c1c1c",
+       "top": 0,
+       "hsl": {
+        "h": 0,
+        "s": 0,
+        "l": 0.11
+       }
+      },
+      {
+       "color": "#c8c5ba",
+       "top": 429,
+       "hsl": {
+        "h": 47,
+        "s": 0.11,
+        "l": 0.76
+       }
+      },
+      {
+       "color": "#262626",
+       "top": 2675,
+       "hsl": {
+        "h": 0,
+        "s": 0,
+        "l": 0.15
+       }
+      },
+      {
+       "color": "#222222",
+       "top": 7521,
+       "hsl": {
+        "h": 0,
+        "s": 0,
+        "l": 0.13
+       }
+      }
+     ],
+     "textColors": [
+      {
+       "color": "#f1f1ef",
+       "share": 0.45
+      },
+      {
+       "color": "#c4c5bf",
+       "share": 0.14
+      },
+      {
+       "color": "#d0d1cb",
+       "share": 0.14
+      },
+      {
+       "color": "#1c1c1c",
+       "share": 0.12
+      },
+      {
+       "color": "#a3a49e",
+       "share": 0.12
+      }
+     ],
+     "button": {
+      "bg": "#8fa68e",
+      "hsl": {
+       "h": 118,
+       "s": 0.12,
+       "l": 0.6
+      },
+      "fg": "#1c1c1c"
+     },
+     "lowContrast": []
+    },
+    "buttons": {
+     "count": 7,
+     "inHero": 3,
+     "radius": 0,
+     "height": 44,
+     "withShadow": 0,
+     "withGradient": 0,
+     "mono": 0,
+     "upper": 0,
+     "heroLabels": [
+      "Skip to the sample review",
+      "Review a real PR",
+      "Mark read : Calculate the discounted tot"
+     ]
+    },
+    "surfaces": {
+     "shadowStatic": 0,
+     "shadowOverlay": 0,
+     "shadowSamples": [],
+     "gradients": 0,
+     "scrims": 0,
+     "gradientSamples": [],
+     "gradientText": 0,
+     "hairlines": 0,
+     "hairlineSamples": [],
+     "outlinedBoxes": 0,
+     "dashed": 0,
+     "blurred": 0,
+     "roundedBoxes": 0,
+     "boxRadius": 0,
+     "squareMedia": 3,
+     "roundedMedia": 0,
+     "mediaRadius": 0,
+     "textShadow": 0,
+     "cardRows": []
+    },
+    "heroMedia": [],
+    "nav": {
+     "links": 1,
+     "fixed": false,
+     "height": 72,
+     "floatingPill": false,
+     "blur": false
+    },
+    "fontsLoaded": [
+     "hanken grotesk",
+     "spline sans mono"
+    ]
+   },
+   "consoleErrors": []
+  }
+ ],
+ "findings": [
+  {
+   "level": "WARN",
+   "id": "size-count",
+   "width": 1440,
+   "message": "13 different font sizes (12, 13, 14, 15, 16, 17, 18, 19, 26, 28, 36, 63, 75).",
+   "fix": "A page needs about five: display, heading, lead, body, small.",
+   "alsoAt": [
+    768,
+    390
+   ]
+  },
+  {
+   "level": "WARN",
+   "id": "no-footage",
+   "width": 1440,
+   "message": "No video anywhere on the page.",
+   "fix": "Look for one honest clip with scripts/assets.mjs --video (the place, the material, the process) and use it as a muted loop with a poster frame. Defend its absence only if no clip fits the subject."
+  }
+ ],
+ "images": [
+  {
+   "viewport": "desktop",
+   "width": 1440,
+   "fold": "/home/hunter/Documents/Code/meteroite/.taste-skill/inspect/desktop-fold.jpg",
+   "pages": [
+    "/home/hunter/Documents/Code/meteroite/.taste-skill/inspect/desktop-page-01.jpg",
+    "/home/hunter/Documents/Code/meteroite/.taste-skill/inspect/desktop-page-02.jpg"
+   ]
+  },
+  {
+   "viewport": "tablet",
+   "width": 768,
+   "fold": "/home/hunter/Documents/Code/meteroite/.taste-skill/inspect/tablet-fold.jpg",
+   "pages": [
+    "/home/hunter/Documents/Code/meteroite/.taste-skill/inspect/tablet-page-01.jpg",
+    "/home/hunter/Documents/Code/meteroite/.taste-skill/inspect/tablet-page-02.jpg"
+   ]
+  },
+  {
+   "viewport": "mobile",
+   "width": 390,
+   "fold": "/home/hunter/Documents/Code/meteroite/.taste-skill/inspect/mobile-fold.jpg",
+   "pages": [
+    "/home/hunter/Documents/Code/meteroite/.taste-skill/inspect/mobile-page-01.jpg",
+    "/home/hunter/Documents/Code/meteroite/.taste-skill/inspect/mobile-page-02.jpg"
+   ]
+  }
+ ]
+}
