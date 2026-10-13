@@ -124,18 +124,27 @@ export function FindingCard({
             {f.evidence.map((e, i) => (
               <div key={i}>
                 <a
-                  href={fileAtCommitUrl(
-                    review.sourceOwner ?? review.repoOwner,
-                    review.sourceRepo ?? review.repoName,
-                    review.headSha ?? "",
-                    e.path,
-                    e.line,
-                  )}
+                  href={
+                    (e.commitSha ?? review.headSha)
+                      ? fileAtCommitUrl(
+                          e.commitSha && e.commitSha === review.diffLeftSha
+                            ? review.repoOwner
+                            : (review.sourceOwner ?? review.repoOwner),
+                          e.commitSha && e.commitSha === review.diffLeftSha
+                            ? review.repoName
+                            : (review.sourceRepo ?? review.repoName),
+                          e.commitSha ?? review.headSha ?? "",
+                          e.path,
+                          e.line,
+                        )
+                      : undefined
+                  }
                   target="_blank"
                   rel="noopener noreferrer"
                   className="break-all font-mono text-xs text-review-link"
                 >
                   {e.path}:{e.line}
+                  {` · revision ${(e.commitSha ?? review.headSha)?.slice(0, 7) ?? "unavailable"}`}
                 </a>
                 <pre className="mt-2 overflow-x-auto rounded-md bg-background p-3 font-mono text-xs">
                   <code>{e.quote}</code>
