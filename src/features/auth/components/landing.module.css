@@ -1,0 +1,784 @@
+.page {
+  min-block-size: 100svh;
+  overflow-x: clip;
+  background: var(--review-bg);
+  color: var(--review-text);
+  font-size: 1.0625rem;
+  line-height: 1.5;
+}
+
+.page a {
+  color: inherit;
+  text-underline-offset: 0.2em;
+}
+
+.page a:hover {
+  color: var(--review-link);
+}
+
+.page code {
+  font-family: var(--font-code-face), ui-monospace, monospace;
+  font-size: 0.9em;
+}
+
+.skip {
+  position: absolute;
+  z-index: 50;
+  inset-block-start: 0.75rem;
+  inset-inline-start: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--review-reading);
+  transform: translateY(-200%);
+}
+
+.skip:focus {
+  transform: none;
+}
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  block-size: 4.5rem;
+  padding-inline: 2.5rem;
+  font-size: 0.9375rem;
+}
+
+.navHome {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 2.5rem;
+  text-decoration: none;
+}
+
+.navLinks,
+.navAnchors {
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+}
+
+.navAnchors a,
+.navSignIn {
+  text-decoration: none;
+}
+
+.navSignIn:hover {
+  color: var(--review-link);
+}
+
+.hero {
+  display: flex;
+  flex-direction: column;
+}
+
+.heroHead {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-inline-size: 47.5rem;
+  padding: 9.375rem 2.5rem 0;
+}
+
+.display {
+  font-size: clamp(3.25rem, 5.2vw, 5rem);
+  font-weight: 500;
+  letter-spacing: -0.05em;
+  line-height: 0.92;
+  text-wrap: balance;
+}
+
+.lede {
+  max-inline-size: 40ch;
+  font-size: 1.125rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1.5rem;
+  font-size: 1rem;
+}
+
+.primary {
+  display: inline-flex;
+  align-items: center;
+  block-size: 2.75rem;
+  padding-inline: 1.25rem;
+  background: var(--review-link);
+  color: var(--review-bg);
+  font-size: 1rem;
+  font-weight: 500;
+  transition:
+    background-color 150ms var(--ease-out),
+    transform 150ms var(--ease-out);
+}
+
+.primary:hover {
+  background: #a5b9a4;
+}
+
+.primary:active {
+  transform: scale(0.97);
+}
+
+/* The etched cut: a concrete stage with one corner sliced away. */
+.stage {
+  box-sizing: border-box;
+  block-size: 37.5rem;
+  margin: 3.5rem 0 0 33.33%;
+  padding: 3.5rem 0 0 3.5rem;
+  overflow: hidden;
+  background: var(--review-field);
+  clip-path: polygon(11rem 0, 100% 0, 100% 100%, 0 100%, 0 6.5rem);
+  scroll-margin-block-start: 1rem;
+}
+
+.stageFrame {
+  inline-size: min(48.75rem, 100%);
+}
+
+.section {
+  padding: 10rem 2.5rem 0;
+}
+
+.heading {
+  font-size: clamp(2.5rem, 4.4vw, 4rem);
+  font-weight: 500;
+  letter-spacing: -0.05em;
+  line-height: 0.92;
+  text-wrap: balance;
+}
+
+.statement {
+  max-inline-size: 30ch;
+  font-size: clamp(1.375rem, 2vw, 1.75rem);
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+
+.small {
+  color: var(--review-text-muted);
+  font-size: 0.9375rem;
+}
+
+.cut {
+  margin-block-start: 10rem;
+  padding-block: 10rem;
+}
+
+.cutInner {
+  display: flex;
+  align-items: flex-start;
+  gap: 4rem;
+  padding-inline: 2.5rem;
+}
+
+.cutHero {
+  flex: 1 1 0;
+  min-inline-size: 0;
+  block-size: 47.5rem;
+  overflow: hidden;
+}
+
+.cutHero img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+}
+
+.cutText {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  gap: 2rem;
+  min-inline-size: 0;
+  padding-block-start: 1.5rem;
+}
+
+.cutText > p:not(.statement) {
+  max-inline-size: 52ch;
+}
+
+.cutFigures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-block-start: 1rem;
+}
+
+.cutFigures figure,
+.runFigure {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.cutFigures img {
+  inline-size: 100%;
+  block-size: 15rem;
+  object-fit: cover;
+}
+
+.page figcaption {
+  font-size: 0.9375rem;
+}
+
+.features {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.375rem;
+  margin-block-start: 3.5rem;
+}
+
+.feature {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: center;
+  gap: 2rem;
+  padding: 2rem;
+  background: var(--review-reading);
+}
+
+.feature[data-flip="true"] .featureText {
+  order: 2;
+}
+
+.featureText {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.featureText h3 {
+  font-size: 1.625rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.featureText p {
+  color: var(--review-text-body);
+  font-size: 1rem;
+}
+
+.featureFragment {
+  min-inline-size: 0;
+  font-size: 0.875rem;
+}
+
+.fragList,
+.fragStack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.fragList li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.625rem 0.75rem;
+  background: var(--review-bg);
+}
+
+.fragList li span:first-child,
+.fragStrong {
+  font-weight: 500;
+}
+
+.fragList li span:last-child,
+.fragMuted {
+  color: var(--review-text-dim);
+  font-size: 0.8125rem;
+}
+
+.fragStack {
+  padding: 1rem;
+  background: var(--review-bg);
+}
+
+.fragField {
+  background: var(--review-field);
+}
+
+.fragRow {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.fragRow > :first-child {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fragOn {
+  color: var(--review-link);
+  font-weight: 500;
+}
+
+.fragOff {
+  color: var(--review-text-dim);
+}
+
+.fragWarn {
+  color: var(--sev-medium);
+}
+
+.fragSearch {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #4a4a4a;
+  color: var(--review-text-dim);
+}
+
+.fragActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.fragButton {
+  align-self: flex-start;
+  padding: 0.375rem 0.75rem;
+  background: var(--review-link);
+  color: var(--review-bg);
+  font-weight: 500;
+}
+
+.fragCode {
+  padding-block: 0.5rem;
+  background: var(--review-code);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.7;
+}
+
+.fragCode > div {
+  display: grid;
+  grid-template-columns: 2.25rem 1.25rem minmax(0, 1fr);
+  color: #c9cac5;
+  white-space: pre;
+}
+
+.fragCode > div span:first-child {
+  padding-inline-end: 0.375rem;
+  color: #7f807b;
+  text-align: end;
+}
+
+.fragCode > div[data-kind="added"] {
+  background: var(--diff-add-bg);
+  color: var(--diff-add-fg);
+}
+
+.fragFinding {
+  margin: 0.375rem 0.75rem 0.375rem 3.5rem;
+  padding: 0.625rem 0.75rem;
+  background: var(--sev-high-bg);
+  font-family: var(--font-ui-face), system-ui, sans-serif;
+  font-size: 0.875rem;
+}
+
+.fragFinding span {
+  color: var(--sev-high);
+  font-weight: 500;
+}
+
+/* A run-in column set off the left third, where the reader's eye starts. */
+.run {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  max-inline-size: 52rem;
+  margin-inline-start: 28%;
+}
+
+.run > p {
+  max-inline-size: 60ch;
+}
+
+.run strong {
+  font-weight: 500;
+  color: var(--review-link);
+}
+
+.runFragment {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+  font-size: 0.9375rem;
+}
+
+.runInput {
+  flex: 1;
+  min-inline-size: 0;
+  padding: 0.625rem 0.875rem;
+  overflow: hidden;
+  background: var(--review-reading);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.runFragment .fragButton {
+  align-self: auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+.runActivity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.9375rem;
+}
+
+.runActivity p {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--review-reading);
+  color: var(--review-text-muted);
+}
+
+.runActivity p:first-child {
+  color: var(--review-text);
+}
+
+.runActive {
+  color: var(--review-link);
+}
+
+.runFigure img {
+  inline-size: 100%;
+  block-size: auto;
+}
+
+.runFigure figcaption {
+  color: var(--review-text-muted);
+}
+
+.demo {
+  display: flex;
+  gap: 0.375rem;
+}
+
+.demoOutput {
+  display: flex;
+  flex: 3 1 0;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-inline-size: 0;
+  font-size: 0.9375rem;
+}
+
+.demoHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.875rem 1.25rem;
+  background: var(--review-file-header);
+  font-weight: 500;
+}
+
+.demoBody,
+.demoInline {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1.25rem;
+  background: var(--review-reading);
+}
+
+.demoInline {
+  background: var(--sev-high-bg);
+}
+
+.demoLabel {
+  color: var(--review-text-dim);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+
+.demoNote {
+  padding: 1rem 1.25rem;
+  background: var(--review-field);
+  color: var(--review-field-ink);
+}
+
+.demoControls {
+  display: flex;
+  flex: 2 1 0;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-inline-size: 0;
+  font-size: 0.9375rem;
+}
+
+.demoRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-block-size: 3.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--review-reading);
+  cursor: pointer;
+}
+
+.segmented {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.segmented button {
+  min-block-size: 2.25rem;
+  padding-inline: 0.75rem;
+  background: #3a3a3a;
+}
+
+.segmented button[aria-checked="true"] {
+  background: var(--review-link);
+  color: var(--review-bg);
+  font-weight: 500;
+}
+
+.switch {
+  appearance: none;
+  position: relative;
+  flex: none;
+  inline-size: 2.75rem;
+  block-size: 1.5rem;
+  border-radius: 999px;
+  background: #4a4a4a;
+  cursor: pointer;
+  transition: background-color 150ms var(--ease-out);
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  inset-block-start: 0.1875rem;
+  inset-inline-start: 0.1875rem;
+  inline-size: 1.125rem;
+  block-size: 1.125rem;
+  border-radius: 999px;
+  background: var(--review-text);
+  transition: transform 150ms var(--ease-out);
+}
+
+.switch:checked {
+  background: var(--review-link);
+}
+
+.switch:checked::after {
+  transform: translateX(1.25rem);
+}
+
+.demoFacts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.demoFacts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1rem;
+  background: var(--review-reading);
+}
+
+.demoFacts dt {
+  color: var(--review-text-muted);
+}
+
+.cta {
+  max-inline-size: 26ch;
+  font-size: clamp(1.75rem, 2.6vw, 2.25rem);
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  margin-block-start: 10rem;
+  padding: 3rem 2.5rem;
+  background: var(--review-chrome);
+  font-size: 0.9375rem;
+}
+
+.credits {
+  max-inline-size: 90ch;
+  color: var(--review-text-muted);
+}
+
+.footLine {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem 2rem;
+}
+
+/* Motion: the hero assembles once on load, then each section's parts rise as
+   they enter. Browsers without scroll timelines, and reduced motion, get the
+   finished page with nothing hidden. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(1.5rem);
+  }
+}
+
+@keyframes settle {
+  from {
+    transform: scale(1.12);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .heroHead > *,
+  .stage {
+    animation: rise 700ms var(--ease-out) both;
+  }
+
+  .heroHead > :nth-child(2) {
+    animation-delay: 80ms;
+  }
+
+  .heroHead > :nth-child(3) {
+    animation-delay: 160ms;
+  }
+
+  .stage {
+    animation-delay: 260ms;
+  }
+
+  @supports (animation-timeline: view()) {
+    .heading,
+    .cutText > *,
+    .cutFigures figure,
+    .feature,
+    .featureText > *,
+    .run > * {
+      animation: rise linear both;
+      animation-timeline: view();
+      animation-range: entry 0% entry 70%;
+    }
+
+    .cutText > :nth-child(3),
+    .cutFigures figure + figure,
+    .featureText > p,
+    .feature:nth-child(even) {
+      animation-range: entry 10% entry 80%;
+    }
+
+    .cutHero img {
+      animation: settle linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 70%;
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .primary,
+  .switch,
+  .switch::after {
+    transition: none;
+  }
+
+  .primary:active {
+    transform: none;
+  }
+}
+
+@media (max-width: 64rem) {
+  .features {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .run {
+    margin-inline-start: 0;
+  }
+}
+
+@media (max-width: 47.5rem) {
+  .nav,
+  .heroHead,
+  .section,
+  .cutInner,
+  .footer {
+    padding-inline: 1rem;
+  }
+
+  .navAnchors {
+    display: none;
+  }
+
+  .heroHead {
+    padding-block-start: 3.5rem;
+  }
+
+  .display {
+    font-size: clamp(2.25rem, 10vw, 3.25rem);
+  }
+
+  .cta {
+    font-size: 1.5rem;
+  }
+
+  .stage {
+    block-size: auto;
+    min-block-size: 32rem;
+    margin-inline-start: 0;
+    padding: 4rem 0 0 1rem;
+    clip-path: polygon(4.5rem 0, 100% 0, 100% 100%, 0 100%, 0 3rem);
+  }
+
+  .section {
+    padding-block-start: 6rem;
+  }
+
+  .cut {
+    margin-block-start: 6rem;
+    padding-block: 6rem;
+  }
+
+  .cutInner,
+  .demo {
+    flex-direction: column;
+  }
+
+  .cutHero {
+    block-size: 26rem;
+  }
+
+  .cutFigures {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .feature {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 1.5rem;
+  }
+
+  .feature[data-flip="true"] .featureText {
+    order: 0;
+  }
+
+  .footer {
+    margin-block-start: 6rem;
+  }
+}
