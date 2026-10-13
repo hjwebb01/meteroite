@@ -1,0 +1,1014 @@
+.atlas {
+  --canvas: #eeedf6;
+  --ink: #243c30;
+  --moss: #607249;
+  --lilac: #a69cc6;
+  --chalk: #fafbf6;
+  --issue: #b74a24;
+  --rule: #c9cdd0;
+  min-height: 100vh;
+  background: var(--canvas);
+  color: var(--ink);
+  padding: 0 clamp(20px, 4.5vw, 76px);
+  font-family: "Trebuchet MS", sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  isolation: isolate;
+}
+
+.atlas *,
+.atlas *::before,
+.atlas *::after {
+  box-sizing: border-box;
+}
+.atlas h1,
+.atlas h2,
+.atlas h3,
+.atlas p {
+  margin: 0;
+}
+.atlas button,
+.atlas input,
+.atlas textarea {
+  font: inherit;
+}
+.atlas button {
+  color: inherit;
+  cursor: pointer;
+}
+.atlas button:focus-visible,
+.atlas a:focus-visible,
+.atlas input:focus-visible,
+.atlas textarea:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 5px;
+}
+.atlas button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.header {
+  max-width: 1400px;
+  margin: 0 auto;
+  min-height: 90px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  border-bottom: 1px solid var(--rule);
+}
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -1px;
+}
+.wordmark svg {
+  width: 28px;
+  height: 28px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+}
+.edition {
+  font-size: 13px;
+  letter-spacing: 0.015em;
+}
+.edition span {
+  margin-left: 18px;
+  color: var(--moss);
+}
+.localBadge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.localBadge i {
+  width: 7px;
+  height: 7px;
+  background: var(--moss);
+  border-radius: 50%;
+}
+.introduction {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 57px 0 35px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 235px;
+  gap: 70px;
+  align-items: end;
+}
+.eyebrow {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+.introduction h1 {
+  font-family: Georgia, serif;
+  font-size: clamp(54px, 6.1vw, 91px);
+  line-height: 1.06;
+  letter-spacing: -0.055em;
+  font-weight: 400;
+  margin: 16px 0 19px;
+}
+.lead {
+  max-width: 510px;
+  font-size: 16px;
+  line-height: 1.65;
+}
+.edgeRail {
+  border-left: 2px solid var(--lilac);
+  padding: 0 0 3px 19px;
+  font-size: 13px;
+}
+.railLabel {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.edgeRail p {
+  color: #4e6257;
+  line-height: 1.65;
+}
+.edgeRail strong {
+  font-size: 27px;
+  font-weight: 400;
+  font-family: Georgia, serif;
+  color: var(--ink);
+}
+.railHint {
+  display: block;
+  margin-top: 15px;
+  font-size: 11px;
+  color: var(--moss);
+}
+.backButton {
+  padding: 0;
+  margin-top: 12px;
+  min-height: 34px;
+  border: 0;
+  background: none;
+  font-size: 12px !important;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.backButton:hover {
+  color: var(--issue);
+}
+
+.mapSection {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 19px 24px 0;
+  border: 1px solid #c5c6d1;
+  border-radius: 5px;
+  background: var(--chalk);
+}
+.mapHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.mapHeading h2 {
+  font-size: 12px;
+  font-weight: 700;
+}
+.mapHeading > span {
+  color: var(--moss);
+  font-size: 11px;
+}
+.map {
+  height: 330px;
+  position: relative;
+}
+.connections,
+.mobileConnections {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  width: 100%;
+  pointer-events: none;
+}
+.mobileConnections {
+  display: none;
+}
+.terrain {
+  fill: #efedf4;
+  stroke: #dfdce9;
+  stroke-width: 1;
+}
+.basePath {
+  stroke: #a6afa5;
+  fill: none;
+  stroke-width: 2;
+  stroke-dasharray: 4 5;
+}
+.activePath {
+  fill: none;
+  stroke: var(--issue);
+  stroke-width: 5;
+  stroke-linecap: round;
+}
+.inputPath {
+  stroke: var(--moss);
+}
+.expiryPath,
+.paymentPath {
+  stroke: var(--issue);
+}
+.resolvedPath {
+  stroke: var(--moss);
+  stroke-dasharray: 7 5;
+}
+.routeAnnotation {
+  position: absolute;
+  bottom: 14px;
+  left: 39%;
+  font-family: Georgia, serif;
+  color: #74816d;
+  font-size: 13px;
+  font-style: italic;
+}
+.station {
+  position: absolute;
+  transform: translateX(-50%);
+  width: 196px;
+  padding: 0;
+  border: none;
+  background: none;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.input {
+  top: 214px;
+  left: 12.5%;
+}
+.lookup {
+  top: 76px;
+  left: 35%;
+}
+.discount {
+  top: 180px;
+  left: 62.3%;
+}
+.payment {
+  top: 54px;
+  left: 87.5%;
+}
+.stationPoint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #a8b0a1;
+  border-radius: 50%;
+  background: var(--chalk);
+  box-shadow: 0 0 0 6px var(--chalk);
+}
+.stationPoint > span {
+  height: 9px;
+  width: 9px;
+  border-radius: 50%;
+  background: var(--moss);
+}
+.stationName {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.25;
+  margin-top: 14px;
+  background: var(--chalk);
+  padding: 0 4px;
+}
+.stationCaption {
+  font-size: 10px;
+  color: #6e796a;
+  margin-top: 5px;
+  background: var(--chalk);
+  padding: 0 3px;
+}
+.stationIssue {
+  font-size: 10px;
+  color: var(--issue);
+  margin-top: 8px;
+  padding: 1px 5px;
+  background: var(--chalk);
+}
+.stationIssue > span {
+  margin-left: 6px;
+}
+.station:hover .stationPoint {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 6px #e6e2ed;
+}
+.station:hover .stationIssue {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.impacted .stationPoint {
+  border-color: var(--issue);
+}
+.impacted .stationPoint > span {
+  background: var(--issue);
+}
+.selected .stationPoint {
+  background: var(--issue);
+  border-color: var(--issue);
+  box-shadow: 0 0 0 6px #f1ded5;
+}
+.selected .stationPoint > span {
+  background: var(--chalk);
+}
+.selected .stationIssue {
+  color: var(--ink);
+  font-weight: 700;
+}
+.resolvedStation .stationPoint {
+  border-color: var(--moss);
+}
+.resolvedStation .stationPoint > span {
+  background: var(--moss);
+}
+.selected.resolvedStation .stationPoint {
+  background: var(--moss);
+  box-shadow: 0 0 0 6px #e2e7db;
+}
+.selected.resolvedStation .stationPoint > span {
+  background: var(--chalk);
+}
+.mapLegend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 22px;
+  font-size: 10px;
+  padding: 14px 0;
+  margin-top: 15px;
+  border-top: 1px solid #e1e3da;
+}
+.mapLegend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.legendRoute {
+  width: 21px;
+  border-top: 1px dashed #8d9b87;
+}
+.legendIssue {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--issue);
+}
+.mapLegend .mapScope {
+  margin-left: auto;
+  color: #768071;
+}
+
+.intakeSection {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 38px 0 43px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 290px;
+  gap: 10%;
+}
+.intake h2 {
+  font-family: Georgia, serif;
+  font-weight: 400;
+  font-size: 30px;
+  letter-spacing: -0.035em;
+  margin: 8px 0 20px;
+}
+.intake label,
+.notes label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+.urlControl {
+  display: flex;
+  background: var(--chalk);
+  border: 1px solid #a6b0a1;
+  border-radius: 3px;
+}
+.urlControl input {
+  width: 100%;
+  min-width: 0;
+  color: var(--ink);
+  padding: 12px 14px;
+  border: none;
+  background: none;
+  font-size: 12px;
+  border-radius: 3px;
+}
+.urlControl button {
+  flex-shrink: 0;
+  min-height: 47px;
+  border: none;
+  background: var(--ink);
+  color: var(--chalk);
+  font-size: 12px;
+  padding: 0 18px;
+  margin: 3px;
+  border-radius: 2px;
+}
+.urlControl button span {
+  margin-left: 15px;
+}
+.urlControl button:hover,
+.resolveButton:hover {
+  background: #365340;
+}
+.scope {
+  margin-top: 11px !important;
+  max-width: 580px;
+  color: #64715f;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.error {
+  font-size: 12px;
+  color: var(--issue);
+  margin-top: 10px !important;
+}
+.intakeAside {
+  padding-top: 4px;
+}
+.asideRule {
+  display: block;
+  width: 38px;
+  height: 3px;
+  background: var(--lilac);
+  margin-bottom: 20px;
+}
+.intakeAside h3 {
+  font-family: Georgia, serif;
+  font-weight: 400;
+  font-size: 24px;
+  letter-spacing: -0.025em;
+  margin-bottom: 10px;
+}
+.intakeAside p {
+  color: #65735d;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.reviewMap {
+  margin-bottom: 38px;
+}
+.inspection {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr) 270px;
+  gap: 35px;
+  padding-bottom: 46px;
+  align-items: start;
+}
+.findingIndex {
+  display: grid;
+  gap: 7px;
+}
+.findingIndex > .eyebrow {
+  padding-bottom: 9px;
+}
+.findingIndex button {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 13px 9px;
+  background: none;
+  text-align: left;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.findingIndex button:hover {
+  background: #e2e1ec;
+}
+.findingIndex button.activeFinding {
+  background: var(--chalk);
+  border-color: #c5c6d1;
+}
+.findingMarker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  width: 20px;
+  flex-shrink: 0;
+  border: 1px solid #a8b2a3;
+  border-radius: 50%;
+  color: var(--moss);
+  font-size: 10px;
+}
+.activeFinding .findingMarker {
+  background: var(--ink);
+  color: var(--chalk);
+  border-color: var(--ink);
+}
+.findingIndex small {
+  display: block;
+  margin-top: 6px;
+  font-size: 9px;
+  color: #6c7668;
+}
+.findingDetail {
+  min-width: 0;
+  padding: 0 0 0 28px;
+  border-left: 1px solid #c8cbd0;
+}
+.detailTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 17px;
+}
+.severity,
+.resolvedLabel {
+  font-size: 10px;
+  color: var(--issue);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.resolvedLabel {
+  color: var(--moss);
+}
+.findingDetail h2 {
+  font-family: Georgia, serif;
+  font-weight: 400;
+  font-size: clamp(27px, 2.6vw, 39px);
+  line-height: 1.17;
+  letter-spacing: -0.035em;
+  margin-bottom: 18px;
+}
+.claim {
+  color: #566850;
+  font-size: 13px;
+  line-height: 1.75;
+}
+.impactRoute {
+  border-left: 3px solid var(--issue);
+  padding: 2px 0 2px 13px;
+  margin: 22px 0;
+}
+.impactRoute > span {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--issue);
+}
+.impactRoute p {
+  font-size: 11px;
+  margin-top: 4px;
+}
+.sourceHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  margin-bottom: 8px;
+}
+.sourceHeading h3 {
+  font-size: 11px;
+  font-weight: 700;
+}
+.sourceHeading > span {
+  font-size: 10px;
+  color: #63715c;
+  overflow-wrap: anywhere;
+}
+.source {
+  background: var(--chalk);
+  border: 1px solid #d4d8cb;
+  border-radius: 3px;
+  padding: 15px 12px;
+  margin: 0;
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.source code {
+  font-family: "Courier New", monospace;
+}
+.sourceLine {
+  display: flex;
+  gap: 14px;
+}
+.sourceLine > span:last-child {
+  min-width: 0;
+}
+.lineNumber {
+  width: 20px;
+  color: #8d9785;
+  flex-shrink: 0;
+  user-select: none;
+  text-align: right;
+}
+.fix {
+  margin: 21px 0;
+}
+.fix .eyebrow {
+  color: var(--moss);
+  font-size: 9px;
+}
+.fix p {
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 5px;
+}
+.resolveButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 27px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--ink);
+  color: var(--chalk) !important;
+  padding: 12px 16px;
+  font-size: 12px !important;
+}
+.notes {
+  background: #e5e3ef;
+  border-radius: 3px;
+  padding: 21px;
+  min-width: 0;
+}
+.noteSymbol {
+  color: var(--moss);
+  font-size: 28px;
+  line-height: 1;
+}
+.notes h2 {
+  font-family: Georgia, serif;
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: -0.035em;
+  margin: 12px 0 9px;
+}
+.notes > p {
+  color: #66735f;
+  font-size: 11px;
+  line-height: 1.65;
+}
+.notes form {
+  margin-top: 21px;
+}
+.notes textarea {
+  display: block;
+  width: 100%;
+  resize: vertical;
+  min-height: 110px;
+  padding: 11px;
+  background: var(--chalk);
+  border: 1px solid #b5baad;
+  border-radius: 3px;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.notes textarea::placeholder {
+  color: #858c81;
+}
+.noteButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  border: 1px solid #abb5a4;
+  background: transparent;
+  border-radius: 3px;
+  padding: 10px 12px;
+  font-size: 11px !important;
+  margin-top: 10px;
+}
+.noteButton:hover:not(:disabled) {
+  background: var(--chalk);
+}
+.notes .noteStatus {
+  font-size: 10px;
+  margin-top: 12px;
+}
+.savedNotes {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0 0;
+}
+.savedNotes li {
+  border-top: 1px solid #c9c8d4;
+  padding: 13px 0;
+}
+.savedNotes li > span {
+  font-size: 9px;
+  color: #718069;
+}
+.savedNotes p {
+  font-size: 12px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+  margin-top: 5px;
+  white-space: pre-wrap;
+}
+.footer {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 19px 0 22px;
+  border-top: 1px solid var(--rule);
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  font-size: 10px;
+  color: #718069;
+}
+.reference {
+  width: 100%;
+  font-size: 9px;
+  overflow-wrap: anywhere;
+}
+
+@media (min-width: 1600px) {
+  .introduction {
+    padding-top: 70px;
+  }
+  .mapSection {
+    padding-left: 50px;
+    padding-right: 50px;
+  }
+  .inspection {
+    grid-template-columns: 225px minmax(0, 1fr) 300px;
+    gap: 45px;
+  }
+}
+
+@media (max-width: 1100px) {
+  .introduction {
+    gap: 30px;
+    grid-template-columns: minmax(0, 1fr) 190px;
+  }
+  .station {
+    width: 170px;
+  }
+  .stationName {
+    font-size: 14px;
+  }
+  .inspection {
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: 24px;
+  }
+  .notes {
+    grid-column: 2;
+  }
+  .notes form {
+    margin-top: 16px;
+  }
+  .intakeSection {
+    gap: 35px;
+    grid-template-columns: minmax(0, 1fr) 240px;
+  }
+  .edition span {
+    display: none;
+  }
+}
+
+@media (max-width: 800px) {
+  .header {
+    min-height: 74px;
+    gap: 12px;
+  }
+  .wordmark {
+    font-size: 21px;
+  }
+  .edition {
+    display: none;
+  }
+  .introduction {
+    padding-top: 36px;
+    display: block;
+  }
+  .introduction h1 {
+    font-size: clamp(48px, 8vw, 64px);
+    margin-top: 13px;
+  }
+  .lead {
+    font-size: 14px;
+    max-width: 470px;
+  }
+  .edgeRail {
+    margin-top: 24px;
+    padding-left: 13px;
+    max-width: 480px;
+  }
+  .edgeRail .railLabel {
+    margin-bottom: 5px;
+  }
+  .railHint {
+    display: none;
+  }
+  .edgeRail strong {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .mapSection {
+    padding: 17px 12px 0;
+  }
+  .mapHeading {
+    padding: 0 3px;
+  }
+  .mapHeading > span {
+    font-size: 10px;
+  }
+  .map {
+    height: 650px;
+    max-width: 500px;
+    margin: 12px auto 0;
+  }
+  .connections {
+    display: none;
+  }
+  .mobileConnections {
+    display: block;
+  }
+  .station {
+    width: 160px;
+  }
+  .input {
+    top: 24px;
+    left: 28%;
+  }
+  .lookup {
+    top: 180px;
+    left: 72%;
+  }
+  .discount {
+    top: 344px;
+    left: 28%;
+  }
+  .payment {
+    top: 508px;
+    left: 72%;
+  }
+  .stationName {
+    font-size: 15px;
+  }
+  .stationCaption {
+    font-size: 9px;
+  }
+  .stationIssue {
+    font-size: 10px;
+  }
+  .routeAnnotation {
+    top: 54px;
+    bottom: auto;
+    right: 3%;
+    left: auto;
+    writing-mode: vertical-rl;
+    font-size: 11px;
+  }
+  .mapLegend {
+    gap: 12px 18px;
+    margin-top: 0;
+    padding: 14px 3px;
+  }
+  .mapLegend .mapScope {
+    margin-left: 0;
+    width: 100%;
+  }
+  .intakeSection {
+    display: block;
+    padding: 29px 0;
+  }
+  .intake h2 {
+    font-size: 28px;
+    margin-bottom: 18px;
+  }
+  .urlControl {
+    flex-direction: column;
+  }
+  .urlControl input {
+    min-height: 48px;
+    padding: 12px;
+  }
+  .urlControl button {
+    min-height: 43px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 0;
+  }
+  .intakeAside {
+    margin-top: 28px;
+    max-width: 450px;
+    border-left: 2px solid var(--lilac);
+    padding: 2px 0 2px 16px;
+  }
+  .asideRule {
+    display: none;
+  }
+  .intakeAside h3 {
+    font-size: 23px;
+  }
+  .intakeAside p {
+    font-size: 12px;
+  }
+  .reviewMap {
+    margin-bottom: 24px;
+  }
+  .inspection {
+    display: block;
+    padding-bottom: 28px;
+  }
+  .findingIndex {
+    margin-bottom: 26px;
+  }
+  .findingIndex button {
+    min-height: 60px;
+    padding: 11px 12px;
+  }
+  .findingIndex small {
+    margin-top: 4px;
+  }
+  .findingDetail {
+    padding-left: 0;
+    border-left: 0;
+    border-top: 1px solid var(--rule);
+    padding-top: 23px;
+  }
+  .findingDetail h2 {
+    font-size: 32px;
+    max-width: 570px;
+  }
+  .source {
+    padding-left: 9px;
+    padding-right: 9px;
+    font-size: 10px;
+  }
+  .sourceLine {
+    gap: 10px;
+  }
+  .notes {
+    margin-top: 28px;
+    padding: 23px;
+  }
+  .notes h2 {
+    font-size: 27px;
+  }
+  .notes > p {
+    font-size: 12px;
+  }
+  .notes label,
+  .notes textarea,
+  .noteButton {
+    font-size: 12px !important;
+  }
+  .noteButton {
+    min-height: 44px;
+  }
+  .footer {
+    font-size: 9px;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 370px) {
+  .atlas {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+  .introduction h1 {
+    font-size: 45px;
+  }
+  .station {
+    width: 142px;
+  }
+  .stationName {
+    font-size: 13px;
+  }
+  .stationCaption {
+    max-width: 134px;
+  }
+}

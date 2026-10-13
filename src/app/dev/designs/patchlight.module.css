@@ -1,0 +1,604 @@
+.canvas {
+  --ink: #163d46;
+  --muted: #536e76;
+  --line: #b7d0d6;
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  background: #eff7f9;
+  color: var(--ink);
+  font-family: Arial, Helvetica, sans-serif;
+}
+.canvas * {
+  box-sizing: border-box;
+}
+.canvas button,
+.canvas input,
+.canvas textarea {
+  font: inherit;
+}
+.canvas button,
+.canvas a {
+  touch-action: manipulation;
+}
+.canvas button {
+  cursor: pointer;
+}
+.canvas button:active {
+  transform: translateY(1px);
+}
+.canvas :focus-visible {
+  outline: 3px solid #bd5428;
+  outline-offset: 4px;
+}
+.spine {
+  background: #16566a;
+  color: #effaff;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
+  padding: 27px 10px;
+  gap: 45px;
+}
+.brand {
+  font-size: 34px;
+  font-weight: 800;
+  color: inherit;
+  text-decoration: none;
+  line-height: 1;
+}
+.brand span {
+  color: #8edbe2;
+  font-size: 22px;
+}
+.vertical {
+  writing-mode: vertical-rl;
+  font:
+    11px "Courier New",
+    monospace;
+  letter-spacing: 3px;
+}
+.private {
+  margin-top: auto;
+  font-size: 10px;
+  line-height: 1.7;
+  text-align: center;
+}
+.work {
+  padding: 0 48px;
+  min-width: 0;
+  max-width: 1600px;
+  width: 100%;
+  margin: auto;
+}
+.toolbar {
+  min-height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12px;
+}
+.sample {
+  font:
+    10px "Courier New",
+    monospace;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+.intro {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  padding: 60px 0 40px;
+  gap: 30px;
+}
+.eyebrow {
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.intro h1 {
+  font-family: "Arial Narrow", Arial, sans-serif;
+  font-weight: 800;
+  font-size: clamp(64px, 7.8vw, 114px);
+  letter-spacing: -7px;
+  line-height: 0.96;
+  margin: 22px 0 0;
+}
+.intro > p {
+  font-size: 18px;
+  line-height: 1.7;
+  margin: 0 0 5px;
+  color: var(--muted);
+}
+.preview {
+  max-width: 1000px;
+  border: 1px solid var(--line);
+  background: #fff;
+  margin-left: auto;
+  box-shadow: 9px 9px 0 #d8e9ed;
+}
+.filebar {
+  padding: 15px 22px;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  font:
+    12px "Courier New",
+    monospace;
+  background: #e1eef2;
+}
+.filebar span {
+  overflow-wrap: anywhere;
+}
+.filebar span:last-child {
+  color: var(--muted);
+  font-size: 11px;
+}
+.codeLine,
+.contextLine {
+  display: grid;
+  grid-template-columns: 55px minmax(0, 1fr);
+  font:
+    13px/1.8 "Courier New",
+    monospace;
+  min-width: 0;
+}
+.codeLine {
+  background: #f2fbf8;
+  padding: 12px 0;
+}
+.codeLine > span,
+.contextLine > span {
+  color: #66848b;
+  text-align: center;
+  border-right: 1px solid #d7e5e8;
+  margin-right: 15px;
+}
+.codeLine code,
+.contextLine code {
+  padding-right: 16px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+.inlinePreview {
+  display: flex;
+  gap: 18px;
+  text-align: left;
+  background: #fff2d9;
+  border: 0;
+  border-left: 4px solid #a34f25;
+  width: calc(100% - 55px);
+  padding: 22px;
+  margin: 12px 0 12px 55px;
+  color: var(--ink);
+}
+.inlinePreview strong {
+  display: block;
+  font-size: 16px;
+}
+.inlinePreview small {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.marker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #a34f25;
+  color: white;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  font-weight: bold;
+  border-radius: 3px;
+}
+.intake {
+  margin: 50px 0 55px;
+  max-width: 1000px;
+}
+.intake > label {
+  display: block;
+  font-size: 15px;
+  font-weight: bold;
+  margin-bottom: 16px;
+}
+.intake > div {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 2px solid #16566a;
+  padding-bottom: 12px;
+}
+.intake input {
+  background: none;
+  border: 0;
+  min-width: 0;
+  flex: 1;
+  font-size: 14px;
+  padding: 10px 0;
+  color: var(--ink);
+}
+.intake button,
+.reviewTitle button {
+  border: 0;
+  color: var(--ink);
+  background: none;
+  font-weight: bold;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.intake p {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.intake [role="alert"] {
+  color: #a34f25;
+  font-size: 13px;
+}
+.footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  border-top: 1px solid var(--line);
+  padding: 20px 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.reviewTitle {
+  padding: 35px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.reviewTitle h1 {
+  font-size: 32px;
+  letter-spacing: -1px;
+  font-weight: bold;
+  margin: 9px 0 0;
+}
+.editor {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  gap: 26px;
+  margin-bottom: 45px;
+}
+.files {
+  min-width: 0;
+}
+.files > .eyebrow {
+  display: block;
+  margin: 0 0 18px;
+}
+.files button {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: none;
+  color: var(--ink);
+  text-align: left;
+  padding: 19px 12px;
+}
+.files button[aria-current="true"] {
+  background: #d5e8ed;
+  border-left: 3px solid #16566a;
+  padding-left: 9px;
+}
+.files button > span {
+  font:
+    12px "Courier New",
+    monospace;
+}
+.files button small {
+  color: var(--muted);
+}
+.files strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.5;
+  margin: 10px 0;
+}
+.files em {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.7px;
+  font-style: normal;
+}
+.files > p {
+  font-size: 11px;
+  line-height: 1.8;
+  color: var(--muted);
+  margin: 25px 12px;
+}
+.source {
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.contextLine {
+  padding: 18px 0;
+  color: var(--muted);
+}
+.annotation {
+  margin: 18px 22px 18px 55px;
+  padding: 25px;
+  background: #fff5e4;
+  border-left: 3px solid #a34f25;
+}
+.annotationHeader {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #88501e;
+  font-size: 10px;
+}
+.annotationHeader > span:last-child {
+  margin-left: auto;
+  color: var(--muted);
+}
+.annotation h2 {
+  font-size: 23px;
+  line-height: 1.25;
+  letter-spacing: -0.5px;
+  margin: 22px 0 12px;
+}
+.annotation p {
+  font-size: 14px;
+  line-height: 1.7;
+  max-width: 68ch;
+}
+.fix {
+  border-left: 1px solid #cfb794;
+  padding-left: 15px;
+  margin: 23px 0;
+}
+.fix strong {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.fix p {
+  margin: 6px 0;
+}
+.resolve {
+  border: 1px solid #16566a;
+  background: #16566a;
+  color: white;
+  padding: 10px 15px;
+  font-size: 12px !important;
+}
+.resolve span {
+  margin-left: 20px;
+}
+.note {
+  border-top: 1px solid #ddcfb8;
+  margin-top: 25px;
+  padding-top: 22px;
+}
+.note label {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 10px;
+}
+.note textarea {
+  display: block;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #cfb794;
+  background: #fffbf3;
+  padding: 12px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.note button {
+  border: 0;
+  background: none;
+  color: var(--ink);
+  padding: 12px 0 0;
+  font-size: 11px;
+}
+.note button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.savedNote {
+  border-left: 2px solid #16566a;
+  padding-left: 12px;
+  overflow-wrap: anywhere;
+}
+.savedNote span {
+  display: block;
+  font-size: 10px;
+  color: var(--muted);
+}
+@media (min-width: 1600px) {
+  .intro h1 {
+    font-size: 120px;
+  }
+}
+@media (max-width: 1000px) {
+  .work {
+    padding: 0 28px;
+  }
+  .intro h1 {
+    letter-spacing: -4px;
+  }
+  .intro > p {
+    font-size: 15px;
+  }
+  .editor {
+    grid-template-columns: 180px minmax(0, 1fr);
+    gap: 15px;
+  }
+  .annotation {
+    margin-left: 20px;
+    padding: 20px;
+  }
+  .annotationHeader > span:last-child {
+    display: none;
+  }
+}
+@media (max-width: 650px) {
+  .canvas {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+  .spine {
+    padding: 22px 5px;
+    gap: 30px;
+  }
+  .brand {
+    font-size: 23px;
+  }
+  .brand span {
+    display: none;
+  }
+  .vertical {
+    font-size: 9px;
+    letter-spacing: 2px;
+  }
+  .private {
+    font-size: 8px;
+  }
+  .work {
+    padding: 0 18px;
+  }
+  .toolbar {
+    min-height: 80px;
+    align-items: flex-start;
+    justify-content: center;
+    flex-direction: column;
+    gap: 7px;
+    font-size: 11px;
+    padding: 16px 0;
+  }
+  .sample {
+    font-size: 8px;
+  }
+  .intro {
+    display: block;
+    padding: 35px 0 25px;
+  }
+  .intro h1 {
+    font-size: 65px;
+    letter-spacing: -4px;
+  }
+  .intro > p {
+    font-size: 13px;
+    margin: 25px 0 0;
+    line-height: 1.65;
+  }
+  .filebar {
+    padding: 12px;
+    font-size: 10px;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .filebar span:last-child {
+    font-size: 9px;
+  }
+  .codeLine,
+  .contextLine {
+    grid-template-columns: 32px minmax(0, 1fr);
+    font-size: 10px;
+  }
+  .codeLine > span,
+  .contextLine > span {
+    margin-right: 8px;
+  }
+  .inlinePreview {
+    margin-left: 20px;
+    width: calc(100% - 20px);
+    padding: 15px 10px;
+    gap: 9px;
+  }
+  .inlinePreview strong {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .inlinePreview small {
+    font-size: 11px;
+  }
+  .marker {
+    width: 18px;
+    height: 18px;
+    font-size: 12px;
+  }
+  .intake {
+    margin: 35px 0;
+  }
+  .intake > div {
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .intake input {
+    font-size: 11px;
+    width: calc(100% - 20px);
+  }
+  .intake button {
+    width: 100%;
+    text-align: left;
+    padding: 14px 0 0;
+  }
+  .intake p {
+    font-size: 10px;
+  }
+  .footer {
+    flex-direction: column;
+    gap: 8px;
+    font-size: 9px;
+  }
+  .reviewTitle {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 25px 0;
+  }
+  .reviewTitle h1 {
+    font-size: 26px;
+  }
+  .reviewTitle button {
+    font-size: 11px;
+  }
+  .editor {
+    display: block;
+  }
+  .files {
+    margin-bottom: 20px;
+  }
+  .files button {
+    padding: 12px;
+  }
+  .files strong {
+    font-size: 12px;
+    margin: 6px 0;
+  }
+  .files > p {
+    margin: 14px 0;
+  }
+  .annotation {
+    margin: 12px 10px;
+    padding: 17px 12px;
+  }
+  .annotation h2 {
+    font-size: 20px;
+  }
+  .annotation p {
+    font-size: 12px;
+  }
+  .annotationHeader {
+    font-size: 9px;
+  }
+  .note textarea {
+    font-size: 12px;
+  }
+}
