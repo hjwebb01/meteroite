@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import Link from "next/link";
-import { UserButton } from "@clerk/nextjs";
+import { UserButton, useClerk, useUser } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
 import ArrowUpRight from "@boxicons/react/ArrowUpRight";
 import Check from "@boxicons/react/Check";
@@ -87,18 +87,49 @@ async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
   return data;
 }
 
+type IntakeDraft = { url?: string; instructions?: string; model?: string };
+
+function readIntakeDraft(key: string | null): IntakeDraft {
+  if (!key || typeof window === "undefined") return {};
+  try {
+    const stored: unknown = JSON.parse(sessionStorage.getItem(key) ?? "null");
+    if (!stored || typeof stored !== "object") return {};
+    const draft = stored as Record<string, unknown>;
+    return {
+      url: typeof draft.url === "string" ? draft.url.slice(0, 500) : undefined,
+      instructions:
+        typeof draft.instructions === "string"
+          ? draft.instructions.slice(0, 4000)
+          : undefined,
+      model: typeof draft.model === "string" ? draft.model : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
+
 export function ReviewsWorkspace() {
+  const { user } = useUser();
+  return <UserReviewWorkspace key={user?.id ?? "pending"} ownerId={user?.id} />;
+}
+
+function UserReviewWorkspace({ ownerId }: { ownerId?: string }) {
   const chatGPT = useChatGPT();
+  const { openUserProfile } = useClerk();
+  const draftKey = ownerId ? `meteroite:intake:${ownerId}` : null;
+  const [draft] = useState(() => readIntakeDraft(draftKey));
   const [availability, setAvailability] = useState<Availability | null>(null);
   const [setupError, setSetupError] = useState("");
   const [checking, setChecking] = useState(true);
   const [selected, setSelected] = useState<Id<"reviews"> | null>(null);
   const [initialFindingId, setInitialFindingId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [url, setUrl] = useState("");
-  const [instructions, setInstructions] = useState("");
+  const [url, setUrl] = useState(draft.url ?? "");
+  const [instructions, setInstructions] = useState(draft.instructions ?? "");
   const [focusOpen, setFocusOpen] = useState(false);
-  const [chosenModel, setModel] = useState<string>(DEFAULT_CODING_MODEL_ID);
+  const [chosenModel, setModel] = useState<string>(
+    draft.model ?? DEFAULT_CODING_MODEL_ID,
+  );
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
   const openRouterModels = availability?.openRouterAvailable
@@ -126,6 +157,26 @@ export function ReviewsWorkspace() {
       : "skip",
   );
 
+  function persistDraft(
+    nextUrl: string,
+    nextInstructions: string,
+    nextModel: string,
+  ) {
+    if (!draftKey) return;
+    try {
+      sessionStorage.setItem(
+        draftKey,
+        JSON.stringify({
+          url: nextUrl,
+          instructions: nextInstructions,
+          model: nextModel,
+        }),
+      );
+    } catch {
+      // The live form remains usable if storage is unavailable.
+    }
+  }
+
   async function checkSetup() {
     setChecking(true);
     setSetupError("");
@@ -139,18 +190,26 @@ export function ReviewsWorkspace() {
   }
   useEffect(() => {
     let active = true;
-    requestJson<Availability>("/api/reviews")
-      .then((value) => {
-        if (active) setAvailability(value);
-      })
-      .catch((e) => {
-        if (active) setSetupError((e as Error).message);
-      })
-      .finally(() => {
-        if (active) setChecking(false);
-      });
+    const refresh = () => {
+      setChecking(true);
+      setSetupError("");
+      requestJson<Availability>("/api/reviews")
+        .then((value) => {
+          if (active) setAvailability(value);
+        })
+        .catch((e) => {
+          if (active) setSetupError((e as Error).message);
+        })
+        .finally(() => {
+          if (active) setChecking(false);
+        });
+    };
+    // OAuth can return in another tab; refresh access when this workspace regains focus.
+    window.addEventListener("focus", refresh);
+    refresh();
     return () => {
       active = false;
+      window.removeEventListener("focus", refresh);
     };
   }, [chatGPT.status?.connected]);
 
@@ -160,6 +219,19 @@ export function ReviewsWorkspace() {
     selectedModel: string,
   ) {
     setError("");
+    if (
+      submitting ||
+      checking ||
+      setupError ||
+      !availability?.ready ||
+      !selectedModel ||
+      availability.githubConnected !== true
+    ) {
+      setError(
+        "Connect GitHub and wait for the review service and a model to be available.",
+      );
+      return;
+    }
     try {
       parsePullRequestUrl(value);
     } catch (e) {
@@ -207,7 +279,18 @@ export function ReviewsWorkspace() {
     }
   })();
   const canSubmit =
-    !submitting && !checking && !!availability?.ready && !!model;
+    !submitting &&
+    !checking &&
+    !setupError &&
+    !!availability?.ready &&
+    !!model &&
+    availability.githubConnected === true;
+  const needsGitHub =
+    !checking &&
+    !setupError &&
+    availability?.ready &&
+    !!model &&
+    availability.githubConnected === false;
 
   return (
     <div className="min-h-screen bg-background text-foreground lg:grid lg:grid-cols-[256px_minmax(0,1fr)]">
@@ -417,7 +500,10 @@ export function ReviewsWorkspace() {
                   maxLength={500}
                   placeholder="https://github.com/owner/repo/pull/123"
                   value={url}
-                  onChange={(e) => setUrl(e.target.value)}
+                  onChange={(e) => {
+                    setUrl(e.target.value);
+                    persistDraft(e.target.value, instructions, chosenModel);
+                  }}
                   aria-invalid={error ? true : undefined}
                   aria-describedby={error ? "review-error" : undefined}
                   className="h-12 min-w-0 flex-1 bg-transparent font-mono text-[13px] placeholder:text-review-muted"
@@ -442,7 +528,10 @@ export function ReviewsWorkspace() {
                     maxLength={4000}
                     rows={3}
                     value={instructions}
-                    onChange={(e) => setInstructions(e.target.value)}
+                    onChange={(e) => {
+                      setInstructions(e.target.value);
+                      persistDraft(url, e.target.value, chosenModel);
+                    }}
                     onKeyDown={(e) => {
                       if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
                         e.preventDefault();
@@ -462,7 +551,10 @@ export function ReviewsWorkspace() {
                   id="review-model"
                   size="sm"
                   value={model}
-                  onChange={(e) => setModel(e.target.value)}
+                  onChange={(e) => {
+                    setModel(e.target.value);
+                    persistDraft(url, instructions, e.target.value);
+                  }}
                   disabled={!model}
                   className="h-8 max-w-[15rem] truncate border-0 bg-transparent pr-7 pl-2 text-xs font-medium text-review-body shadow-none transition-colors hover:bg-accent hover:text-foreground focus-visible:border-review-link focus-visible:ring-review-link/30 focus-visible:ring-2 dark:bg-transparent dark:hover:bg-accent"
                 >
@@ -500,9 +592,10 @@ export function ReviewsWorkspace() {
                   </Button>
                 )}
                 <Button
-                  type="submit"
+                  type={needsGitHub ? "button" : "submit"}
                   className="ml-auto px-3.5"
-                  disabled={!canSubmit}
+                  disabled={!needsGitHub && !canSubmit}
+                  onClick={needsGitHub ? () => openUserProfile() : undefined}
                 >
                   {submitting && (
                     <LoaderCircle
@@ -510,7 +603,11 @@ export function ReviewsWorkspace() {
                       className="size-3.5 animate-spin motion-reduce:animate-none"
                     />
                   )}
-                  {submitting ? "Starting…" : "Start review"}
+                  {needsGitHub
+                    ? "Connect GitHub"
+                    : submitting
+                      ? "Starting…"
+                      : "Start review"}
                 </Button>
               </div>
             </form>
