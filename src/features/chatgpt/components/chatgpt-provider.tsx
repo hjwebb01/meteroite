@@ -42,7 +42,10 @@ export function ChatGPTProvider({
           />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 space-y-4">
+      <PopoverContent
+        align="start"
+        className="w-80 max-w-[calc(100vw-2rem)] max-h-[calc(100dvh-2rem)] overflow-y-auto space-y-4 [&_button]:h-auto [&_button]:min-h-8 [&_button]:whitespace-normal"
+      >
         <div>
           <h2 className="text-sm font-medium">ChatGPT connection</h2>
           <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
@@ -56,7 +59,10 @@ export function ChatGPTProvider({
           </p>
         )}
         {status.error && (
-          <p role="alert" className="text-xs text-destructive">
+          <p
+            role="alert"
+            className="text-xs text-destructive [overflow-wrap:anywhere]"
+          >
             {status.error}
           </p>
         )}
@@ -65,7 +71,7 @@ export function ChatGPTProvider({
             <p role="status" className="flex items-center gap-2 text-xs">
               <LoaderIcon
                 aria-hidden="true"
-                className="size-3.5 animate-spin motion-reduce:animate-none"
+                className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none"
               />
               Finish signing in in the new tab.
             </p>
@@ -97,7 +103,7 @@ export function ChatGPTProvider({
             {busy && (
               <LoaderIcon
                 aria-hidden="true"
-                className="size-3.5 animate-spin motion-reduce:animate-none"
+                className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none"
               />
             )}
             {status.connected ? "Reconnect ChatGPT" : "Continue with ChatGPT"}
