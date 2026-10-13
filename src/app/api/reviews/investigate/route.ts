@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error:
-          "Choose a supported model and limits of 30–300 seconds and $0.10–$10.",
+          "Choose a supported model, a time limit from 30 to 300 seconds and a cost limit from $0.10 to $10.",
       },
       { status: 400 },
     );

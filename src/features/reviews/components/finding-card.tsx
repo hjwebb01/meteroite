@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import Check from "@boxicons/react/Check";
 import Copy from "@boxicons/react/Copy";
 import FileDiff from "@boxicons/react/FileCode";
@@ -36,6 +36,7 @@ export function FindingCard({
   onDiscuss: () => void;
   context?: boolean;
 }) {
+  const articleId = useId();
   const [copyStatus, setCopyStatus] = useState<"" | "copied" | "failed">("");
   const copyPrompt = () => {
     void navigator.clipboard
@@ -56,7 +57,7 @@ export function FindingCard({
   );
   return (
     <article
-      id={`${context ? "context-finding" : "finding"}-${f.id}`}
+      id={articleId}
       className={cn(
         "scroll-mt-6 overflow-hidden rounded-md border bg-review-bg",
         active && "border-review-link",

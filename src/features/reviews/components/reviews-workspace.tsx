@@ -1,15 +1,13 @@
 "use client";
 
 import {
-  useCallback,
   useEffect,
-  useMemo,
+  useId,
   useRef,
   useState,
   type FormEvent,
   type ReactNode,
 } from "react";
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { UserButton } from "@clerk/nextjs";
 import { useQuery } from "convex/react";
@@ -43,29 +41,7 @@ import {
 import { Wordmark } from "@/components/wordmark";
 import { cn } from "@/lib/utils";
 import { parsePullRequestUrl } from "../lib/review";
-import { ReviewFindingPanel } from "./review-finding-panel";
-import { FindingCard } from "./finding-card";
-import {
-  isNitpick,
-  severityCounts,
-  sortFindings,
-} from "../lib/finding-presentation";
-import type { ReviewNavigationTarget } from "../lib/review-diff";
-import { ReviewReassessment } from "./review-reassessment";
-import { ReviewNavigation } from "./review-navigation";
-import { fileCoverageGaps } from "../../../../convex/lib/review_navigation";
-import { ReviewHotspots } from "./review-hotspots";
-import { ReviewAssessment } from "./review-assessment";
-
-// Pierre renders into custom elements and Shiki, so it loads only in the browser.
-const ReviewDiffPanel = dynamic(() => import("./review-diff-panel"), {
-  ssr: false,
-  loading: () => (
-    <p role="status" className="p-5 text-sm text-muted-foreground">
-      Loading diff…
-    </p>
-  ),
-});
+import { ReviewReader } from "./review-reader";
 
 type Availability = {
   ready: boolean;
@@ -727,142 +703,132 @@ function ReviewDetail({
   onRerun: () => void;
   onCancel: () => Promise<void>;
 }) {
-  const [filter, setFilter] = useState("all");
   const [cancelling, setCancelling] = useState(false);
-  const [activeFindingId, setActiveFindingId] = useState<string | null>(() =>
-    review.result?.findings.some((finding) => finding.id === initialFindingId)
-      ? initialFindingId
-      : null,
-  );
-  const [focus, setFocus] = useState<ReviewNavigationTarget | null>(() => {
-    const finding = review.result?.findings.find(
-      (entry) => entry.id === initialFindingId,
-    );
-    return finding ? { kind: "finding", finding } : null;
-  });
-  const diffSection = useRef<HTMLElement>(null);
-  const contextSection = useRef<HTMLElement>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const [manualRefreshing, setRefreshing] = useState(false);
+  const [checkedSnapshot, setCheckedSnapshot] = useState<string | null>(null);
   const [freshnessError, setFreshnessError] = useState("");
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState("");
+  const [acknowledgedRevision, setAcknowledgedRevision] = useState<
+    string | null
+  >(null);
+  const revisionHeadingId = useId();
+  const revisionHeading = useRef<HTMLHeadingElement>(null);
+  const readingContent = useRef<HTMLDivElement>(null);
   const files = useQuery(api.reviews.files, { id: review._id });
   const verdicts = useQuery(api.reviewInteractions.verdicts, {
     reviewId: review._id,
   });
-  const diffPaths = new Set(
-    files?.filter((file) => file.patch).map((file) => file.filename),
-  );
-  const showDiff = diffPaths.size > 0;
-  const navigate = useCallback((target: ReviewNavigationTarget) => {
-    setActiveFindingId(target.kind === "finding" ? target.finding.id : null);
-    setFocus(target);
-  }, []);
-  const selectFinding = useCallback(
-    (id: string | null) => {
-      if (id === null) {
-        setActiveFindingId(null);
-        setFocus(null);
-        return;
-      }
-      const finding = review.result?.findings.find((entry) => entry.id === id);
-      if (finding) navigate({ kind: "finding", finding });
-    },
-    [review.result, navigate],
-  );
-  const selectHotspot = useCallback(
-    (target: Extract<ReviewNavigationTarget, { kind: "hotspot" }>) => {
-      setActiveFindingId(null);
-      setFocus(target);
-    },
-    [],
-  );
-  const running = review.status === "queued" || review.status === "running";
   const now = useNow(30_000);
+  const running = review.status === "queued" || review.status === "running";
   const stalled = running && now - review.updatedAt > STALLED_AFTER_MS;
-  const result = review.result;
-  const findings = useMemo(
-    () =>
-      sortFindings(
-        result?.findings.filter(
-          (f) => filter === "all" || f.severity === filter,
-        ) ?? [],
-      ),
-    [result, filter],
-  );
-  const inDiff = (f: (typeof findings)[number]) =>
-    showDiff && diffPaths.has(f.path);
-  const diffFindings = findings.filter(inDiff);
-  const listedFindings = findings.filter((f) => !inDiff(f));
-  const nitpicks = listedFindings.filter(isNitpick);
-  const mainFindings = listedFindings.filter((f) => !isNitpick(f));
-  const counts = severityCounts(result?.findings ?? []);
-  const renderFinding = (f: (typeof findings)[number]) => (
-    <FindingCard
-      key={f.id}
-      finding={f}
-      verdict={verdicts?.[f.id]}
-      review={review}
-      active={f.id === activeFindingId}
-      onDiscuss={() => selectFinding(f.id)}
-      onShowInDiff={
-        diffPaths.has(f.path)
-          ? () => {
-              setActiveFindingId(f.id);
-              setFocus({ kind: "finding", finding: f });
-              // Below xl the diff stacks under the findings.
-              diffSection.current?.scrollIntoView({ block: "nearest" });
-            }
-          : undefined
-      }
-    />
-  );
-  const linked = new Set(
-    result?.findings.map((f) => f.previousFindingId).filter(Boolean),
-  );
-  const unreported =
-    previous?.result?.findings.filter((f) => !linked.has(f.id)) ?? [];
+  const changed =
+    review.freshness?.state === "outdated" ||
+    (review.result?.outdated === true && review.freshness?.state !== "current");
+  const liveHead =
+    review.freshness && review.freshness.state !== "unavailable"
+      ? review.freshness.headSha
+      : null;
+  const revisionKey = `${review.headSha ?? "unknown"}:${liveHead ?? "changed-during-analysis"}:${review.freshness?.state !== "unavailable" ? (review.freshness?.baseTipSha ?? "") : ""}`;
+  const needsAcknowledgment = changed && acknowledgedRevision !== revisionKey;
+  const automaticSnapshotKey = `${review._id}:${review.headSha ?? ""}`;
+  const refreshing =
+    manualRefreshing ||
+    (review.status === "completed" &&
+      !!review.headSha &&
+      checkedSnapshot !== automaticSnapshotKey);
+
+  useEffect(() => {
+    if (review.status !== "completed" || !review.headSha) return;
+    let active = true;
+    const controller = new AbortController();
+    requestJson("/api/reviews/freshness", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reviewId: review._id }),
+      signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10_000)]),
+    })
+      .catch((failure) => {
+        if (active) setFreshnessError((failure as Error).message);
+      })
+      .finally(() => {
+        if (active) setCheckedSnapshot(automaticSnapshotKey);
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [review._id, review.headSha, review.status, automaticSnapshotKey]);
+
+  useEffect(() => {
+    if (
+      needsAcknowledgment &&
+      (document.activeElement === document.body ||
+        readingContent.current?.contains(document.activeElement))
+    )
+      revisionHeading.current?.focus();
+  }, [needsAcknowledgment, revisionKey]);
+
+  async function checkFreshness() {
+    setRefreshing(true);
+    setFreshnessError("");
+    try {
+      await requestJson("/api/reviews/freshness", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reviewId: review._id }),
+      });
+    } catch (failure) {
+      setFreshnessError((failure as Error).message);
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  const readerProps = {
+    review,
+    files: files ?? [],
+    verdicts,
+    previous: previous ?? null,
+    initialFindingId,
+    onRerun,
+    onSelectReview,
+  };
+
   return (
-    <div className={cn("mx-auto", showDiff ? "max-w-none" : "max-w-4xl")}>
-      <header className="mb-5 flex items-start gap-4 border-b pb-4">
-        <div className="min-w-0 flex-1">
-          <p className="flex flex-wrap items-center gap-x-1.5 text-xs leading-5 text-review-muted tabular-nums">
+    <div className="mx-auto min-w-0 max-w-[1600px]">
+      <header className="mb-6 flex flex-col items-start justify-between gap-4 border-b pb-5 sm:flex-row sm:flex-wrap">
+        <div className="w-full min-w-0 sm:w-auto sm:flex-1">
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs leading-5 text-review-muted">
             <a
               href={review.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-review-body hover:text-foreground"
+              className="break-all text-review-link underline-offset-4 hover:underline"
             >
               {review.repoOwner}/{review.repoName} #{review.pullNumber}
             </a>
-            <span aria-hidden="true">·</span>
-            <span>{statusLabel[review.status]}</span>
-            <span aria-hidden="true">·</span>
-            <span>{formatRunTime(review._creationTime)}</span>
+            <span>
+              · {statusLabel[review.status]}, started{" "}
+              {formatRunTime(review._creationTime)}
+            </span>
+          </p>
+          <h1 className="mt-3 break-words text-[clamp(20px,2.6vw,32px)] leading-snug tracking-[-0.035em]">
+            {review.title || "Pull request review"}
+          </h1>
+          <p className="mt-3 flex flex-wrap items-center gap-2 text-xs text-review-muted">
+            <LockKeyhole aria-hidden="true" className="size-3.5" />
+            {review.githubReview
+              ? "Private work. A review was published separately."
+              : "Private work, not posted to GitHub."}
             {review.headSha && (
-              <>
-                <span aria-hidden="true">·</span>
-                <span className="font-mono">{review.headSha.slice(0, 7)}</span>
-              </>
+              <span className="text-review-body">
+                Saved revision {review.headSha.slice(0, 7)}
+              </span>
             )}
           </p>
-          <h1 className="mt-1 font-serif text-[19px] leading-tight tracking-[-0.01em] text-balance">
-            {review.title ?? "Pull request review"}
-          </h1>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          {(refreshing || submitting) && (
-            <span
-              role="status"
-              className="mr-2 flex items-center gap-1.5 text-xs text-review-muted"
-            >
-              <LoaderCircle
-                aria-hidden="true"
-                className="size-3.5 animate-spin motion-reduce:animate-none"
-              />
-              {refreshing ? "Checking freshness…" : "Starting review…"}
-            </span>
-          )}
+        <div className="flex max-w-full flex-wrap items-center gap-2">
           {running ? (
             <Button
               variant="outline"
@@ -880,14 +846,14 @@ function ReviewDetail({
               {cancelling ? "Cancelling…" : "Cancel review"}
             </Button>
           ) : review.githubReview ? (
-            <Button variant="ghost" asChild>
+            <Button variant="outline" asChild>
               <a
                 href={review.githubReview.url}
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                <Check aria-hidden="true" className="size-4" />
-                Posted to GitHub
+                <Check aria-hidden="true" className="size-3.5" />
+                Published review
                 <ArrowUpRight aria-hidden="true" className="size-3.5" />
               </a>
             </Button>
@@ -917,15 +883,19 @@ function ReviewDetail({
           )}
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
-              <Button variant="ghost" size="icon" aria-label="More actions">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="More review actions"
+              >
                 <DotsHorizontal aria-hidden="true" className="size-4" />
               </Button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
               <DropdownMenu.Content
                 align="end"
-                sideOffset={4}
-                className="z-50 min-w-52 rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+                sideOffset={8}
+                className="review-glass z-50 max-w-[calc(100vw-2rem)] min-w-52 rounded-md border p-1 shadow-xl"
               >
                 {!running && (
                   <>
@@ -940,21 +910,7 @@ function ReviewDetail({
                     <DropdownMenu.Item
                       className={menuItem}
                       disabled={refreshing}
-                      onSelect={async () => {
-                        setRefreshing(true);
-                        setFreshnessError("");
-                        try {
-                          await requestJson("/api/reviews/freshness", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ reviewId: review._id }),
-                          });
-                        } catch (failure) {
-                          setFreshnessError((failure as Error).message);
-                        } finally {
-                          setRefreshing(false);
-                        }
-                      }}
+                      onSelect={() => void checkFreshness()}
                     >
                       <Clock aria-hidden="true" className="size-4" />
                       Check PR freshness
@@ -977,412 +933,154 @@ function ReviewDetail({
           </DropdownMenu.Root>
         </div>
       </header>
+
+      <p role="status" className="mb-5 text-xs leading-6 text-review-muted">
+        {refreshing ? (
+          "Checking the PR revision…"
+        ) : review.freshness ? (
+          <>
+            {review.freshness.state === "current"
+              ? "Saved revision was current at last check. "
+              : review.freshness.state === "outdated"
+                ? "Historical revision · newer source detected. "
+                : "PR freshness is unknown. "}
+            {review.freshness.reason} Checked{" "}
+            {formatRunTime(review.freshness.observedAt)}.
+          </>
+        ) : review.headSha ? (
+          "Saved source is pinned. PR freshness has not been confirmed."
+        ) : (
+          "The review has not saved a revision yet."
+        )}
+      </p>
       {freshnessError && (
-        <p role="alert" className="mb-4 text-sm text-destructive">
-          {freshnessError}
+        <p role="alert" className="mb-5 break-words text-sm text-sev-medium">
+          Freshness check failed: {freshnessError} The saved revision is still
+          available; this does not confirm it is current.
         </p>
       )}
+
       {publishError && (
         <p role="alert" className="mb-4 text-sm text-destructive">
           {publishError}
         </p>
       )}
-      {review.freshness && (
-        <p
-          role="status"
-          className="mb-5 rounded-md border p-4 text-sm text-muted-foreground"
-        >
-          {review.freshness.state === "outdated"
-            ? "New assessment needed. "
-            : review.freshness.state === "current"
-              ? "Snapshot current at last check. "
-              : "Freshness unavailable. "}
-          {review.freshness.reason}
-          <span className="mt-2 block text-xs">
-            Checked {new Date(review.freshness.observedAt).toLocaleString()}
-            {review.freshness.state !== "unavailable" &&
-              ` · live head ${review.freshness.headSha.slice(0, 7)}`}
-          </span>
-        </p>
-      )}
-      {showDiff && (
+      {needsAcknowledgment && (
         <section
-          ref={diffSection}
-          aria-label="Pull request diff"
-          className="mb-10 h-[calc(100vh-6rem)] min-h-[560px] overflow-hidden rounded-md border border-review-border"
+          className="review-reading-plane mx-auto max-w-3xl border border-sev-medium/40 p-6 sm:p-9"
+          aria-labelledby={revisionHeadingId}
         >
-          <ReviewDiffPanel
-            files={files!}
-            findings={findings}
-            verdicts={verdicts}
-            allFindings={result?.findings ?? []}
-            hotspots={result?.hotspots ?? []}
-            onSelectHotspot={selectHotspot}
-            activeFindingId={activeFindingId}
-            focus={focus}
-            onSelectFinding={selectFinding}
-            onOpenFinding={(id) => {
-              selectFinding(id);
-              requestAnimationFrame(() =>
-                contextSection.current?.scrollIntoView({ block: "start" }),
-              );
-            }}
-          />
+          <p className="text-xs text-sev-medium">Revision changed</p>
+          <h2
+            ref={revisionHeading}
+            id={revisionHeadingId}
+            tabIndex={-1}
+            className="mt-4 text-2xl leading-snug"
+          >
+            Which revision do you want to inspect?
+          </h2>
+          <p className="mt-4 text-sm leading-7 text-review-body">
+            This analysis belongs to saved commit{" "}
+            {review.headSha?.slice(0, 7) ?? "unknown"}
+            {liveHead &&
+              liveHead !== review.headSha &&
+              `; the PR now points to ${liveHead.slice(0, 7)}`}
+            . The PR’s source or base context changed. Reading the historical
+            result does not update its evidence or authorize a remote action.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAcknowledgedRevision(revisionKey);
+                requestAnimationFrame(() => readingContent.current?.focus());
+              }}
+            >
+              Inspect saved revision
+            </Button>
+            <Button disabled={submitting} onClick={onRerun}>
+              {submitting ? "Starting…" : "Request reassessment"}
+            </Button>
+          </div>
+          <p className="mt-4 text-xs leading-6 text-review-muted">
+            Reassessment starts a new analysis with your saved model and focus.
+            It never starts automatically. Historical read marks remain on this
+            review.
+          </p>
         </section>
       )}
-      <div className={cn(showDiff && "max-w-4xl")}>
-        <div className="min-w-0">
-          {focus && (
+      <div ref={readingContent} tabIndex={-1} hidden={needsAcknowledgment}>
+        {review.status === "completed" && review.result ? (
+          files === undefined ||
+          (!!review.headSha && checkedSnapshot !== automaticSnapshotKey) ? (
+            <p role="status" className="p-6 text-sm text-review-muted">
+              {files === undefined
+                ? "Loading saved source…"
+                : "Checking the saved PR revision…"}
+            </p>
+          ) : (
+            <ReviewReader {...readerProps} />
+          )
+        ) : (
+          <div className="mx-auto max-w-4xl space-y-6">
             <section
-              ref={contextSection}
-              aria-label="Selected review context"
-              className="mb-6 scroll-mt-5 rounded-md bg-sidebar"
+              className="review-reading-plane p-6 sm:p-9"
+              aria-label="Analysis activity"
             >
-              <div className="flex flex-wrap items-center justify-between gap-2 border-b p-3">
-                <h2 className="text-sm font-medium">Selected review context</h2>
+              <p className="text-xs text-review-link">
+                Analysis activity · {statusLabel[review.status]}
+              </p>
+              <h2 className="mt-5 flex items-start gap-3 text-xl leading-snug">
+                {running && !stalled && (
+                  <LoaderCircle
+                    aria-hidden="true"
+                    className="mt-0.5 size-5 shrink-0 animate-spin motion-reduce:animate-none"
+                  />
+                )}
+                {stalled
+                  ? "This review has stopped reporting"
+                  : review.status === "failed"
+                    ? "Analysis couldn’t finish"
+                    : review.status === "cancelled"
+                      ? "Analysis cancelled"
+                      : review.progress}
+              </h2>
+              <p
+                role={
+                  stalled || review.status === "failed" ? "alert" : "status"
+                }
+                className="mt-4 break-words text-sm leading-7 text-review-muted"
+              >
+                {stalled
+                  ? `No progress since ${formatRunTime(review.updatedAt)}. Last reported step: ${review.progress}. Cancel this run before requesting a new review.`
+                  : review.status === "failed"
+                    ? review.error
+                    : review.status === "cancelled"
+                      ? "The saved work is retained. Request another review when you’re ready."
+                      : "This is actual background activity, not a completed change brief. You can leave and return through Saved reviews; progress is saved here."}
+              </p>
+              {!running && (
                 <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setFocus(null);
-                    diffSection.current?.scrollIntoView({ block: "start" });
-                  }}
+                  className="mt-6"
+                  disabled={submitting}
+                  onClick={onRerun}
                 >
-                  {showDiff ? "Back to diff" : "Close context"}
+                  {submitting ? "Starting…" : "Review latest commits"}
                 </Button>
-              </div>
-              {focus.kind === "finding" && (
-                <>
-                  <FindingCard
-                    finding={focus.finding}
-                    verdict={verdicts?.[focus.finding.id]}
-                    review={review}
-                    active={true}
-                    context={true}
-                    onDiscuss={() => selectFinding(focus.finding.id)}
-                  />
-                  <ReviewFindingPanel
-                    key={focus.finding.id}
-                    review={review}
-                    finding={focus.finding}
-                    onReviewLatest={onRerun}
-                  />
-                </>
-              )}
-              {focus.kind === "hotspot" && (
-                <div className="rounded-md border p-4">
-                  <p className="text-xs text-review-link">
-                    {focus.hotspot.kind === "human_judgment"
-                      ? "Human judgment"
-                      : "Possible issue"}
-                  </p>
-                  <h2 className="mt-2 font-medium">{focus.hotspot.title}</h2>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    {focus.hotspot.reason}
-                  </p>
-                  <p className="mt-2 break-all font-mono text-xs text-muted-foreground">
-                    {focus.reference.path}:{focus.reference.line}
-                  </p>
-                </div>
-              )}
-              {focus.kind === "group" && (
-                <div className="rounded-md border p-4">
-                  <h2 className="font-medium">{focus.group.title}</h2>
-                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                    {focus.group.purpose}
-                  </p>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    {focus.group.hunkIds.length} supporting{" "}
-                    {focus.group.hunkIds.length === 1 ? "hunk" : "hunks"}. Use
-                    the group navigation to move between them.
-                  </p>
-                  <p className="mt-2 break-all font-mono text-xs">
-                    {focus.hunk.path} · hunk {focus.hunk.ordinal + 1}
-                  </p>
-                </div>
-              )}
-              {focus.kind === "hunk" && (
-                <div className="rounded-md border p-4">
-                  <h2 className="break-all font-mono text-sm">
-                    {focus.hunk.path}
-                  </h2>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Hunk {focus.hunk.ordinal + 1} ·{" "}
-                    {focus.hunk.heading || "Changed code"}
-                  </p>
-                </div>
-              )}
-              {focus.kind === "file" && (
-                <div className="rounded-md border p-4">
-                  <h2 className="break-all font-mono text-sm">{focus.path}</h2>
-                  {files
-                    ?.filter((file) => file.filename === focus.path)
-                    .flatMap((file) =>
-                      fileCoverageGaps(file).map((gap) => (
-                        <p
-                          key={gap.kind}
-                          className="mt-2 text-xs leading-5 text-muted-foreground"
-                        >
-                          {gap.reason}
-                        </p>
-                      )),
-                    )}
-                </div>
               )}
             </section>
-          )}
-          {stalled && (
-            <div
-              role="alert"
-              className="rounded-md border border-sev-medium/30 bg-sev-medium/5 p-5"
-            >
-              <h2 className="font-medium">This review has stopped reporting</h2>
-              <p className="mt-2 text-sm leading-6">
-                No progress since{" "}
-                {new Date(review.updatedAt).toLocaleTimeString()} (last step: “
-                {review.progress}”). The background worker likely failed before
-                it could save an error. Cancel this review, then start a new
-                one.
-              </p>
-            </div>
-          )}
-          {running && !stalled && (
-            <div
-              role="status"
-              aria-live="polite"
-              className="flex items-start gap-4 rounded-md border bg-review-bg p-4"
-            >
-              <LoaderCircle
-                aria-hidden="true"
-                className="mt-1 size-5 animate-spin text-review-link motion-reduce:animate-none"
-              />
-              <div>
-                <h2 className="font-medium">{review.progress}</h2>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  You can leave this page. The review runs in the background and
-                  saves its findings here.
-                </p>
-              </div>
-            </div>
-          )}
-          {review.status === "failed" && (
-            <div
-              role="alert"
-              className="rounded-md border border-destructive/30 bg-destructive/10 p-5"
-            >
-              <h2 className="font-medium">Review couldn’t finish</h2>
-              <p className="mt-2 text-sm">{review.error}</p>
-            </div>
-          )}
-          {review.status === "cancelled" && (
-            <p className="rounded-md border p-5 text-sm text-muted-foreground">
-              This review was cancelled. Start another run when you’re ready.
-            </p>
-          )}
-          {result && (
-            <>
-              {result.outdated && (
-                <p
-                  role="status"
-                  className="mb-5 rounded-md border border-sev-medium/30 bg-sev-medium/5 p-4 text-sm"
-                >
-                  The PR changed during this review. These findings refer to
-                  commit {review.headSha?.slice(0, 7)}. Review the latest
-                  commits for current findings.
-                </p>
-              )}
-              <section className="mb-7 rounded-md border bg-review-bg p-4">
-                <h2 className="text-sm font-medium">Review summary</h2>
-                <p className="mt-3 whitespace-pre-wrap text-sm leading-7">
-                  {result.summary}
-                </p>
-                {result.findings.length > 0 && (
-                  <p className="mt-4 text-xs font-medium">
-                    {counts.high} high · {counts.medium} medium · {counts.low}{" "}
-                    low
-                  </p>
-                )}
-                <p className="mt-4 text-xs text-muted-foreground">
-                  Static analysis · Diffs for {result.coverage.diffFiles.length}{" "}
-                  of {result.coverage.changedFiles} changed{" "}
-                  {result.coverage.changedFiles === 1 ? "file" : "files"} ·{" "}
-                  {result.coverage.filesRead.length} source{" "}
-                  {result.coverage.filesRead.length === 1 ? "file" : "files"}{" "}
-                  read
-                </p>
-                {files?.length === 0 && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    This review predates saved diffs. Review the latest commits
-                    to see findings in the diff.
-                  </p>
-                )}
-              </section>
-              <ReviewAssessment
-                assessment={result.assessment}
-                sourceOwner={review.sourceOwner ?? review.repoOwner}
-                sourceRepo={review.sourceRepo ?? review.repoName}
-              />
-              {previous && (
-                <ReviewReassessment
-                  review={review}
-                  previous={previous}
-                  files={files ?? []}
-                  onOpenReview={onSelectReview}
-                  onNavigate={navigate}
-                />
-              )}
-              <ReviewNavigation
-                review={review}
-                files={files ?? []}
-                focus={focus}
-                onNavigate={navigate}
-              />
-              <ReviewHotspots
-                review={review}
-                files={files ?? []}
-                onSelect={selectHotspot}
-              />
-              <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-                <h2 className="text-lg font-semibold">
-                  Findings{" "}
-                  <span className="ml-2 text-muted-foreground">
-                    {result.findings.length}
-                  </span>
-                </h2>
-                <div
-                  className="flex gap-1"
-                  role="group"
-                  aria-label="Filter findings by severity"
-                >
-                  {["all", "high", "medium", "low"].map((value) => (
-                    <Button
-                      key={value}
-                      size="sm"
-                      variant={filter === value ? "secondary" : "ghost"}
-                      aria-pressed={filter === value}
-                      onClick={() => setFilter(value)}
-                      className="capitalize"
-                    >
-                      {value}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              {result.findings.length === 0 ? (
-                <div className="flex items-start gap-3 rounded-md border p-5">
-                  <Check
-                    aria-hidden="true"
-                    className="mt-0.5 size-4 text-review-link"
-                  />
-                  <div>
-                    <p className="text-sm font-medium">
-                      No validated findings reported
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                      This review did not establish an actionable issue within
-                      its coverage. Check the limitations below; this is not a
-                      guarantee that the change is correct.
-                    </p>
-                  </div>
-                </div>
-              ) : findings.length === 0 ? (
-                <p className="py-5 text-sm text-muted-foreground">
-                  No {filter} severity findings in this run.
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {mainFindings.map(renderFinding)}
-                  {nitpicks.length > 0 && (
-                    <details className="rounded-md border p-4">
-                      <summary className="cursor-pointer text-sm font-medium">
-                        Nitpicks and low-confidence notes ({nitpicks.length})
-                      </summary>
-                      <div className="mt-4 space-y-4">
-                        {nitpicks.map(renderFinding)}
-                      </div>
-                    </details>
-                  )}
-                  {diffFindings.length > 0 && (
-                    <details
-                      className="rounded-md border p-4"
-                      open={listedFindings.length === 0}
-                    >
-                      <summary className="cursor-pointer text-sm font-medium">
-                        Findings shown in the diff ({diffFindings.length})
-                      </summary>
-                      <div className="mt-4 space-y-4">
-                        {diffFindings.map(renderFinding)}
-                      </div>
-                    </details>
-                  )}
-                </div>
-              )}
-              {previous?.result && !result.reassessment && (
-                <section className="mt-8 border-t pt-6">
-                  <h2 className="text-sm font-medium">
-                    Compared with the previous review
-                  </h2>
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    {linked.size} linked repeat{" "}
-                    {linked.size === 1 ? "finding" : "findings"} ·{" "}
-                    {unreported.length} previous{" "}
-                    {unreported.length === 1 ? "finding" : "findings"} not
-                    reported again
-                  </p>
-                  {unreported.length > 0 && (
-                    <details className="mt-3 text-sm">
-                      <summary className="cursor-pointer">
-                        View findings not reported again
-                      </summary>
-                      <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                        Absence from a repeat review does not prove a fix.
-                        Coverage and reviewer interpretation can differ.
-                      </p>
-                      <ul className="mt-3 space-y-2">
-                        {unreported.map((f) => (
-                          <li key={f.id}>
-                            <span className="font-mono text-xs text-muted-foreground">
-                              {f.path}:{f.line}
-                            </span>
-                            <p className="mt-1">{f.title}</p>
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  )}
-                </section>
-              )}
-              <details className="mt-8 rounded-md border p-5">
-                <summary className="cursor-pointer text-sm font-medium">
-                  Coverage and limitations{" "}
-                  {result.coverage.warnings.length > 0 &&
-                    `(${result.coverage.warnings.length})`}
+            {!!files?.length && (
+              <details className="rounded-md border">
+                <summary className="cursor-pointer px-5 py-4 text-sm">
+                  Inspect saved source · {files.length} files
                 </summary>
-                <div className="mt-4 space-y-4 text-sm leading-6 text-muted-foreground">
-                  <p>
-                    Tests, builds, and browser flows were not run. Findings are
-                    based on the recorded diff and inspected source.
-                  </p>
-                  {result.coverage.warnings.length > 0 && (
-                    <ul className="list-disc space-y-2 pl-5">
-                      {result.coverage.warnings.map((warning, index) => (
-                        <li key={index}>{warning}</li>
-                      ))}
-                    </ul>
-                  )}
-                  <h3 className="font-medium text-foreground">
-                    Source files read
-                  </h3>
-                  <ul className="break-all font-mono text-xs">
-                    {result.coverage.filesRead.map((path) => (
-                      <li key={path}>{path}</li>
-                    ))}
-                  </ul>
+                <div className="border-t p-3">
+                  <ReviewReader {...readerProps} sourceOnly />
                 </div>
               </details>
-            </>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

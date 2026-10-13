@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, type FormEvent } from "react";
+import { useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Doc } from "../../../../convex/_generated/dataModel";
@@ -27,6 +27,7 @@ export function ReviewNavigation({
   onNavigate: (target: ReviewNavigationTarget) => void;
 }) {
   const [query, setQuery] = useState("");
+  const searchId = useId();
   const feedback = useQuery(api.reviews.groupingFeedback, { id: review._id });
   const hunks = useMemo(
     () => savedHunks(files, `legacy:${review._id}`),
@@ -34,10 +35,18 @@ export function ReviewNavigation({
   );
   const groups = review.result?.changeGroups ?? [];
   const ungrouped = ungroupedHunks(hunks, groups);
+  const normalizedQuery = query.trim().toLowerCase();
   const matchingFiles = files.filter((file) =>
-    `${file.filename}\n${file.previousFilename ?? ""}`
+    [
+      file.filename,
+      file.previousFilename ?? "",
+      ...hunks
+        .filter((hunk) => hunk.path === file.filename)
+        .map((hunk) => hunk.heading),
+    ]
+      .join("\n")
       .toLowerCase()
-      .includes(query.toLowerCase()),
+      .includes(normalizedQuery),
   );
   const hunkButton = (hunk: ChangeHunk, group?: ChangeGroup) => (
     <button
@@ -52,25 +61,30 @@ export function ReviewNavigation({
         (focus?.kind === "hunk" || focus?.kind === "group") &&
         focus.hunk.id === hunk.id
       }
-      className="block w-full rounded px-2 py-1.5 text-left text-xs text-review-link hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
+      className="block w-full rounded-md px-2 py-1.5 text-left text-xs text-review-link hover:bg-accent focus-visible:outline-2 focus-visible:outline-ring"
     >
-      <span className="break-all font-mono">{hunk.path}</span>
+      <code className="break-all">{hunk.path}</code>
       <span className="block text-muted-foreground">
         Hunk {hunk.ordinal + 1} · −{hunk.leftStart},{hunk.leftLines} +
         {hunk.rightStart},{hunk.rightLines}
-        {hunk.heading && ` · ${hunk.heading}`}
+        {hunk.heading && (
+          <span className="block break-words">{hunk.heading}</span>
+        )}
       </span>
     </button>
   );
   return (
     <section
       aria-label="Change navigation"
-      className="mb-7 rounded-md border bg-sidebar p-4"
+      className="rounded-md border border-review-border bg-review-bg p-4"
     >
-      <h2 className="font-semibold">Explore changes</h2>
+      <h3 className="font-semibold">All saved changes</h3>
       <p className="mt-2 text-xs leading-5 text-muted-foreground">
-        {files.length} files · {hunks.length} saved hunks. Finding filters leave
-        this inventory available.
+        {files.length} saved files · {hunks.length} saved hunks. Finding filters
+        leave this inventory available.
+        {review.result &&
+          review.result.coverage.changedFiles > files.length &&
+          ` Inventory incomplete: ${review.result.coverage.changedFiles - files.length} changed files were not saved.`}
       </p>
       <div className="mt-4 space-y-3">
         {groups.map((group) => {
@@ -78,7 +92,7 @@ export function ReviewNavigation({
             hunks.filter((hunk) => hunk.id === id),
           );
           return (
-            <details key={group.id} className="rounded border p-3">
+            <details key={group.id} className="rounded-md border p-3">
               <summary className="cursor-pointer text-sm font-medium">
                 {group.title} · {members.length} hunks
               </summary>
@@ -98,7 +112,7 @@ export function ReviewNavigation({
             </details>
           );
         })}
-        <details className="rounded border p-3">
+        <details className="rounded-md border p-3">
           <summary className="cursor-pointer text-sm font-medium">
             Ungrouped changes · {ungrouped.length} hunks
           </summary>
@@ -112,18 +126,15 @@ export function ReviewNavigation({
           </div>
         </details>
       </div>
-      <label
-        htmlFor={`file-search-${review._id}`}
-        className="mt-5 block text-xs font-medium"
-      >
-        Find a changed file
+      <label htmlFor={searchId} className="mt-5 block text-xs font-medium">
+        Find a changed file or hunk
       </label>
       <Input
-        id={`file-search-${review._id}`}
+        id={searchId}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
-        placeholder="Search paths…"
-        className="mt-2"
+        placeholder="Search paths or hunk headings…"
+        className="mt-2 text-base sm:text-sm"
       />
       <p className="mt-2 text-xs text-muted-foreground" role="status">
         {matchingFiles.length} matching files
@@ -131,8 +142,8 @@ export function ReviewNavigation({
       <div className="mt-2 max-h-72 overflow-y-auto">
         {matchingFiles.map((file) => (
           <details key={file.filename} className="border-t py-2">
-            <summary className="cursor-pointer break-all font-mono text-xs">
-              {file.filename}
+            <summary className="cursor-pointer break-all text-xs">
+              <code>{file.filename}</code>
               {file.previousFilename && (
                 <span className="block text-muted-foreground">
                   Renamed from {file.previousFilename}
@@ -142,7 +153,7 @@ export function ReviewNavigation({
             <button
               type="button"
               onClick={() => onNavigate({ kind: "file", path: file.filename })}
-              className="mt-2 rounded px-2 py-1 text-xs text-review-link underline focus-visible:outline-2 focus-visible:outline-ring"
+              className="mt-2 rounded-md px-2 py-1 text-xs text-review-link underline focus-visible:outline-2 focus-visible:outline-ring"
             >
               {file.patch ? "Open file diff" : "Show file coverage"}
             </button>
@@ -233,7 +244,7 @@ function GroupingFeedback({
               setReason(event.target.value);
               requestId.current = null;
             }}
-            className="mt-2 min-h-20 w-full rounded border bg-background p-2 text-xs focus-visible:outline-2 focus-visible:outline-ring"
+            className="mt-2 min-h-20 w-full rounded-md border bg-background p-2 text-xs focus-visible:outline-2 focus-visible:outline-ring"
           />
           <p className="mt-1 text-xs text-muted-foreground">
             Private feedback. Groups stay available.

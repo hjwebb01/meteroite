@@ -3,18 +3,17 @@ import dynamic from "next/dynamic";
 const ReviewProposalPanel = dynamic(() => import("./review-proposal-panel"), {
   ssr: false,
 });
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import type { Doc } from "../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
-import {
-  CODING_MODELS,
-  resolveCodingModelId,
-} from "../../../../convex/lib/coding_models";
+import { CODING_MODELS } from "../../../../convex/lib/coding_models";
 import { isActiveWork } from "../../../../convex/lib/finding_lease";
 import { Textarea } from "@/components/ui/textarea";
 import { fileAtCommitUrl } from "../lib/review";
+import { useDiscussionSession } from "./discussion-sessions";
+import { investigationRequestFor } from "../lib/discussion-session";
 
 type Review = Doc<"reviews">;
 type Finding = NonNullable<Review["result"]>["findings"][number];
@@ -37,12 +36,23 @@ export function ReviewFindingPanel({
   finding: Finding;
   onReviewLatest?: () => void;
 }) {
+  const discussionId = useId();
   const proposals = useQuery(api.reviewProposals.list, {
     reviewId: review._id,
     findingId: finding.id,
   });
   const history = useRef<HTMLOListElement>(null);
-  const [cursor, setCursor] = useState<string | undefined>();
+  const [session, update] = useDiscussionSession(finding.id, review.model);
+  const {
+    cursor,
+    model,
+    seconds,
+    dollars,
+    body,
+    error,
+    cancellation,
+    sending,
+  } = session;
   const thread = useQuery(api.reviewInteractions.thread, {
     reviewId: review._id,
     findingId: finding.id,
@@ -56,12 +66,6 @@ export function ReviewFindingPanel({
     available: boolean;
     reason: string;
   } | null>(null);
-  const [model, setModel] = useState<string>(
-    resolveCodingModelId(review.model),
-  );
-  const [seconds, setSeconds] = useState(300);
-  const [dollars, setDollars] = useState(2);
-  const investigationRequest = useRef<string | null>(null);
   useEffect(() => {
     let active = true;
     fetch("/api/reviews/investigate")
@@ -81,21 +85,13 @@ export function ReviewFindingPanel({
       active = false;
     };
   }, []);
-  const [body, setBody] = useState("");
-  const [error, setError] = useState("");
-  const [cancellation, setCancellation] = useState("");
-  const [sending, setSending] = useState(false);
-  const pending = useRef<{ body: string; requestId: string } | null>(null);
   const active = thread?.work.find((w) => isActiveWork(w.status));
   return (
     <section
       aria-label="Finding discussion"
-      className="mt-2 rounded-md border bg-review-chrome p-4"
+      className="mt-2 min-w-0 rounded-md border bg-review-bg p-4"
     >
-      <h2 className="text-sm font-semibold">Discuss this finding</h2>
-      <p className="mt-2 font-serif text-[19px] leading-tight">
-        {finding.title}
-      </p>
+      <h3 className="text-sm font-semibold">Discuss this finding</h3>
       <p className="mt-2 text-xs text-muted-foreground">
         Private discussion at {review.headSha?.slice(0, 7)}. The original
         finding stays in the review.
@@ -110,7 +106,7 @@ export function ReviewFindingPanel({
           <Button
             size="sm"
             variant="outline"
-            onClick={() => setCursor(thread.olderCursor!)}
+            onClick={() => update({ cursor: thread.olderCursor! })}
           >
             Older messages
           </Button>
@@ -119,7 +115,7 @@ export function ReviewFindingPanel({
           <Button
             size="sm"
             variant="outline"
-            onClick={() => setCursor(undefined)}
+            onClick={() => update({ cursor: undefined })}
           >
             Latest messages
           </Button>
@@ -129,7 +125,7 @@ export function ReviewFindingPanel({
         ref={history}
         tabIndex={0}
         aria-label="Discussion history"
-        className="mt-4 max-h-80 overflow-y-auto space-y-4"
+        className="mt-4 max-h-80 overflow-y-auto space-y-4 focus-visible:outline-2 focus-visible:outline-review-link"
       >
         {thread?.messages.map((message) => (
           <li key={message._id} className="rounded-md border p-3 text-sm">
@@ -207,65 +203,115 @@ export function ReviewFindingPanel({
             </p>
           ))}
       </div>
-      {thread?.work
-        .filter((w) => ["queued", "failed", "cancelled"].includes(w.status))
-        .slice(0, 3)
-        .map((w) => (
+      <form
+        className="mt-4 space-y-3"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          update({ error: "" });
+          update({ sending: true });
+          const pending =
+            session.pending?.body === body.trim()
+              ? session.pending
+              : { body: body.trim(), requestId: crypto.randomUUID() };
+          update({ pending });
+          try {
+            await send("/api/reviews/discuss", {
+              reviewId: review._id,
+              findingId: finding.id,
+              ...pending,
+            });
+            update({ body: "" });
+            update({ cursor: undefined });
+            update({ pending: null });
+          } catch (e) {
+            update({ error: (e as Error).message });
+          } finally {
+            update({ sending: false });
+          }
+        }}
+      >
+        <label htmlFor={discussionId} className="text-xs font-medium">
+          Challenge the claim or ask for more evidence
+        </label>
+        <Textarea
+          id={discussionId}
+          data-finding-discussion={finding.id}
+          value={body}
+          onChange={(event) => update({ body: event.target.value })}
+          maxLength={4000}
+          rows={3}
+          disabled={Boolean(active) || sending}
+        />
+        <Button size="sm" disabled={!body.trim() || Boolean(active) || sending}>
+          {sending ? "Sending…" : "Ask review agent"}
+        </Button>
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
+          </p>
+        )}
+      </form>
+      <details className="mt-5 rounded-md border p-3" open={Boolean(active)}>
+        <summary className="cursor-pointer py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-review-link">
+          Investigate and propose fix
+        </summary>
+        {thread?.work
+          .filter((w) => ["queued", "failed", "cancelled"].includes(w.status))
+          .slice(0, 3)
+          .map((w) => (
+            <Button
+              key={w._id}
+              className="mt-3 mr-2"
+              variant="outline"
+              size="sm"
+              disabled={sending || Boolean(active && active._id !== w._id)}
+              onClick={async () => {
+                update({ sending: true });
+                update({ error: "" });
+                try {
+                  await send("/api/reviews/work/retry", { workId: w._id });
+                } catch (e) {
+                  update({ error: (e as Error).message });
+                } finally {
+                  update({ sending: false });
+                }
+              }}
+            >
+              {w.status === "queued"
+                ? "Retry dispatch"
+                : `Retry ${w.kind} within saved cap`}
+            </Button>
+          ))}
+        {active && (
           <Button
-            key={w._id}
-            className="mt-3 mr-2"
+            className="mt-3"
             variant="outline"
             size="sm"
-            disabled={sending || Boolean(active && active._id !== w._id)}
             onClick={async () => {
-              setSending(true);
-              setError("");
               try {
-                await send("/api/reviews/work/retry", { workId: w._id });
+                const result = await send("/api/reviews/work/cancel", {
+                  workId: active._id,
+                });
+                if (
+                  active.requestId === session.investigationRequest?.requestId
+                )
+                  update({ investigationRequest: null });
+                update({
+                  cancellation:
+                    result.executionStopped === true
+                      ? "Cancellation saved and repository execution stopped."
+                      : result.executionStopped === false
+                        ? "Cancellation saved. Immediate execution stop could not be confirmed; the sandbox deadline remains enforced."
+                        : "Cancellation saved. No repository execution was attached.",
+                });
               } catch (e) {
-                setError((e as Error).message);
-              } finally {
-                setSending(false);
+                update({ error: (e as Error).message });
               }
             }}
           >
-            {w.status === "queued"
-              ? "Retry dispatch"
-              : `Retry ${w.kind} within saved cap`}
+            Cancel work
           </Button>
-        ))}
-      {active && (
-        <Button
-          className="mt-3"
-          variant="outline"
-          size="sm"
-          onClick={async () => {
-            try {
-              const result = await send("/api/reviews/work/cancel", {
-                workId: active._id,
-              });
-              setCancellation(
-                result.executionStopped === true
-                  ? "Cancellation saved and repository execution stopped."
-                  : result.executionStopped === false
-                    ? "Cancellation saved. Immediate execution stop could not be confirmed; the sandbox deadline remains enforced."
-                    : "Cancellation saved. No repository execution was attached.",
-              );
-            } catch (e) {
-              setError((e as Error).message);
-            }
-          }}
-        >
-          Cancel work
-        </Button>
-      )}
-      <details
-        className="mt-5 rounded-md border p-3"
-        open={Boolean(active?.kind === "investigation")}
-      >
-        <summary className="text-sm font-medium">
-          Investigate and propose fix
-        </summary>
+        )}
         <p className="mt-2 text-xs text-muted-foreground">
           {!capability
             ? "Checking isolated execution availability…"
@@ -282,9 +328,9 @@ export function ReviewFindingPanel({
           <label>
             Model
             <select
-              className="mt-1 w-full rounded border bg-background p-2"
+              className="mt-1 w-full rounded-md border bg-background p-2 text-base sm:text-sm"
               value={model}
-              onChange={(e) => setModel(e.target.value)}
+              onChange={(e) => update({ model: e.target.value })}
             >
               {CODING_MODELS.map((m) => (
                 <option key={m.id} value={m.id}>
@@ -296,191 +342,147 @@ export function ReviewFindingPanel({
           <label>
             Time limit (seconds)
             <input
-              className="mt-1 w-full rounded border bg-background p-2"
+              className="mt-1 w-full rounded-md border bg-background p-2 text-base sm:text-sm"
               type="number"
               min={30}
               max={300}
               value={seconds}
-              onChange={(e) => setSeconds(Number(e.target.value))}
+              onChange={(e) => update({ seconds: Number(e.target.value) })}
             />
           </label>
           <label>
             Cost cap ($)
             <input
-              className="mt-1 w-full rounded border bg-background p-2"
+              className="mt-1 w-full rounded-md border bg-background p-2 text-base sm:text-sm"
               type="number"
               min={0.1}
               max={10}
               step={0.1}
               value={dollars}
-              onChange={(e) => setDollars(Number(e.target.value))}
+              onChange={(e) => update({ dollars: Number(e.target.value) })}
             />
           </label>
         </div>
         <Button
           className="mt-3 bg-review-text text-review-bg hover:bg-review-text/90"
           size="sm"
-          disabled={!capability || Boolean(active) || sending}
+          disabled={!capability || !thread || Boolean(active) || sending}
           onClick={async () => {
-            setError("");
-            setSending(true);
-            investigationRequest.current ??= crypto.randomUUID();
+            update({ error: "" });
+            update({ sending: true });
+            const previous = thread?.work.find(
+              (work) =>
+                work.requestId === session.investigationRequest?.requestId,
+            );
+            const investigationRequest = investigationRequestFor(
+              previous && !isActiveWork(previous.status)
+                ? { ...session, investigationRequest: null }
+                : session,
+            );
+            update({ investigationRequest });
             try {
               await send("/api/reviews/investigate", {
                 reviewId: review._id,
                 findingId: finding.id,
-                requestId: investigationRequest.current,
-                model,
-                maxDurationMs: seconds * 1000,
-                maxCostMicros: Math.round(dollars * 1_000_000),
+                ...investigationRequest,
               });
-              investigationRequest.current = null;
+              update({ investigationRequest: null });
             } catch (e) {
-              setError((e as Error).message);
+              update({ error: (e as Error).message });
             } finally {
-              setSending(false);
+              update({ sending: false });
             }
           }}
         >
           Investigate and propose fix
         </Button>
-      </details>
-      {thread?.work
-        .filter((w) => w.kind === "investigation")
-        .slice(0, 3)
-        .map((w) => (
-          <div key={w._id} className="mt-3 rounded-md border p-3 text-xs">
-            <p>
-              Investigation {w.status} · {w.maxDurationMs / 1000}s limit · $
-              {(w.reservedCostMicros / 1_000_000).toFixed(2)} reserved maximum
-              of ${(w.maxCostMicros / 1_000_000).toFixed(2)}
-            </p>
-            {w.result && (
-              <p className="mt-2">
-                {w.result.verdict}: {w.result.explanation}
+        {thread?.work
+          .filter((w) => w.kind === "investigation")
+          .slice(0, 3)
+          .map((w) => (
+            <div key={w._id} className="mt-3 rounded-md border p-3 text-xs">
+              <p>
+                Investigation {w.status}, {w.maxDurationMs / 1000}s limit. $
+                {(w.reservedCostMicros / 1_000_000).toFixed(2)} reserved of a $
+                {(w.maxCostMicros / 1_000_000).toFixed(2)} maximum.
               </p>
-            )}
-            {w.proposalError && (
-              <p className="mt-2">Proposal unavailable: {w.proposalError}</p>
-            )}
-            {w.error && (
-              <p className="mt-2">
-                {w.stopReason ?? "infrastructure"}: {w.error}
-              </p>
-            )}
-            {!w.checks?.length && (
-              <p className="mt-2">
-                Checks unavailable. No runtime validation was recorded.
-              </p>
-            )}
-            {w.checks?.map((check, i) => (
-              <details key={i} className="mt-2">
-                <summary>
-                  {check.status}: {check.command.join(" ")}
-                </summary>
-                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap">
-                  {check.output}
-                </pre>
-              </details>
-            ))}
-          </div>
-        ))}
-      {Boolean(thread?.attempts.length) && (
-        <details className="mt-3 rounded-md border p-3 text-xs">
-          <summary>Earlier attempts ({thread?.attempts.length})</summary>
-          <div
-            className="max-h-48 overflow-y-auto"
-            tabIndex={0}
-            aria-label="Earlier attempt history"
-          >
-            {" "}
-            {thread?.attempts.map((previous) => (
-              <details
-                key={previous._id}
-                className="mt-3 rounded-md border p-3 text-xs"
-              >
-                <summary>
-                  Earlier attempt {previous.attempt}: {previous.status}{" "}
-                  {previous.stopReason && `· ${previous.stopReason}`}
-                </summary>
-                {previous.result && (
-                  <p className="mt-2">
-                    {previous.result.verdict}: {previous.result.explanation}
-                  </p>
-                )}
-                {previous.proposalError && <p>{previous.proposalError}</p>}
-                {previous.checks.map((check, i) => (
-                  <details key={i} className="mt-2">
-                    <summary>
-                      {check.status}: {check.command.join(" ")}
-                    </summary>
-                    <pre className="max-h-40 overflow-auto whitespace-pre-wrap">
-                      {check.output}
-                    </pre>
-                  </details>
-                ))}
-              </details>
-            ))}
-          </div>
-        </details>
-      )}
-      {proposals?.map((proposal) => (
-        <ReviewProposalPanel
-          key={proposal._id}
-          proposal={proposal}
-          onReviewLatest={onReviewLatest}
-        />
-      ))}
-      <form
-        className="mt-4 space-y-3"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          setError("");
-          setSending(true);
-          if (!pending.current || pending.current.body !== body.trim())
-            pending.current = {
-              body: body.trim(),
-              requestId: crypto.randomUUID(),
-            };
-          try {
-            await send("/api/reviews/discuss", {
-              reviewId: review._id,
-              findingId: finding.id,
-              ...pending.current,
-            });
-            setBody("");
-            setCursor(undefined);
-            pending.current = null;
-          } catch (e) {
-            setError((e as Error).message);
-          } finally {
-            setSending(false);
-          }
-        }}
-      >
-        <label
-          htmlFor={`discussion-${finding.id}`}
-          className="text-xs font-medium"
-        >
-          Challenge the claim or ask for more evidence
-        </label>
-        <Textarea
-          id={`discussion-${finding.id}`}
-          value={body}
-          onChange={(event) => setBody(event.target.value)}
-          maxLength={4000}
-          rows={3}
-          disabled={Boolean(active) || sending}
-        />
-        <Button size="sm" disabled={!body.trim() || Boolean(active) || sending}>
-          {sending ? "Sending…" : "Ask review agent"}
-        </Button>
-        {error && (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
+              {w.result && (
+                <p className="mt-2">
+                  {w.result.verdict}: {w.result.explanation}
+                </p>
+              )}
+              {w.proposalError && (
+                <p className="mt-2">Proposal unavailable: {w.proposalError}</p>
+              )}
+              {w.error && (
+                <p className="mt-2">
+                  {w.stopReason ?? "infrastructure"}: {w.error}
+                </p>
+              )}
+              {!w.checks?.length && (
+                <p className="mt-2">
+                  Checks unavailable. No runtime validation was recorded.
+                </p>
+              )}
+              {w.checks?.map((check, i) => (
+                <details key={i} className="mt-2">
+                  <summary>
+                    {check.status}: {check.command.join(" ")}
+                  </summary>
+                  <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap">
+                    {check.output}
+                  </pre>
+                </details>
+              ))}
+            </div>
+          ))}
+        {Boolean(thread?.attempts.length) && (
+          <details className="mt-3 rounded-md border p-3 text-xs">
+            <summary>Earlier attempts ({thread?.attempts.length})</summary>
+            <div
+              className="max-h-48 overflow-y-auto"
+              tabIndex={0}
+              aria-label="Earlier attempt history"
+            >
+              {" "}
+              {thread?.attempts.map((previous) => (
+                <details
+                  key={previous._id}
+                  className="mt-3 rounded-md border p-3 text-xs"
+                >
+                  <summary>
+                    Earlier attempt {previous.attempt}: {previous.status}{" "}
+                    {previous.stopReason && `· ${previous.stopReason}`}
+                  </summary>
+                  {previous.result && (
+                    <p className="mt-2">
+                      {previous.result.verdict}: {previous.result.explanation}
+                    </p>
+                  )}
+                  {previous.proposalError && <p>{previous.proposalError}</p>}
+                  {previous.checks.map((check, i) => (
+                    <details key={i} className="mt-2">
+                      <summary>
+                        {check.status}: {check.command.join(" ")}
+                      </summary>
+                      <pre className="max-h-40 overflow-auto whitespace-pre-wrap">
+                        {check.output}
+                      </pre>
+                    </details>
+                  ))}
+                </details>
+              ))}
+            </div>
+          </details>
         )}
-      </form>
+        {proposals?.map((proposal) => (
+          <ReviewProposalPanel
+            key={proposal._id}
+            proposal={proposal}
+            onReviewLatest={onReviewLatest}
+          />
+        ))}
+      </details>
     </section>
   );
 }

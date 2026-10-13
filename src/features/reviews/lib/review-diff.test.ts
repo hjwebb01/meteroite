@@ -1,123 +1,14 @@
 import { expect, test } from "vitest";
 import {
   buildDiffItems,
-  calculateMarginLayout,
   diffSideOf,
   navigationLocation,
   parseSavedDiffs,
-  stackCards,
   toGitPatch,
   type ReviewFinding,
-  type ReviewAnnotation,
 } from "./review-diff";
 
 const patch = "@@ -1,2 +1,2 @@\n context\n-old\n+new";
-
-function marginFinding(id: string, path = "x.ts"): ReviewAnnotation {
-  return {
-    kind: "finding",
-    finding: {
-      id,
-      path,
-      line: 2,
-      side: "RIGHT",
-      severity: "high",
-      title: "Removed guard",
-      explanation: "Why",
-      suggestion: "Fix",
-      evidence: [],
-      previousFindingId: null,
-    },
-  };
-}
-
-test("margin layout sorts measured anchors and counts unrendered entries outside the viewport", () => {
-  const anchors = [
-    { key: "finding:bottom", lineY: 301, height: 40 },
-    { key: "finding:edge", lineY: 300, height: 40 },
-    { key: "finding:visible", lineY: 0, height: 40 },
-    { key: "finding:above", lineY: -20, height: 40 },
-  ];
-  const layout = calculateMarginLayout({
-    anchors,
-    height: 300,
-    headers: [{ path: "x.ts", top: 100 }],
-    entries: [
-      "unrendered-above",
-      "above",
-      "visible",
-      "edge",
-      "bottom",
-      "unrendered-below",
-    ].map((id) => marginFinding(id)),
-  });
-  expect(layout.path).toBe("x.ts");
-  expect([...layout.placements.keys()]).toEqual([
-    "finding:above",
-    "finding:visible",
-    "finding:edge",
-    "finding:bottom",
-  ]);
-  expect(layout.placements.get("finding:edge")).toEqual({
-    top: 252,
-    lineY: 300,
-  });
-  expect(layout.hint).toEqual({
-    above: 2,
-    aboveKey: "finding:above",
-    below: 2,
-    belowKey: "finding:bottom",
-  });
-  expect(anchors[0].key).toBe("finding:bottom");
-});
-
-test("margin hints split after the last rendered anchor when all anchors are above", () => {
-  const layout = calculateMarginLayout({
-    anchors: [{ key: "finding:second", lineY: -10, height: 40 }],
-    height: 300,
-    headers: [{ path: "x.ts", top: -10 }],
-    entries: ["first", "second", "third"].map((id) => marginFinding(id)),
-  });
-  expect(layout.hint).toEqual({
-    above: 2,
-    aboveKey: "finding:second",
-    below: 1,
-    belowKey: "finding:third",
-  });
-});
-
-test("unrendered margin entries use the last reached file header to split hints", () => {
-  const entries = [marginFinding("first"), marginFinding("second", "y.ts")];
-  const layout = calculateMarginLayout({
-    anchors: [],
-    height: 300,
-    headers: [
-      { path: "x.ts", top: -100 },
-      { path: "y.ts", top: 40 },
-      { path: "z.ts", top: 41 },
-    ],
-    entries,
-  });
-  expect(layout.path).toBe("y.ts");
-  expect(layout.hint).toEqual({
-    above: 1,
-    aboveKey: "finding:first",
-    below: 1,
-    belowKey: "finding:second",
-  });
-  expect(
-    calculateMarginLayout({
-      anchors: [],
-      height: 300,
-      headers: [],
-      entries: [],
-    }),
-  ).toEqual({
-    placements: new Map(),
-    path: null,
-    hint: { above: 0, aboveKey: undefined, below: 0, belowKey: undefined },
-  });
-});
 
 test("adds git headers so added, removed, and renamed GitHub patches keep their type", () => {
   const parsed = parseSavedDiffs([
@@ -250,35 +141,51 @@ test("file and hunk navigation keep diff direction independent of finding filter
   ).toEqual({ path: "removed.ts", line: 8, side: "LEFT" });
 });
 
-test("margin cards stack below overlapping cards, slide up at the bottom, and stay on screen", () => {
-  // Overlap: the second card is pushed below the first card plus the gap.
-  expect(
-    stackCards(
-      [
-        { lineY: 100, height: 40 },
-        { lineY: 110, height: 40 },
-      ],
-      500,
-    ),
-  ).toEqual([86, 134]);
-  // Bottom: a card whose line is near the edge slides up to fit the viewport.
-  expect(stackCards([{ lineY: 480, height: 40 }], 500)).toEqual([452]);
-  // Below the viewport: the card keeps its unclamped position.
-  expect(
-    stackCards(
-      [
-        { lineY: 100, height: 40 },
-        { lineY: 600, height: 40 },
-      ],
-      500,
-    ),
-  ).toEqual([86, 586]);
-  // Top: a card never starts above the viewport.
-  expect(stackCards([{ lineY: 5, height: 40 }], 500)).toEqual([0]);
-});
-
 test("a code reference is annotated on deletions only when it is a removed line", () => {
   expect(diffSideOf("LEFT")).toBe("deletions");
   expect(diffSideOf("RIGHT")).toBe("additions");
   expect(diffSideOf(undefined)).toBe("additions");
+});
+
+test("supporting references retain exact old side and recorded revision", () => {
+  const reference = {
+    path: "renamed.ts",
+    sourcePath: "old.ts",
+    line: 9,
+    side: "LEFT" as const,
+    commitSha: "saved-left",
+  };
+  expect(navigationLocation({ kind: "reference", reference })).toEqual(
+    reference,
+  );
+});
+
+test("finding filters retain every saved file and exact source targets", () => {
+  const diffs = parseSavedDiffs([
+    { filename: "with-finding.ts", status: "modified", patch },
+    { filename: "unexplained.ts", status: "modified", patch },
+  ]);
+  const finding: ReviewFinding = {
+    id: "hidden-by-filter",
+    path: "with-finding.ts",
+    line: 2,
+    side: "LEFT",
+    severity: "low",
+    title: "Concern",
+    explanation: "Evidence",
+    suggestion: "Correction",
+    evidence: [],
+    previousFindingId: null,
+  };
+  const items = buildDiffItems(diffs, [], new Set(), [], "unexplained.ts", [
+    finding,
+  ]);
+  expect(items.map((item) => item.id)).toEqual([
+    "diff:with-finding.ts",
+    "diff:unexplained.ts",
+  ]);
+  expect(items.every((item) => item.annotations?.length === 0)).toBe(true);
+  expect(items.every((item) => item.collapsed === false)).toBe(true);
+  expect(items[0].fileDiff.hunks[0].deletionStart).toBe(1);
+  expect(items[1].fileDiff.hunks[0].additionStart).toBe(1);
 });
