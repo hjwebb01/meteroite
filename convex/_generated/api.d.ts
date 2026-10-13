@@ -19,6 +19,7 @@ import type * as lib_review_fields from "../lib/review_fields.js";
 import type * as lib_review_models from "../lib/review_models.js";
 import type * as lib_review_navigation from "../lib/review_navigation.js";
 import type * as lib_review_proposal_fields from "../lib/review_proposal_fields.js";
+import type * as lib_review_publication from "../lib/review_publication.js";
 import type * as lib_review_reassessment from "../lib/review_reassessment.js";
 import type * as lib_review_verdicts from "../lib/review_verdicts.js";
 import type * as lib_review_work_fields from "../lib/review_work_fields.js";
@@ -28,6 +29,7 @@ import type * as reviewFindingJobs from "../reviewFindingJobs.js";
 import type * as reviewInteractions from "../reviewInteractions.js";
 import type * as reviewJobs from "../reviewJobs.js";
 import type * as reviewProposals from "../reviewProposals.js";
+import type * as reviewPublications from "../reviewPublications.js";
 import type * as reviews from "../reviews.js";
 
 import type {
@@ -48,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   "lib/review_models": typeof lib_review_models;
   "lib/review_navigation": typeof lib_review_navigation;
   "lib/review_proposal_fields": typeof lib_review_proposal_fields;
+  "lib/review_publication": typeof lib_review_publication;
   "lib/review_reassessment": typeof lib_review_reassessment;
   "lib/review_verdicts": typeof lib_review_verdicts;
   "lib/review_work_fields": typeof lib_review_work_fields;
@@ -57,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   reviewInteractions: typeof reviewInteractions;
   reviewJobs: typeof reviewJobs;
   reviewProposals: typeof reviewProposals;
+  reviewPublications: typeof reviewPublications;
   reviews: typeof reviews;
 }>;
 

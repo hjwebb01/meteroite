@@ -46,6 +46,15 @@ export default defineSchema({
     error: v.optional(v.string()),
     result: v.optional(v.object(reviewResult)),
     githubReview: v.optional(githubReview),
+    githubPublication: v.optional(
+      v.object({
+        attemptId: v.string(),
+        source: v.string(),
+        state: v.union(v.literal("publishing"), v.literal("uncertain")),
+        startedAt: v.number(),
+        remoteStartedAt: v.optional(v.number()),
+      }),
+    ),
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_url", ["ownerId", "url"]),

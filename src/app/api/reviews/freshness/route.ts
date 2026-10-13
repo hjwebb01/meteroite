@@ -6,6 +6,7 @@ import { createUserOctokit } from "@/lib/github";
 import { getConvexAdminClient } from "@/lib/convex-client";
 import { api, internal } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
+import { observeReviewFreshness } from "@/features/reviews/lib/github-freshness";
 
 export async function POST(request: Request) {
   const identity = await getConvexAuth();
@@ -32,34 +33,14 @@ export async function POST(request: Request) {
   }
   let observation;
   try {
-    if (!review.headSha || !(review.baseTipSha ?? review.baseSha))
-      throw new Error("Saved snapshot unavailable");
     const github = await createUserOctokit(identity.userId);
-    const { data: live } = await github.rest.pulls.get({
-      owner: review.repoOwner,
-      repo: review.repoName,
-      pull_number: review.pullNumber,
-    });
-    const current =
-      live.head.sha === review.headSha &&
-      live.base.sha === (review.baseTipSha ?? review.baseSha);
-    observation = {
-      state: current ? ("current" as const) : ("outdated" as const),
-      headSha: live.head.sha,
-      baseTipSha: live.base.sha,
-      observedAt: Date.now(),
-      reason: current
-        ? "The PR matches this saved base/head snapshot."
-        : "The PR has newer head or base commits. Start a new assessment to review current code.",
-    };
+    observation = await observeReviewFreshness(github, review);
   } catch {
     observation = {
       state: "unavailable" as const,
       observedAt: Date.now(),
       reason:
-        !review.headSha || !(review.baseTipSha ?? review.baseSha)
-          ? "This older review has no pinned base/head snapshot. Start a new assessment to establish freshness."
-          : "PR freshness could not be refreshed. Check your GitHub connection and repository access, then try again.",
+        "PR freshness could not be checked. Check your GitHub connection and repository access, then try again.",
     };
   }
   try {

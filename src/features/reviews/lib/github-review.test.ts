@@ -1,9 +1,10 @@
 import { describe, expect, test, vi } from "vitest";
-import { RequestError, type Octokit } from "octokit";
+import { RequestError, Octokit } from "octokit";
 import type { Doc } from "../../../../convex/_generated/dataModel";
 import type { Finding } from "./finding-presentation";
 import {
   buildGithubReview,
+  findPostedGithubReview,
   publishGithubReview,
   reviewMarker,
 } from "./github-review";
@@ -68,14 +69,23 @@ describe("buildGithubReview", () => {
   });
 });
 
-function fakeOctokit(posted: { body: string }[] = []) {
+function fakeOctokit(posted: { body: string; commit_id?: string }[] = []) {
   const createReview = vi.fn().mockResolvedValue({
     data: { id: 9, html_url: "https://github.com/r/9" },
   });
   const octokit = {
-    paginate: vi.fn().mockResolvedValue(
-      posted.map((r, i) => ({ ...r, id: i, html_url: `https://g/${i}` })),
-    ),
+    paginate: {
+      iterator: async function* () {
+        yield {
+          data: posted.map((r, i) => ({
+            commit_id: review.headSha,
+            ...r,
+            id: i,
+            html_url: `https://g/${i}`,
+          })),
+        };
+      },
+    },
     rest: { pulls: { listReviews: {}, createReview } },
   } as unknown as Octokit;
   return { octokit, createReview };
@@ -101,9 +111,10 @@ describe("publishGithubReview", () => {
       { body: "unrelated" },
       { body: `${reviewMarker("review1")}\n## Meteroite review` },
     ]);
-    await expect(
-      publishGithubReview(octokit, review, [finding]),
-    ).resolves.toEqual({ id: 1, url: "https://g/1" });
+    await expect(findPostedGithubReview(octokit, review)).resolves.toEqual({
+      id: 1,
+      url: "https://g/1",
+    });
     expect(createReview).not.toHaveBeenCalled();
   });
 
@@ -118,4 +129,80 @@ describe("publishGithubReview", () => {
     expect(createReview).toHaveBeenCalledTimes(2);
     expect(createReview.mock.calls[1][0].comments).toEqual([]);
   });
+});
+
+test("marker recovery never mistakes a review of another commit for this saved revision", async () => {
+  const { octokit, createReview } = fakeOctokit([
+    { body: reviewMarker("review1"), commit_id: "another-commit" },
+  ]);
+  expect(await findPostedGithubReview(octokit, review)).toBeNull();
+  expect(createReview).not.toHaveBeenCalled();
+});
+
+test("the same authorization gate runs before both inline and fallback writes", async () => {
+  const { octokit, createReview } = fakeOctokit();
+  createReview.mockRejectedValueOnce(
+    new RequestError("Line unavailable", 422, {
+      request: { method: "POST", url: "", headers: {} },
+    }),
+  );
+  const authorize = vi.fn().mockResolvedValue(undefined);
+  await publishGithubReview(octokit, review, [finding], authorize);
+  expect(authorize).toHaveBeenCalledTimes(2);
+});
+
+test("recovery stops paging once the saved review is found", async () => {
+  const nextPage = vi.fn();
+  const { octokit } = fakeOctokit();
+  octokit.paginate.iterator = async function* () {
+    yield {
+      data: [
+        {
+          id: 9,
+          html_url: "https://github.com/r/9",
+          body: reviewMarker("review1"),
+          commit_id: review.headSha,
+        },
+      ],
+    };
+    nextPage();
+    yield { data: [] };
+  } as typeof octokit.paginate.iterator;
+  expect(await findPostedGithubReview(octokit, review)).toEqual({
+    id: 9,
+    url: "https://github.com/r/9",
+  });
+  expect(nextPage).not.toHaveBeenCalled();
+});
+
+test("the real Octokit client never retries an uncertain publication write", async () => {
+  const lostResponse = vi
+    .fn()
+    .mockRejectedValue(new TypeError("Connection reset after request"));
+  const octokit = new Octokit({
+    request: { fetch: lostResponse },
+    retry: { retryAfterBaseValue: 1 },
+  });
+  await expect(publishGithubReview(octokit, review, [finding])).rejects.toThrow(
+    "Connection reset",
+  );
+  expect(lostResponse).toHaveBeenCalledOnce();
+});
+
+test("a deadline that expires during authorization cannot send a write later", async () => {
+  const fetch = vi.fn();
+  const octokit = new Octokit({ request: { fetch } });
+  const controller = new AbortController();
+  controller.abort(new Error("Authorization deadline expired"));
+  await expect(
+    publishGithubReview(
+      octokit,
+      review,
+      [finding],
+      async () => controller.signal,
+    ),
+  ).rejects.toThrow();
+  // The custom transport cannot observe browser abort semantics; the helper
+  // itself must reject before invoking any transport.
+  expect(fetch).not.toHaveBeenCalled();
 });

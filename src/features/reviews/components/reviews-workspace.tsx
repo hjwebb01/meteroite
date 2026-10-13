@@ -42,6 +42,7 @@ import { Wordmark } from "@/components/wordmark";
 import { cn } from "@/lib/utils";
 import { parsePullRequestUrl } from "../lib/review";
 import { ReviewReader } from "./review-reader";
+import { ReviewPublicationPreview } from "./review-publication-preview";
 
 type Availability = {
   ready: boolean;
@@ -707,13 +708,13 @@ function ReviewDetail({
   const [manualRefreshing, setRefreshing] = useState(false);
   const [checkedSnapshot, setCheckedSnapshot] = useState<string | null>(null);
   const [freshnessError, setFreshnessError] = useState("");
-  const [publishing, setPublishing] = useState(false);
-  const [publishError, setPublishError] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [acknowledgedRevision, setAcknowledgedRevision] = useState<
     string | null
   >(null);
   const revisionHeadingId = useId();
   const revisionHeading = useRef<HTMLHeadingElement>(null);
+  const previewTrigger = useRef<HTMLButtonElement>(null);
   const readingContent = useRef<HTMLDivElement>(null);
   const files = useQuery(api.reviews.files, { id: review._id });
   const verdicts = useQuery(api.reviewInteractions.verdicts, {
@@ -857,30 +858,17 @@ function ReviewDetail({
                 <ArrowUpRight aria-hidden="true" className="size-3.5" />
               </a>
             </Button>
-          ) : (
-            review.status === "completed" && (
-              <Button
-                disabled={publishing}
-                onClick={async () => {
-                  setPublishing(true);
-                  setPublishError("");
-                  try {
-                    await requestJson("/api/reviews/publish", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ reviewId: review._id }),
-                    });
-                  } catch (failure) {
-                    setPublishError((failure as Error).message);
-                  } finally {
-                    setPublishing(false);
-                  }
-                }}
-              >
-                {publishing ? "Publishing…" : "Publish review"}
-              </Button>
-            )
-          )}
+          ) : review.status === "completed" ? (
+            <Button
+              ref={previewTrigger}
+              variant="outline"
+              className="h-auto min-h-8 max-w-full whitespace-normal"
+              disabled={refreshing || submitting || needsAcknowledgment}
+              onClick={() => setPreviewOpen(true)}
+            >
+              Preview publication
+            </Button>
+          ) : null}
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
               <Button
@@ -960,11 +948,6 @@ function ReviewDetail({
         </p>
       )}
 
-      {publishError && (
-        <p role="alert" className="mb-4 text-sm text-destructive">
-          {publishError}
-        </p>
-      )}
       {needsAcknowledgment && (
         <section
           className="review-reading-plane mx-auto max-w-3xl border border-sev-medium/40 p-6 sm:p-9"
@@ -993,6 +976,7 @@ function ReviewDetail({
               variant="outline"
               onClick={() => {
                 setAcknowledgedRevision(revisionKey);
+                setPreviewOpen(false);
                 requestAnimationFrame(() => readingContent.current?.focus());
               }}
             >
@@ -1009,7 +993,23 @@ function ReviewDetail({
           </p>
         </section>
       )}
-      <div ref={readingContent} tabIndex={-1} hidden={needsAcknowledgment}>
+      {!needsAcknowledgment && previewOpen && (
+        <ReviewPublicationPreview
+          review={review}
+          onReviewLatest={onRerun}
+          onClose={() => {
+            setPreviewOpen(false);
+            requestAnimationFrame(() =>
+              (previewTrigger.current ?? readingContent.current)?.focus(),
+            );
+          }}
+        />
+      )}
+      <div
+        ref={readingContent}
+        tabIndex={-1}
+        hidden={needsAcknowledgment || previewOpen}
+      >
         {review.status === "completed" && review.result ? (
           files === undefined ||
           (!!review.headSha && checkedSnapshot !== automaticSnapshotKey) ? (

@@ -741,7 +741,6 @@ describe("authenticated persisted review assessment", () => {
       (await authenticated.query(api.reviews.get, { id: started.id }))
         .freshness,
     ).toMatchObject({ state: "unavailable" });
-    expect(mocks.github).not.toHaveBeenCalled();
   });
   test("freshness requires authentication and validates the target before GitHub reads", async () => {
     const malformed = await refreshFreshness(

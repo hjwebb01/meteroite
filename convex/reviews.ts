@@ -6,6 +6,7 @@ import { mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
 import { isReviewModelId } from "./lib/review_models";
 import { getOwnedReview } from "./lib/owned_review";
+import { publicationSnapshot } from "./lib/review_publication";
 
 export type ReviewHistoryRow = {
   _id: Doc<"reviews">["_id"];
@@ -151,6 +152,17 @@ export const setSectionRead = mutation({
         markedAt: Date.now(),
       });
     if (!read && mark) await ctx.db.delete("reviewSectionReads", mark._id);
+  },
+});
+
+export const publication = query({
+  args: { id: v.id("reviews") },
+  handler: async (ctx, { id }) => {
+    const identity = await verifyAuth(ctx);
+    return publicationSnapshot(
+      ctx,
+      await getOwnedReview(ctx, id, identity.subject),
+    );
   },
 });
 

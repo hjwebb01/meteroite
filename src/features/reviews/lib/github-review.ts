@@ -10,6 +10,18 @@ import {
 
 type Review = Doc<"reviews">;
 
+export type GithubReviewComment = {
+  path: string;
+  line: number;
+  side: "LEFT" | "RIGHT";
+  body: string;
+};
+export type GithubReviewPayload = {
+  body: string;
+  comments: GithubReviewComment[];
+};
+export type PublishedGithubReview = { id: number; url: string };
+
 // GitHub rejects review and comment bodies longer than this.
 const MAX_BODY_CHARS = 65_000;
 
@@ -56,7 +68,7 @@ export function buildGithubReview(
   review: Review,
   findings: Finding[],
   { inline = true } = {},
-) {
+): GithubReviewPayload {
   const ordered = sortFindings(findings);
   const main = ordered.filter((f) => !isNitpick(f));
   const nitpicks = ordered.filter(isNitpick);
@@ -107,39 +119,52 @@ export function buildGithubReview(
   };
 }
 
-async function findPostedReview(octokit: Octokit, review: Review) {
+export async function findPostedGithubReview(
+  octokit: Octokit,
+  review: Review,
+): Promise<PublishedGithubReview | null> {
   const marker = reviewMarker(review._id);
-  const posted = await octokit.paginate(octokit.rest.pulls.listReviews, {
-    owner: review.repoOwner,
-    repo: review.repoName,
-    pull_number: review.pullNumber,
-    per_page: 100,
-  });
-  return posted.find((r) => r.body?.includes(marker));
+  for await (const { data: posted } of octokit.paginate.iterator(
+    octokit.rest.pulls.listReviews,
+    {
+      owner: review.repoOwner,
+      repo: review.repoName,
+      pull_number: review.pullNumber,
+      per_page: 100,
+    },
+  )) {
+    const existing = posted.find(
+      (r) => r.body?.includes(marker) && r.commit_id === review.headSha,
+    );
+    if (existing) return { id: existing.id, url: existing.html_url };
+  }
+  return null;
 }
 
 /**
  * Posts the review as a non-blocking COMMENT review on the reviewed commit.
- * A post that reached GitHub but was never recorded is found by its marker
- * instead of being posted twice.
+ * The caller must claim publication and check findPostedGithubReview first.
  */
 export async function publishGithubReview(
   octokit: Octokit,
   review: Review,
   findings: Finding[],
-) {
+  beforeWrite?: () => Promise<AbortSignal | void>,
+): Promise<PublishedGithubReview> {
   if (!review.headSha) throw new Error("This review has no pinned commit.");
-  const existing = await findPostedReview(octokit, review);
-  if (existing) return { id: existing.id, url: existing.html_url };
-  const post = (inline: boolean) =>
-    octokit.rest.pulls.createReview({
+  const post = async (inline: boolean) => {
+    const signal = (await beforeWrite?.()) ?? AbortSignal.timeout(60_000);
+    signal.throwIfAborted();
+    return octokit.rest.pulls.createReview({
       owner: review.repoOwner,
       repo: review.repoName,
       pull_number: review.pullNumber,
       commit_id: review.headSha,
       event: "COMMENT",
+      request: { signal, retries: 0 },
       ...buildGithubReview(review, findings, { inline }),
     });
+  };
   try {
     const { data } = await post(true);
     return { id: data.id, url: data.html_url };
