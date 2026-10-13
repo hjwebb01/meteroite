@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import type { Doc } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
@@ -5,6 +6,22 @@ import { mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
 import { isReviewModelId } from "./lib/review_models";
 import { getOwnedReview } from "./lib/owned_review";
+
+export type ReviewHistoryRow = {
+  _id: Doc<"reviews">["_id"];
+  _creationTime: number;
+  repoOwner: string;
+  repoName: string;
+  pullNumber: number;
+  title?: string;
+  status: Doc<"reviews">["status"];
+  findingCount?: number;
+  readCount: number;
+  sectionCount: number;
+  headSha?: string;
+  freshnessState?: "current" | "outdated" | "unavailable";
+  githubReviewUrl?: string;
+};
 
 async function sectionReads(ctx: QueryCtx, review: Doc<"reviews">) {
   if (review.status !== "completed" || !review.result || !review.headSha)
@@ -22,6 +39,30 @@ async function sectionReads(ctx: QueryCtx, review: Doc<"reviews">) {
   return marks
     .filter((mark) => groups.has(mark.groupId))
     .map((mark) => mark.groupId);
+}
+
+async function historyRow(
+  ctx: QueryCtx,
+  review: Doc<"reviews">,
+): Promise<ReviewHistoryRow> {
+  return {
+    _id: review._id,
+    _creationTime: review._creationTime,
+    repoOwner: review.repoOwner,
+    repoName: review.repoName,
+    pullNumber: review.pullNumber,
+    title: review.title,
+    status: review.status,
+    findingCount: review.result?.findings.length,
+    readCount: (await sectionReads(ctx, review)).length,
+    sectionCount:
+      review.status === "completed"
+        ? new Set(review.result?.changeGroups?.map((group) => group.id)).size
+        : 0,
+    headSha: review.headSha,
+    freshnessState: review.freshness?.state,
+    githubReviewUrl: review.githubReview?.url,
+  };
 }
 
 export const list = query({
@@ -43,6 +84,24 @@ export const list = query({
       status: review.status,
       findingCount: review.result?.findings.length,
     }));
+  },
+});
+
+export const history = query({
+  args: { paginationOpts: paginationOptsValidator },
+  handler: async (ctx, { paginationOpts }) => {
+    const identity = await verifyAuth(ctx);
+    const page = await ctx.db
+      .query("reviews")
+      .withIndex("by_owner", (q) => q.eq("ownerId", identity.subject))
+      .order("desc")
+      .paginate(paginationOpts);
+    return {
+      ...page,
+      page: await Promise.all(
+        page.page.map((review) => historyRow(ctx, review)),
+      ),
+    };
   },
 });
 

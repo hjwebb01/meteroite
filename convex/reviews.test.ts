@@ -1,6 +1,8 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
+import type { PaginationResult } from "convex/server";
+import type { ReviewHistoryRow } from "./reviews";
 import { buildHunks } from "./lib/review_navigation";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
@@ -761,4 +763,61 @@ test("historical reading remains saved when freshness changes and never transfer
   expect(await alice.query(api.reviews.readSections, { id })).toEqual([
     group.id,
   ]);
+});
+
+test("owner-isolated paginated history reaches all saved reviews with real human reading counts", async () => {
+  const { t, alice, bob, id, group } = await sectionReadingFixture();
+  await alice.mutation(api.reviews.setSectionRead, {
+    id,
+    headSha: "read-head",
+    groupId: group.id,
+    read: true,
+  });
+  await t.run(async (ctx) => {
+    for (let index = 0; index < 60; index++)
+      await ctx.db.insert("reviews", {
+        ...request,
+        ownerId: "alice",
+        url: `https://github.com/alice/app/pull/${index + 20}`,
+        pullNumber: index + 20,
+        status: "queued",
+        progress: "Waiting",
+        updatedAt: 0,
+      });
+    await ctx.db.insert("reviews", {
+      ...request,
+      ownerId: "bob",
+      url: "https://github.com/bob/app/pull/1",
+      status: "queued",
+      progress: "Waiting",
+      updatedAt: 0,
+    });
+  });
+  const rows: { _id: string; readCount: number; sectionCount: number }[] = [];
+  let cursor: string | null = null;
+  for (;;) {
+    const page: PaginationResult<ReviewHistoryRow> = await alice.query(
+      api.reviews.history,
+      {
+        paginationOpts: { numItems: 17, cursor },
+      },
+    );
+    rows.push(...page.page);
+    if (page.isDone) break;
+    cursor = page.continueCursor;
+  }
+  expect(rows).toHaveLength(61);
+  expect(new Set(rows.map((row) => row._id)).size).toBe(61);
+  expect(rows.find((row) => row._id === id)).toMatchObject({
+    readCount: 1,
+    sectionCount: 1,
+  });
+  expect(await alice.query(api.reviews.list, {})).toHaveLength(50);
+  expect(
+    (
+      await bob.query(api.reviews.history, {
+        paginationOpts: { numItems: 17, cursor: null },
+      })
+    ).page,
+  ).toHaveLength(1);
 });
