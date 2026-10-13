@@ -44,7 +44,7 @@ import { parsePullRequestUrl } from "../lib/review";
 import { ReviewReader } from "./review-reader";
 import { ReviewPublicationPreview } from "./review-publication-preview";
 
-type Availability = {
+export type Availability = {
   ready: boolean;
   historyAvailable: boolean;
   reason: string;
@@ -53,7 +53,7 @@ type Availability = {
   githubConnected?: boolean;
 };
 type Review = Doc<"reviews">;
-type History = Omit<ReviewHistoryRow, "readCount" | "sectionCount"> &
+export type History = Omit<ReviewHistoryRow, "readCount" | "sectionCount"> &
   Partial<Pick<ReviewHistoryRow, "readCount" | "sectionCount">>;
 const statusLabel = {
   queued: "Queued",
@@ -90,6 +90,17 @@ async function requestJson<T>(url: string, options?: RequestInit): Promise<T> {
   return data;
 }
 
+export type LandingFixture = {
+  availability: Availability;
+  history?: History[];
+  checking?: boolean;
+  setupError?: string;
+  url: string;
+  instructions: string;
+  error?: string;
+  models?: { id: string; name: string }[];
+};
+
 type IntakeDraft = { url?: string; instructions?: string; model?: string };
 
 function readIntakeDraft(key: string | null): IntakeDraft {
@@ -111,35 +122,58 @@ function readIntakeDraft(key: string | null): IntakeDraft {
   }
 }
 
-export function ReviewsWorkspace() {
+export function ReviewsWorkspace({
+  fixture,
+}: { fixture?: LandingFixture } = {}) {
   const { user } = useUser();
-  return <UserReviewWorkspace key={user?.id ?? "pending"} ownerId={user?.id} />;
+  return (
+    <UserReviewWorkspace
+      key={user?.id ?? "pending"}
+      ownerId={user?.id}
+      fixture={fixture}
+    />
+  );
 }
 
-function UserReviewWorkspace({ ownerId }: { ownerId?: string }) {
+function UserReviewWorkspace({
+  ownerId,
+  fixture,
+}: {
+  ownerId?: string;
+  fixture?: LandingFixture;
+}) {
+  const demo = process.env.NODE_ENV === "development" ? fixture : undefined;
   const chatGPT = useChatGPT();
   const { openUserProfile } = useClerk();
   const formId = useId();
   const draftKey = ownerId ? `meteroite:intake:${ownerId}` : null;
-  const [draft] = useState(() => readIntakeDraft(draftKey));
-  const [availability, setAvailability] = useState<Availability | null>(null);
-  const [setupError, setSetupError] = useState("");
-  const [checking, setChecking] = useState(true);
+  const [draft] = useState(() => (demo ? {} : readIntakeDraft(draftKey)));
+  const [availability, setAvailability] = useState<Availability | null>(
+    demo?.availability ?? null,
+  );
+  const [setupError, setSetupError] = useState(demo?.setupError ?? "");
+  const [checking, setChecking] = useState(demo?.checking ?? !demo);
   const [selected, setSelected] = useState<Id<"reviews"> | null>(null);
   const [initialFindingId, setInitialFindingId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [historySearch, setHistorySearch] = useState("");
-  const [url, setUrl] = useState(draft.url ?? "");
-  const [instructions, setInstructions] = useState(draft.instructions ?? "");
+  const [url, setUrl] = useState(demo?.url ?? draft.url ?? "");
+  const [instructions, setInstructions] = useState(
+    demo?.instructions ?? draft.instructions ?? "",
+  );
   const [chosenModel, setModel] = useState<string>(
     draft.model ?? DEFAULT_CODING_MODEL_ID,
   );
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(demo?.error ?? "");
   const openRouterModels = availability?.openRouterAvailable
     ? REVIEW_MODELS
     : [];
-  const chatGPTModels = chatGPT.status?.connected ? chatGPT.status.models : [];
+  const chatGPTModels = demo
+    ? (demo.models ?? [])
+    : chatGPT.status?.connected
+      ? chatGPT.status.models
+      : [];
   // The selection can outlive its provider, such as after ChatGPT disconnects.
   const model = [
     ...openRouterModels.map((m) => m.id),
@@ -149,8 +183,10 @@ function UserReviewWorkspace({ ownerId }: { ownerId?: string }) {
     : (openRouterModels[0]?.id ??
       (chatGPTModels[0] && chatGPTReviewModelId(chatGPTModels[0].id)) ??
       "");
-  const liveHistory = useReviewHistory(availability?.historyAvailable === true);
-  const history = liveHistory.results;
+  const liveHistory = useReviewHistory(
+    !demo && availability?.historyAvailable === true,
+  );
+  const history = demo?.history ?? liveHistory.results;
   const review = useQuery(
     api.reviews.get,
     availability?.historyAvailable && selected ? { id: selected } : "skip",
@@ -167,7 +203,7 @@ function UserReviewWorkspace({ ownerId }: { ownerId?: string }) {
     nextInstructions: string,
     nextModel: string,
   ) {
-    if (!draftKey) return;
+    if (demo || !draftKey) return;
     try {
       sessionStorage.setItem(
         draftKey,
@@ -183,6 +219,7 @@ function UserReviewWorkspace({ ownerId }: { ownerId?: string }) {
   }
 
   async function checkSetup() {
+    if (demo) return;
     setChecking(true);
     setSetupError("");
     try {
@@ -194,6 +231,7 @@ function UserReviewWorkspace({ ownerId }: { ownerId?: string }) {
     }
   }
   useEffect(() => {
+    if (demo) return;
     let active = true;
     const refresh = () => {
       setChecking(true);
@@ -216,7 +254,7 @@ function UserReviewWorkspace({ ownerId }: { ownerId?: string }) {
       active = false;
       window.removeEventListener("focus", refresh);
     };
-  }, [chatGPT.status?.connected]);
+  }, [chatGPT.status?.connected, demo]);
 
   async function startReview(
     value: string,
@@ -241,6 +279,10 @@ function UserReviewWorkspace({ ownerId }: { ownerId?: string }) {
       parsePullRequestUrl(value);
     } catch (e) {
       setError((e as Error).message);
+      return;
+    }
+    if (demo) {
+      setError("Fixture preview: no review is submitted.");
       return;
     }
     setSubmitting(true);
@@ -369,7 +411,7 @@ function UserReviewWorkspace({ ownerId }: { ownerId?: string }) {
                       ready.
                     </RailNote>
                   )}
-                  {liveHistory.status === "LoadingFirstPage" && (
+                  {!demo && liveHistory.status === "LoadingFirstPage" && (
                     <RailNote>Loading reviews…</RailNote>
                   )}
                   {history.length === 0 && !checking && (
@@ -395,6 +437,7 @@ function UserReviewWorkspace({ ownerId }: { ownerId?: string }) {
                                 runs={runs}
                                 selected={selected}
                                 select={(id) => {
+                                  if (demo) return;
                                   setInitialFindingId(null);
                                   setSelected(id);
                                   setHistoryOpen(false);
@@ -407,19 +450,20 @@ function UserReviewWorkspace({ ownerId }: { ownerId?: string }) {
                       </section>
                     ),
                   )}
-                  {(liveHistory.status === "CanLoadMore" ||
-                    liveHistory.status === "LoadingMore") && (
-                    <Button
-                      variant="outline"
-                      className="mt-2 w-full"
-                      disabled={liveHistory.status === "LoadingMore"}
-                      onClick={() => liveHistory.loadMore(30)}
-                    >
-                      {liveHistory.status === "LoadingMore"
-                        ? "Loading older reviews…"
-                        : "Load older reviews"}
-                    </Button>
-                  )}
+                  {!demo &&
+                    (liveHistory.status === "CanLoadMore" ||
+                      liveHistory.status === "LoadingMore") && (
+                      <Button
+                        variant="outline"
+                        className="mt-2 w-full"
+                        disabled={liveHistory.status === "LoadingMore"}
+                        onClick={() => liveHistory.loadMore(30)}
+                      >
+                        {liveHistory.status === "LoadingMore"
+                          ? "Loading older reviews…"
+                          : "Load older reviews"}
+                      </Button>
+                    )}
                   {historySearch && (
                     <p className="mt-3 text-xs text-review-muted">
                       Search covers loaded reviews. Load older reviews to search
@@ -580,7 +624,11 @@ function UserReviewWorkspace({ ownerId }: { ownerId?: string }) {
                       onClick={
                         needsGitHub
                           ? () => {
-                              openUserProfile();
+                              if (demo)
+                                setError(
+                                  "Fixture preview: account settings are not opened.",
+                                );
+                              else openUserProfile();
                             }
                           : undefined
                       }
@@ -787,8 +835,10 @@ function UserReviewWorkspace({ ownerId }: { ownerId?: string }) {
                 <button
                   type="button"
                   onClick={() => {
-                    setInitialFindingId(null);
-                    setSelected(history[0]._id);
+                    if (!demo) {
+                      setInitialFindingId(null);
+                      setSelected(history[0]._id);
+                    }
                   }}
                   className="inline-flex h-11 items-center self-start bg-review-bg px-5 text-base font-medium text-review-text transition-transform active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100"
                 >
