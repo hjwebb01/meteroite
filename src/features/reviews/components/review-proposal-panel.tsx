@@ -135,8 +135,8 @@ export default function ReviewProposalPanel({
               : `Commit proposal to ${proposal.sourceOwner}/${proposal.sourceRepo}:${proposal.sourceBranch}`}
         </Button>
       )}
-      <p className="mt-2 font-mono text-muted-foreground">
-        Manifest {proposal.digest.slice(0, 12)}
+      <p className="mt-2 text-muted-foreground">
+        Manifest <code>{proposal.digest.slice(0, 12)}</code>
       </p>
       {!inspected && (
         <p className="mt-2">

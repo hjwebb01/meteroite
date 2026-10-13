@@ -1,34 +1,29 @@
 import type { Metadata } from "next";
-import {
-  Hedvig_Letters_Serif,
-  Schibsted_Grotesk,
-  Spline_Sans_Mono,
-} from "next/font/google";
+import { Hanken_Grotesk, Spline_Sans_Mono } from "next/font/google";
 import { Providers } from "@/components/providers";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 
-// Display, UI, and code faces (DESIGN.md, "Typography").
-const display = Hedvig_Letters_Serif({
-  variable: "--font-display-face",
+const sans = Hanken_Grotesk({
+  variable: "--font-sans-face",
   subsets: ["latin"],
-  axes: ["opsz"],
+  weight: ["400", "500"],
+  display: "swap",
+  fallback: ["system-ui", "Segoe UI", "Helvetica", "Arial", "sans-serif"],
 });
 
-const grotesk = Schibsted_Grotesk({
-  variable: "--font-ui-face",
-  subsets: ["latin"],
-});
-
+// Code, file paths and revision ids only.
 const code = Spline_Sans_Mono({
   variable: "--font-code-face",
   subsets: ["latin"],
+  display: "swap",
+  fallback: ["ui-monospace", "SFMono-Regular", "Consolas", "monospace"],
 });
 
 export const metadata: Metadata = {
   title: "Meteroite · Private code review",
   description:
-    "Review pull requests with source evidence and private discussions.",
+    "Understand unfamiliar pull requests through a change brief, exact source evidence, and private review discussions.",
 };
 
 export default function RootLayout({
@@ -37,12 +32,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${display.variable} ${grotesk.variable} ${code.variable} antialiased`}
-      >
+    <html
+      lang="en"
+      className={`dark ${sans.variable} ${code.variable}`}
+      suppressHydrationWarning
+    >
+      <body className="antialiased">
         <Providers>
-          <Toaster />
+          <Toaster theme="dark" />
           {children}
         </Providers>
       </body>

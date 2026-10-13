@@ -21,7 +21,7 @@ export function FindingVerdictBadge({ verdict }: { verdict?: FindingVerdict }) {
   return (
     <span
       className={cn(
-        "shrink-0 rounded px-2 py-1 text-xs font-medium",
+        "shrink-0 rounded-md px-2 py-1 text-xs font-medium",
         verdict === "supported"
           ? "bg-verdict-confirmed/10 text-verdict-confirmed"
           : verdict === "incorrect"

@@ -70,7 +70,7 @@ export function FindingCard({
         )}
         <SeverityBadge severity={f.severity} />
         {f.category && (
-          <span className="shrink-0 rounded bg-muted px-2 py-1 text-xs text-muted-foreground">
+          <span className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">
             {CATEGORY_LABEL[f.category]}
           </span>
         )}
@@ -81,12 +81,14 @@ export function FindingCard({
         )}
         <FindingVerdictBadge verdict={verdict} />
         <a
-          className="min-w-0 break-all font-mono text-xs text-muted-foreground hover:text-foreground"
+          className="min-w-0 break-all text-xs text-muted-foreground hover:text-foreground"
           href={f.side === "LEFT" && !review.diffLeftSha ? undefined : anchor}
           target="_blank"
           rel="noopener noreferrer"
         >
-          {f.path}:{f.line}
+          <code>
+            {f.path}:{f.line}
+          </code>
           {f.side === "LEFT" &&
             (review.diffLeftSha
               ? " (removed)"
@@ -141,12 +143,14 @@ export function FindingCard({
                   }
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="break-all font-mono text-xs text-review-link"
+                  className="break-all text-xs text-review-link"
                 >
-                  {e.path}:{e.line}
+                  <code>
+                    {e.path}:{e.line}
+                  </code>
                   {` · revision ${(e.commitSha ?? review.headSha)?.slice(0, 7) ?? "unavailable"}`}
                 </a>
-                <pre className="mt-2 overflow-x-auto rounded-md bg-background p-3 font-mono text-xs">
+                <pre className="mt-2 overflow-x-auto rounded-md bg-background p-3 text-xs">
                   <code>{e.quote}</code>
                 </pre>
               </div>

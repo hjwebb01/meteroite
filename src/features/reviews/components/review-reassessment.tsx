@@ -47,10 +47,12 @@ export function ReviewReassessment({
   ).length;
   return (
     <section
-      className="mb-7 rounded-md border bg-review-bg p-4"
+      className="review-field mb-7 min-w-0 break-words p-5"
       aria-label="Snapshot reassessment"
     >
-      <h2 className="font-semibold">Compared with the prior snapshot</h2>
+      <h2 className="text-lg font-medium tracking-[-0.01em]">
+        Compared with the prior snapshot
+      </h2>
       <dl className="mt-3 space-y-3 text-xs">
         <div>
           <dt className="text-muted-foreground">
@@ -73,7 +75,7 @@ export function ReviewReassessment({
       <Button
         size="xs"
         variant="outline"
-        className="mt-3"
+        className="mt-3 h-auto min-h-6 max-w-full whitespace-normal"
         onClick={() => onOpenReview(previous._id)}
       >
         Open prior review and discussions
@@ -114,7 +116,7 @@ export function ReviewReassessment({
                 return (
                   <li
                     key={`${context.kind}:${context.sourceId}`}
-                    className="rounded border p-3"
+                    className="border-t border-border pt-3"
                   >
                     <p className="text-xs font-medium">
                       {source?.title ?? `Prior ${context.kind}`} ·{" "}
@@ -137,7 +139,7 @@ export function ReviewReassessment({
                             : undefined,
                         )
                       }
-                      className="mt-2 rounded text-xs text-review-link underline focus-visible:outline-2 focus-visible:outline-ring"
+                      className="mt-2 rounded-md text-xs text-review-link underline focus-visible:outline-2 focus-visible:outline-ring"
                     >
                       Open prior{" "}
                       {context.kind === "finding"
@@ -153,9 +155,9 @@ export function ReviewReassessment({
                             key={path}
                             type="button"
                             onClick={() => onNavigate({ kind: "file", path })}
-                            className="block rounded break-all font-mono text-xs text-review-link underline focus-visible:outline-2 focus-visible:outline-ring"
+                            className="block rounded-md break-all text-xs text-review-link underline focus-visible:outline-2 focus-visible:outline-ring"
                           >
-                            Current diff: {path}
+                            Current diff: <code>{path}</code>
                           </button>
                         ) : (
                           <a
@@ -163,12 +165,12 @@ export function ReviewReassessment({
                             href={contextSourceUrl(path)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="block break-all font-mono text-xs text-review-link underline"
+                            className="block break-all text-xs text-review-link underline"
                           >
                             {contextSourceUrl(path)
                               ? "Current pinned source"
                               : "Current source unavailable"}
-                            : {path}
+                            : <code>{path}</code>
                           </a>
                         ),
                       )}

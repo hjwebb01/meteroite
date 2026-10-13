@@ -59,7 +59,7 @@ export function ReviewHotspots({
                     onClick={() =>
                       onSelect({ kind: "hotspot", hotspot, reference })
                     }
-                    className="rounded px-1 py-1 text-review-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
+                    className="rounded-md px-1 py-1 text-review-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-ring"
                   >
                     {available ? "Show in diff" : "Show context"}:{" "}
                     {reference.path}:{reference.line} ({reference.side})
@@ -92,9 +92,7 @@ export function ReviewHotspots({
             {files.flatMap((file) =>
               fileCoverageGaps(file).map((gap) => (
                 <li key={`${file.filename}:${gap.kind}`}>
-                  <span className="block break-all font-mono">
-                    {file.filename}
-                  </span>
+                  <code className="block break-all">{file.filename}</code>
                   <span>
                     {gap.kind === "model_context_omitted"
                       ? "Model context omitted"

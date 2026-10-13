@@ -7,7 +7,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-ui-face);
-  --font-mono: var(--font-code-face);
+  --font-mono: var(--font-code-face); /* code blocks and file paths only — taste-skill-ignore */
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -37,23 +37,33 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: var(--radius);
+  /* Surfaces are separated by tone, never by a resting shadow. */
+  --shadow-2xs: 0 0 #0000;
+  --shadow-xs: 0 0 #0000;
+  --shadow-sm: 0 0 #0000;
+  /* Hanken sets small; one step up keeps running text at 15px and above. */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.5;
+  --text-sm: 0.9375rem;
+  --text-sm--line-height: 1.55;
 }
 
-/* The workspace shares the review palette in both app appearances. */
+/* One production appearance; shared component tokens keep their public names. */
 :root,
 .dark {
-  --radius: 0.375rem;
+  /* Controls and surfaces are square; only avatars and status dots stay round. */
+  --radius: 0rem;
   --background: var(--review-bg);
   --foreground: var(--review-text);
   --card: var(--review-chrome);
   --card-foreground: var(--review-text);
   --popover: var(--review-chrome);
   --popover-foreground: var(--review-text);
-  --primary: var(--review-text);
+  --primary: var(--review-link);
   --primary-foreground: var(--review-bg);
   --secondary: var(--review-file-header);
   --secondary-foreground: var(--review-text);
@@ -98,25 +108,6 @@
   }
 }
 
-@theme inline {
-  --animate-cell-ripple: cell-ripple var(--duration, 200ms) ease-out none 1
-    var(--delay, 0ms);
-
-  @keyframes cell-ripple {
-    0% {
-      opacity: 0.4;
-    }
-
-    50% {
-      opacity: 0.8;
-    }
-
-    100% {
-      opacity: 0.4;
-    }
-  }
-}
-
 ::-webkit-scrollbar {
   @apply w-2.5 h-2.5;
 }
@@ -129,29 +120,37 @@
   @apply rounded-full bg-border border-[1px] border-transparent border-solid bg-clip-padding;
 }
 
-/* Fusion crust palette (DESIGN.md). Dark in both app themes: the ground is
-   the burnt shell of a meteorite, and severity is how hot a mark burns. */
+/* Charcoal grounds, sage marks the one action; the concrete field holds notes the reader must weigh. */
 :root {
-  --review-bg: #16120e;
-  --review-code: #121110;
-  --review-chrome: #1d1813;
-  --review-file-header: #241e18;
-  --review-border: #342b23;
-  --review-border-strong: #4c4136;
-  --review-text: #f2e9db;
-  --review-text-body: #d3c7b5;
-  --review-text-muted: #a49784;
-  --review-text-dim: #918573;
-  --review-link: #c5d17c;
-  --diff-add-fg: #9fd3a0;
-  --diff-del-fg: #f2909f;
-  --sev-high: #ff7a45;
-  --sev-high-bg: #26170f;
-  --sev-medium: #e9ad4f;
-  --sev-low: #a49784;
-  --sev-judgment: #c5d17c;
-  --sev-resolved: #9fd3a0;
-  --verdict-confirmed: #a8dfb6;
+  --font-ui-face: var(--font-sans-face, system-ui);
+  --font-display-face: var(--font-sans-face, system-ui);
+  --review-bg: #1c1c1c;
+  --review-code: #181818;
+  --review-chrome: #222222;
+  --review-file-header: #303030;
+  --review-border: #3a3a3a;
+  --review-border-strong: #5a5a5a;
+  --review-text: #f1f1ef;
+  --review-text-body: #d0d1cb;
+  --review-text-muted: #c4c5bf;
+  --review-text-dim: #a3a49e;
+  --review-link: #8fa68e;
+  --review-reading: #262626;
+  --review-glass: #222222;
+  --review-context: #2b3229;
+  --review-field: #c8c5ba;
+  --review-field-ink: #1c1c1c;
+  --diff-add-bg: #22302a;
+  --diff-add-fg: #cfe3cc;
+  --diff-del-bg: #3a2725;
+  --diff-del-fg: #f3c3bb;
+  --sev-high: #f0a58f;
+  --sev-high-bg: #2a2624;
+  --sev-medium: #e6c98a;
+  --sev-low: #b9bab4;
+  --sev-judgment: #c9bedf;
+  --sev-resolved: #b3cfb0;
+  --verdict-confirmed: #b3cfb0;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
 }
 
@@ -169,6 +168,12 @@
   --color-review-muted: var(--review-text-muted);
   --color-review-dim: var(--review-text-dim);
   --color-review-link: var(--review-link);
+  --color-review-reading: var(--review-reading);
+  --color-review-context: var(--review-context);
+  --color-review-field: var(--review-field);
+  --color-review-field-ink: var(--review-field-ink);
+  --color-diff-add-bg: var(--diff-add-bg);
+  --color-diff-del-bg: var(--diff-del-bg);
   --color-diff-add: var(--diff-add-fg);
   --color-diff-del: var(--diff-del-fg);
   --color-sev-high: var(--sev-high);
@@ -182,8 +187,20 @@
 
 @layer base {
   body {
-    font-family: var(--font-ui-face, Arial), sans-serif;
-    font-feature-settings: "ss01", "tnum";
+    font-family: var(--font-ui-face), system-ui, sans-serif;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.5;
+  }
+  :where(code, pre, kbd, samp) {
+    font-family: var(--font-code-face), ui-monospace, monospace; /* taste-skill-ignore */
+  }
+  html {
+    color-scheme: dark;
+    background: var(--review-bg);
+  }
+  :where(input, textarea, select)::placeholder {
+    color: var(--review-text-dim);
+    opacity: 1;
   }
   :where(
     button,
@@ -202,7 +219,7 @@
   }
 }
 
-/* A dismissed finding cools from its severity color to ash. */
+/* Finding dismissal keeps its existing local feedback, without ambient motion. */
 @keyframes cool {
   from {
     color: var(--heat);
@@ -215,22 +232,88 @@
 
 @media (prefers-reduced-motion: reduce) {
   .cooling {
-    animation-duration: 200ms;
+    animation: none;
   }
 }
 
-/* Every pressable control answers a press, except where it would move text. */
+/* Press feedback does not shift the source or contract reading surfaces. */
 @layer base {
   :where(button, [role="button"], a[data-slot="button"]):not(:disabled) {
-    transition-property: color, background-color, border-color, transform;
+    transition-property: color, background-color, border-color;
     transition-duration: 150ms;
     transition-timing-function: var(--ease-out);
   }
-  :where(button, [role="button"], a[data-slot="button"]):not(:disabled):active {
-    transform: scale(0.97);
-  }
   ::selection {
-    background: rgb(255 122 69 / 32%);
+    background: #3e4c3d;
     color: var(--review-text);
+  }
+}
+
+@layer components {
+  .review-shell {
+    background-color: var(--review-bg);
+  }
+  .review-glass {
+    background: var(--review-glass);
+  }
+  .review-field {
+    background: var(--review-field);
+    color: var(--review-field-ink);
+  }
+  .review-field :where(a) {
+    color: var(--review-field-ink);
+  }
+  /* Secondary ink and links darken on the field so they keep their contrast. */
+  .review-field {
+    --muted-foreground: #4a4a44;
+    --review-text-muted: #4a4a44;
+    --review-text-dim: #5a5a54;
+    --review-link: #3f5a3e;
+    --border: #a9a69b;
+    --ring: #3f5a3e;
+  }
+  .review-field .bg-review-bg {
+    color: var(--review-text);
+    --muted-foreground: #c4c5bf;
+    --review-text-muted: #c4c5bf;
+    --review-text-dim: #a3a49e;
+    --review-link: #8fa68e;
+    --border: #3a3a3a;
+    --ring: #8fa68e;
+  }
+  .review-reading-plane {
+    background: var(--review-reading);
+    color: var(--review-text-body);
+  }
+  .review-source-plane {
+    background: var(--review-code);
+    color: var(--review-text);
+  }
+}
+
+@media (max-width: 40rem) {
+  :where(input, textarea, select) {
+    font-size: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(button, [role="button"], a[data-slot="button"]):not(:disabled) {
+    transition: none;
+    transform: none;
+  }
+}
+
+@media (forced-colors: active) {
+  :where(
+    button,
+    a,
+    input,
+    textarea,
+    select,
+    summary,
+    [tabindex]
+  ):focus-visible {
+    outline-color: Highlight;
   }
 }

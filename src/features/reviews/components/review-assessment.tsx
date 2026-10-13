@@ -29,12 +29,9 @@ export function ReviewAssessment({
   return (
     <section
       aria-labelledby={headingId}
-      className="mb-7 rounded-md border bg-review-bg p-4"
+      className="mb-7 min-w-0 break-words rounded-md border bg-review-bg p-4"
     >
-      <h2
-        id={headingId}
-        className="text-xs font-medium uppercase tracking-wider text-muted-foreground"
-      >
+      <h2 id={headingId} className="text-sm font-medium text-review-link">
         {heading}
       </h2>
       {assessment.state === "legacy" ? (
@@ -53,7 +50,7 @@ export function ReviewAssessment({
             <h3 className="text-sm font-medium">Human review needed</h3>
             {assessment.state === "complete" ? (
               <>
-                <p className="mt-2 flex items-baseline gap-2">
+                <p className="mt-2 flex flex-wrap items-baseline gap-2">
                   <span className="text-3xl font-semibold tabular-nums">
                     {assessment.score}
                     <span className="text-base font-normal text-muted-foreground">
@@ -86,7 +83,7 @@ export function ReviewAssessment({
             These signals guide human attention. They do not approve merging.
           </p>
           <details className="mt-4 border-t pt-3">
-            <summary className="cursor-pointer rounded py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
+            <summary className="cursor-pointer rounded-md py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
               Readiness and scrutiny reasons
             </summary>
             <div className="mt-3 space-y-5 text-sm leading-6">
@@ -131,9 +128,11 @@ export function ReviewAssessment({
                           )}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="break-all font-mono text-xs text-review-link underline underline-offset-4"
+                          className="break-all text-xs text-review-link underline underline-offset-4"
                         >
-                          {item.path}:{item.line}
+                          <code>
+                            {item.path}:{item.line}
+                          </code>
                         </a>
                         <pre className="mt-1 overflow-x-auto rounded-md bg-background p-2 text-xs">
                           <code>{item.quote}</code>
@@ -145,8 +144,8 @@ export function ReviewAssessment({
               )}
               <div>
                 <h3 className="font-medium">Observed signals</h3>
-                <p className="mt-2 break-all font-mono text-xs text-muted-foreground">
-                  Commit {assessment.headSha}
+                <p className="mt-2 break-all text-xs text-muted-foreground">
+                  Commit <code>{assessment.headSha}</code>
                 </p>
                 {Object.entries(assessment.signals).map(([name, signal]) => (
                   <p key={name} className="mt-2 text-muted-foreground">
@@ -181,7 +180,7 @@ export function ReviewAssessment({
         </>
       )}
       <details className="mt-3 border-t pt-3">
-        <summary className="cursor-pointer rounded py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
+        <summary className="cursor-pointer rounded-md py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
           How scrutiny is scored
         </summary>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
