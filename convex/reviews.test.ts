@@ -1,6 +1,7 @@
 /// <reference types="vite/client" />
 import { convexTest } from "convex-test";
 import { describe, expect, test } from "vitest";
+import { buildHunks } from "./lib/review_navigation";
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { DEFAULT_CODING_MODEL_ID } from "./lib/coding_models";
@@ -619,4 +620,145 @@ test("reassessment persistence rejects another snapshot or invented prior contex
     (await alice.query(api.reviews.get, { id: second.id })).result?.reassessment
       ?.sourceReviewId,
   ).toBe(first.id);
+});
+
+async function sectionReadingFixture() {
+  const t = convexTest(schema, modules);
+  const alice = t.withIdentity({ subject: "alice" });
+  const bob = t.withIdentity({ subject: "bob" });
+  const { id } = await alice.mutation(api.reviews.start, request);
+  await t.mutation(internal.reviewJobs.pinSnapshot, {
+    id,
+    title: "Saved sections",
+    headSha: "read-head",
+    baseSha: "read-base",
+    sourceOwner: "alice",
+    sourceRepo: "app",
+  });
+  const file = {
+    filename: "app.ts",
+    status: "modified",
+    patch: "@@ -1 +1 @@\n-a\n+b",
+  };
+  await t.mutation(internal.reviewJobs.saveFiles, {
+    id,
+    headSha: "read-head",
+    baseSha: "read-base",
+    files: [{ ...file, hunks: buildHunks(file, "read-head:read-base") }],
+  });
+  const files = await alice.query(api.reviews.files, { id });
+  const group = {
+    id: "saved-group",
+    title: "Purpose",
+    purpose: "Explain the change",
+    hunkIds: [files[0].hunks![0].id],
+  };
+  await t.mutation(internal.reviewJobs.finish, {
+    id,
+    result: { ...result, changeGroups: [group] },
+  });
+  return { t, alice, bob, id, group };
+}
+
+test("section reading is owner-checked, explicit, idempotent, revision-scoped and undoable", async () => {
+  const { t, alice, bob, id } = await sectionReadingFixture();
+  const mark = { id, headSha: "read-head", groupId: "saved-group", read: true };
+  expect(await alice.query(api.reviews.readSections, { id })).toEqual([]);
+  await expect(t.query(api.reviews.readSections, { id })).rejects.toThrow(
+    "Unauthorized",
+  );
+  await expect(bob.query(api.reviews.readSections, { id })).rejects.toThrow(
+    "Review not found",
+  );
+  await expect(bob.mutation(api.reviews.setSectionRead, mark)).rejects.toThrow(
+    "Review not found",
+  );
+  await expect(
+    alice.mutation(api.reviews.setSectionRead, { ...mark, headSha: "other" }),
+  ).rejects.toThrow("completed saved revision");
+  await expect(
+    alice.mutation(api.reviews.setSectionRead, {
+      ...mark,
+      groupId: "ungrouped",
+    }),
+  ).rejects.toThrow("Saved change section not found");
+  await alice.mutation(api.reviews.setSectionRead, mark);
+  await alice.mutation(api.reviews.setSectionRead, mark);
+  expect(await alice.query(api.reviews.readSections, { id })).toEqual([
+    "saved-group",
+  ]);
+  expect(
+    await t.run((ctx) => ctx.db.query("reviewSectionReads").collect()),
+  ).toHaveLength(1);
+  await alice.mutation(api.reviews.setSectionRead, { ...mark, read: false });
+  expect(await alice.query(api.reviews.readSections, { id })).toEqual([]);
+  expect(
+    await t.run((ctx) => ctx.db.query("reviewSectionReads").collect()),
+  ).toHaveLength(0);
+});
+
+test("historical reading remains saved when freshness changes and never transfers to a new review", async () => {
+  const { t, alice, id, group } = await sectionReadingFixture();
+  await alice.mutation(api.reviews.setSectionRead, {
+    id,
+    headSha: "read-head",
+    groupId: group.id,
+    read: true,
+  });
+  await t.mutation(internal.reviewJobs.recordFreshness, {
+    id,
+    ownerId: "alice",
+    observation: {
+      state: "outdated",
+      headSha: "new-head",
+      baseTipSha: "read-base",
+      observedAt: 10,
+      reason: "Head changed",
+    },
+  });
+  expect(await alice.query(api.reviews.readSections, { id })).toEqual([
+    group.id,
+  ]);
+  const next = await alice.mutation(api.reviews.start, request);
+  await expect(
+    alice.mutation(api.reviews.setSectionRead, {
+      id: next.id,
+      headSha: "new-head",
+      groupId: group.id,
+      read: true,
+    }),
+  ).rejects.toThrow("completed saved revision");
+  await t.mutation(internal.reviewJobs.pinSnapshot, {
+    id: next.id,
+    title: "New revision",
+    headSha: "new-head",
+    baseSha: "read-base",
+    sourceOwner: "alice",
+    sourceRepo: "app",
+  });
+  const nextFile = {
+    filename: "app.ts",
+    status: "modified",
+    patch: "@@ -1 +1 @@\n-a\n+c",
+  };
+  await t.mutation(internal.reviewJobs.saveFiles, {
+    id: next.id,
+    headSha: "new-head",
+    baseSha: "read-base",
+    files: [{ ...nextFile, hunks: buildHunks(nextFile, "new-head:read-base") }],
+  });
+  const files = await alice.query(api.reviews.files, { id: next.id });
+  await t.mutation(internal.reviewJobs.finish, {
+    id: next.id,
+    result: {
+      ...result,
+      changeGroups: [{ ...group, hunkIds: [files[0].hunks![0].id] }],
+    },
+  });
+  expect(await alice.query(api.reviews.readSections, { id: next.id })).toEqual(
+    [],
+  );
+  expect(await alice.query(api.reviews.readSections, { id })).toEqual([
+    group.id,
+  ]);
 });

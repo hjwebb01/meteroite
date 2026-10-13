@@ -50,6 +50,19 @@ export default defineSchema({
     .index("by_owner", ["ownerId"])
     .index("by_owner_url", ["ownerId", "url"]),
 
+  reviewSectionReads: defineTable({
+    reviewId: v.id("reviews"),
+    ownerId: v.string(),
+    headSha: v.string(),
+    groupId: v.string(),
+    markedAt: v.number(),
+  }).index("by_owner_review_head_group", [
+    "ownerId",
+    "reviewId",
+    "headSha",
+    "groupId",
+  ]),
+
   reviewGroupingFeedback: defineTable({
     reviewId: v.id("reviews"),
     ownerId: v.string(),

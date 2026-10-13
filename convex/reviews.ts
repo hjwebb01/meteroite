@@ -1,8 +1,28 @@
+import type { Doc } from "./_generated/dataModel";
+import type { QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
 import { isReviewModelId } from "./lib/review_models";
 import { getOwnedReview } from "./lib/owned_review";
+
+async function sectionReads(ctx: QueryCtx, review: Doc<"reviews">) {
+  if (review.status !== "completed" || !review.result || !review.headSha)
+    return [];
+  const groups = new Set(review.result.changeGroups?.map((group) => group.id));
+  const marks = await ctx.db
+    .query("reviewSectionReads")
+    .withIndex("by_owner_review_head_group", (q) =>
+      q
+        .eq("ownerId", review.ownerId)
+        .eq("reviewId", review._id)
+        .eq("headSha", review.headSha!),
+    )
+    .collect();
+  return marks
+    .filter((mark) => groups.has(mark.groupId))
+    .map((mark) => mark.groupId);
+}
 
 export const list = query({
   args: {},
@@ -23,6 +43,55 @@ export const list = query({
       status: review.status,
       findingCount: review.result?.findings.length,
     }));
+  },
+});
+
+export const readSections = query({
+  args: { id: v.id("reviews") },
+  handler: async (ctx, { id }) => {
+    const identity = await verifyAuth(ctx);
+    return sectionReads(ctx, await getOwnedReview(ctx, id, identity.subject));
+  },
+});
+
+export const setSectionRead = mutation({
+  args: {
+    id: v.id("reviews"),
+    headSha: v.string(),
+    groupId: v.string(),
+    read: v.boolean(),
+  },
+  handler: async (ctx, { id, headSha, groupId, read }) => {
+    const identity = await verifyAuth(ctx);
+    const review = await getOwnedReview(ctx, id, identity.subject);
+    if (
+      review.status !== "completed" ||
+      !review.result ||
+      !review.headSha ||
+      review.headSha !== headSha
+    )
+      throw new Error("Reading marks require the completed saved revision.");
+    if (!review.result.changeGroups?.some((group) => group.id === groupId))
+      throw new Error("Saved change section not found.");
+    const mark = await ctx.db
+      .query("reviewSectionReads")
+      .withIndex("by_owner_review_head_group", (q) =>
+        q
+          .eq("ownerId", identity.subject)
+          .eq("reviewId", id)
+          .eq("headSha", headSha)
+          .eq("groupId", groupId),
+      )
+      .unique();
+    if (read && !mark)
+      await ctx.db.insert("reviewSectionReads", {
+        ownerId: identity.subject,
+        reviewId: id,
+        headSha,
+        groupId,
+        markedAt: Date.now(),
+      });
+    if (!read && mark) await ctx.db.delete("reviewSectionReads", mark._id);
   },
 });
 
