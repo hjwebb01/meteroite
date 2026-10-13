@@ -1,0 +1,365 @@
+.lab {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  min-height: 36px;
+  padding: 9px 24px;
+  font:
+    11px Arial,
+    sans-serif;
+  color: #57626a;
+  background: white;
+  border-bottom: 1px solid #d7dce0;
+}
+.lab a {
+  color: inherit;
+  text-decoration: none;
+}
+.lab a:last-child {
+  margin-left: auto;
+}
+.gallery {
+  background: #edf3f5;
+  color: #233d49;
+  min-height: 100svh;
+  padding: 0 5vw;
+  font-family: Arial, Helvetica, sans-serif;
+}
+.gallery * {
+  box-sizing: border-box;
+}
+.gallery a:focus-visible,
+.lab a:focus-visible {
+  outline: 3px solid #aa5735;
+  outline-offset: 5px;
+}
+.gallery header,
+.gallery footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 30px 0;
+  font-size: 12px;
+}
+.gallery header {
+  border-bottom: 1px solid #bfd0d7;
+}
+.gallery header > span {
+  font-size: 20px;
+  font-weight: bold;
+  letter-spacing: -0.7px;
+}
+.gallery a {
+  color: inherit;
+}
+.heading {
+  padding: 48px 0 38px;
+}
+.heading > p {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  color: #617783;
+  margin: 0 0 24px;
+}
+.heading h1 {
+  font-size: clamp(42px, 5vw, 72px);
+  letter-spacing: -3px;
+  line-height: 1.06;
+  margin: 0;
+  font-weight: 700;
+}
+.heading > div {
+  font-size: 14px;
+  line-height: 1.7;
+  color: #617783;
+  margin-top: 23px;
+}
+.directions {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.direction {
+  display: grid;
+  grid-template-columns: 38% minmax(0, 1fr);
+  text-decoration: none;
+  min-height: 320px;
+  border: 1px solid #bfd0d7;
+  background: #fff;
+}
+.caption {
+  padding: 35px;
+}
+.caption > span {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #617783;
+}
+.caption h2 {
+  font-size: 34px;
+  letter-spacing: -1px;
+  margin: 13px 0 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+}
+.caption h2 b {
+  font-weight: normal;
+  font-size: 22px;
+}
+.caption h3 {
+  font-size: 14px;
+  font-weight: bold;
+  margin: 0 0 12px;
+}
+.caption p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: #617783;
+  margin: 0 0 20px;
+  max-width: 45ch;
+}
+.caption small {
+  font-size: 9px;
+  line-height: 1.7;
+  color: #617783;
+}
+.preview {
+  padding: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+}
+.seam .preview {
+  background: #f1f3f1;
+}
+.current .preview {
+  background: #163949;
+  color: #d9eaf1;
+}
+.proof .preview {
+  background: #f8edc7;
+  color: #253650;
+}
+.seamPreview {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  width: 100%;
+  align-items: center;
+}
+.seamPreview > div {
+  background: white;
+  border-top: 3px solid #ad573c;
+  padding: 20px 15px;
+  min-width: 0;
+}
+.seamPreview > div:last-child {
+  border-color: #25766c;
+}
+.seamPreview small {
+  font-size: 10px;
+  color: #6e7c75;
+}
+.seamPreview code {
+  display: block;
+  margin: 20px 0;
+  font:
+    11px/1.9 "Courier New",
+    monospace;
+  overflow-wrap: anywhere;
+}
+.seamPreview > strong {
+  grid-column: 1/-1;
+  grid-row: 2;
+  text-align: center;
+  font-size: 11px;
+  color: #25766c;
+  border-top: 1px solid #ccd3cf;
+  padding-top: 14px;
+}
+.currentPreview {
+  width: 100%;
+  border-left: 1px solid #476676;
+  padding-left: 25px;
+}
+.currentPreview small {
+  font-size: 10px;
+  color: #9dbdcd;
+}
+.currentPreview code {
+  display: block;
+  padding: 24px 0;
+  font:
+    12px/2 "Courier New",
+    monospace;
+  overflow-wrap: anywhere;
+}
+.currentPreview strong {
+  display: block;
+  background: #244e60;
+  border-left: 3px solid #f0c67f;
+  padding: 18px;
+  color: #f0c67f;
+  font-size: 13px;
+}
+.proofPreview {
+  display: flex;
+  align-items: center;
+  gap: 35px;
+  width: 100%;
+  justify-content: center;
+}
+.proofPreview small {
+  font-size: 10px;
+  text-transform: uppercase;
+}
+.proofPreview strong {
+  display: block;
+  font-size: 40px;
+  font-weight: 600;
+  letter-spacing: -2px;
+  margin: 16px 0;
+}
+.proofPreview span {
+  display: block;
+  font-size: 10px;
+  color: #786942;
+}
+.proofPreview > div:last-child strong {
+  color: #bd4d2f;
+}
+.proofPreview > b {
+  font-weight: normal;
+  font-size: 25px;
+}
+.gallery footer {
+  font-size: 10px;
+  color: #617783;
+}
+@media (hover: hover) {
+  .direction:hover {
+    border-color: #527886;
+  }
+  .lab a:hover {
+    text-decoration: underline;
+  }
+}
+@media (max-width: 900px) {
+  .direction {
+    grid-template-columns: 45% minmax(0, 1fr);
+  }
+  .caption {
+    padding: 26px;
+  }
+  .preview {
+    padding: 25px;
+  }
+  .seamPreview {
+    grid-template-columns: 1fr;
+  }
+  .seamPreview > div {
+    padding: 12px;
+  }
+  .seamPreview code {
+    margin: 10px 0;
+  }
+  .seamPreview > strong {
+    grid-row: auto;
+  }
+  .proofPreview {
+    gap: 20px;
+  }
+  .proofPreview strong {
+    font-size: 30px;
+  }
+}
+@media (max-width: 650px) {
+  .gallery {
+    padding: 0 22px;
+  }
+  .gallery header {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 15px;
+    padding: 22px 0;
+  }
+  .gallery header > span {
+    font-size: 18px;
+  }
+  .gallery header > a {
+    font-size: 11px;
+  }
+  .heading {
+    padding: 35px 0;
+  }
+  .heading h1 {
+    font-size: 43px;
+    letter-spacing: -2px;
+  }
+  .heading > div {
+    font-size: 12px;
+  }
+  .direction {
+    display: flex;
+    flex-direction: column-reverse;
+  }
+  .caption {
+    padding: 25px;
+  }
+  .caption h2 {
+    font-size: 32px;
+  }
+  .caption h3 {
+    font-size: 13px;
+  }
+  .caption p {
+    font-size: 12px;
+  }
+  .preview {
+    min-height: 230px;
+    padding: 26px;
+  }
+  .seamPreview {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .seamPreview > strong {
+    grid-column: 1/-1;
+  }
+  .seamPreview small {
+    font-size: 9px;
+  }
+  .seamPreview code {
+    font-size: 9px;
+  }
+  .currentPreview {
+    padding-left: 15px;
+  }
+  .currentPreview code {
+    font-size: 10px;
+  }
+  .currentPreview strong {
+    font-size: 11px;
+  }
+  .proofPreview strong {
+    font-size: 31px;
+  }
+  .proofPreview span {
+    font-size: 9px;
+  }
+  .gallery footer {
+    flex-direction: column;
+    align-items: flex-start;
+    line-height: 1.7;
+  }
+  .lab {
+    padding: 9px 13px;
+    font-size: 9px;
+    gap: 13px;
+  }
+}

@@ -1,0 +1,1213 @@
+.canvas {
+  --ocean: #163949;
+  --bluegray: #244e60;
+  --mist: #d9eaf1;
+  --gold: #f0c67f;
+  --cobalt: #7bb6ee;
+  background: var(--ocean);
+  color: var(--mist);
+  min-height: 100vh;
+  padding: 32px clamp(20px, 4.5vw, 72px) 24px;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.canvas,
+.canvas * {
+  box-sizing: border-box;
+}
+
+.canvas button,
+.canvas input,
+.canvas textarea {
+  font: inherit;
+}
+
+.canvas button {
+  cursor: pointer;
+}
+
+.canvas button:focus-visible,
+.canvas input:focus-visible,
+.canvas textarea:focus-visible {
+  outline: 3px solid var(--cobalt);
+  outline-offset: 5px;
+}
+
+.canvas button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.canvas h1,
+.canvas h2,
+.canvas p {
+  margin: 0;
+}
+
+.masthead,
+.landing,
+.review,
+.pageFooter {
+  max-width: 1280px;
+  margin-inline: auto;
+}
+
+.masthead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  padding-bottom: 38px;
+}
+
+.wordmark {
+  display: flex;
+  gap: 15px;
+  align-items: baseline;
+  font-family: "Trebuchet MS", sans-serif;
+  font-weight: 700;
+  font-size: 21px;
+  letter-spacing: -0.7px;
+}
+
+.wordmark > span:last-child {
+  font-weight: 400;
+  font-size: 15px;
+  letter-spacing: 0;
+}
+
+.brandDivider {
+  color: var(--cobalt);
+  font-size: 18px;
+  font-weight: 400;
+}
+
+.localLabel {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--mist);
+  font-size: 12px;
+}
+
+.localLabel > span {
+  color: var(--gold);
+  font-size: 20px;
+}
+
+.landing {
+  display: grid;
+  grid-template-columns: 270px minmax(0, 1fr);
+  gap: clamp(30px, 5vw, 72px);
+  align-items: start;
+}
+
+.intro {
+  padding-top: 26px;
+}
+
+.kicker {
+  display: block;
+  color: var(--cobalt);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.8px;
+}
+
+.intro h1 {
+  font-family: "Trebuchet MS", sans-serif;
+  font-size: clamp(44px, 4.4vw, 65px);
+  line-height: 0.99;
+  letter-spacing: -3px;
+  margin-block: 24px 25px;
+  font-weight: 700;
+}
+
+.introCopy {
+  max-width: 220px;
+  font-size: 19px;
+  line-height: 1.45;
+}
+
+.description {
+  margin-top: 18px !important;
+  font-size: 14px;
+  line-height: 1.65;
+  max-width: 235px;
+}
+
+.intake {
+  margin-top: 49px;
+}
+
+.intake label {
+  display: block;
+  font-weight: 700;
+  font-size: 13px;
+  margin-bottom: 12px;
+}
+
+.intake input {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px 0 13px;
+  border: 0;
+  border-bottom: 1px solid var(--cobalt);
+  border-radius: 0;
+  background: transparent;
+  color: var(--mist);
+  font-size: 13px;
+  text-overflow: ellipsis;
+}
+
+.openButton {
+  width: 100%;
+  min-height: 48px;
+  margin-top: 15px;
+  padding: 12px 15px;
+  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--gold);
+  color: var(--ocean);
+  text-align: left;
+  font-weight: 700 !important;
+}
+
+.openButton:hover {
+  background: var(--mist);
+}
+
+.inputHelp {
+  margin-top: 13px !important;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.error {
+  color: var(--gold);
+  margin-top: 12px !important;
+  font-size: 13px;
+}
+
+.sampleButton {
+  display: flex;
+  gap: 25px;
+  align-items: center;
+  min-height: 44px;
+  background: none;
+  color: var(--cobalt);
+  padding: 8px 0;
+  margin-top: 13px;
+  border: 0;
+  border-bottom: 1px solid transparent;
+}
+
+.sampleButton:hover {
+  border-bottom-color: var(--cobalt);
+}
+
+.introFoot {
+  margin-top: 53px;
+  border-top: 1px solid var(--bluegray);
+  padding-top: 18px;
+  font-size: 12px;
+}
+
+.introFoot > span {
+  color: var(--gold);
+}
+
+.introFoot p {
+  margin-top: 7px;
+  line-height: 1.65;
+}
+
+.landingFolio,
+.document {
+  min-width: 0;
+  border: 1px solid var(--bluegray);
+}
+
+.folioTitle,
+.documentBand {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 17px 24px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+}
+
+.folioTitle > span:last-child,
+.documentBand > span:last-child {
+  color: var(--cobalt);
+  text-transform: none;
+  font-weight: 400;
+  letter-spacing: 0;
+  font-size: 12px;
+}
+
+.fileBand {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0;
+  background: var(--bluegray);
+  min-height: 53px;
+  padding-right: 24px;
+}
+
+.fileMark {
+  text-align: center;
+  color: var(--cobalt);
+  font-size: 22px;
+}
+
+.fileBand strong {
+  font-size: 12px;
+  font-weight: 400;
+  overflow-wrap: anywhere;
+  padding: 12px 10px 12px 0;
+}
+
+.fileBand > span:last-child {
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  white-space: nowrap;
+}
+
+.sourceRows {
+  padding-block: 11px;
+}
+
+.sourceRows + .sourceRows {
+  padding-top: 0;
+  margin-top: -6px;
+}
+
+.codeLine {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  align-items: baseline;
+  min-height: 30px;
+  padding-right: 24px;
+}
+
+.lineNumber {
+  font-family: "Courier New", monospace;
+  color: var(--cobalt);
+  font-size: 11px;
+  text-align: center;
+  padding-block: 4px;
+  border-right: 1px solid var(--bluegray);
+  align-self: stretch;
+}
+
+.codeLine code {
+  padding: 3px 0 3px 20px;
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+}
+
+.keyword {
+  color: var(--cobalt);
+}
+
+.number {
+  color: var(--gold);
+}
+
+.markedLine .lineNumber {
+  color: var(--gold);
+  border-right-color: var(--gold);
+}
+
+.previewAnnotation {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  text-align: left;
+  background: var(--mist);
+  color: var(--ocean);
+  border: 0;
+  border-left: 4px solid var(--gold);
+  width: 100%;
+  padding: 0;
+  margin-block: 4px 13px;
+}
+
+.annotationGutter {
+  padding-top: 28px;
+  text-align: center;
+  font-size: 28px;
+  font-family: "Trebuchet MS", sans-serif;
+  color: var(--ocean);
+}
+
+.previewCopy {
+  display: flex;
+  flex-direction: column;
+  padding: 28px 35px 26px 16px;
+}
+
+.annotationEyebrow {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  font-size: 10px;
+  line-height: 1.6;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.previewCopy > strong {
+  font-family: "Trebuchet MS", sans-serif;
+  font-size: clamp(24px, 2.5vw, 35px);
+  line-height: 1.12;
+  letter-spacing: -1px;
+  margin-block: 18px 14px;
+}
+
+.previewCopy > span:nth-last-child(2) {
+  max-width: 375px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.previewAction {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 24px;
+  padding-top: 13px;
+  border-top: 1px solid var(--bluegray);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.previewAnnotation:hover .previewAction {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.continuation {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  align-items: center;
+  min-height: 54px;
+  border-top: 1px solid var(--bluegray);
+  color: var(--cobalt);
+}
+
+.continuation > span:first-child {
+  font-size: 24px;
+  text-align: center;
+}
+
+.continuation > span:last-child {
+  font-size: 10px;
+  letter-spacing: 1.4px;
+  text-transform: uppercase;
+  padding-left: 20px;
+}
+
+.marginNote {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  padding-block: 10px 16px;
+  color: var(--gold);
+}
+
+.marginNote > span {
+  text-align: center;
+  font-size: 23px;
+}
+
+.marginNote p {
+  font-size: 14px;
+  line-height: 1.65;
+  padding-left: 20px;
+}
+
+.folioEnd {
+  border-top: 1px solid var(--bluegray);
+  display: flex;
+  justify-content: space-between;
+  padding: 20px 24px;
+  font-size: 12px;
+}
+
+.folioEnd > span:last-child {
+  color: var(--gold);
+}
+
+.pageFooter {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 14px;
+  border-top: 1px solid var(--bluegray);
+  padding-top: 20px;
+  margin-top: 52px;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+
+.pageFooter > span:last-child {
+  letter-spacing: 0;
+}
+
+.readingHeader {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 30px;
+  margin-block: 10px 37px;
+}
+
+.readingHeader h1 {
+  font-family: "Trebuchet MS", sans-serif;
+  font-size: clamp(38px, 5vw, 66px);
+  line-height: 1.1;
+  letter-spacing: -2.7px;
+  margin-block: 12px 16px;
+  scroll-margin-top: 30px;
+}
+
+.target {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.readingMeta {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.backButton {
+  min-height: 44px;
+  padding: 8px 0;
+  background: none;
+  color: var(--mist);
+  border: 0;
+  border-bottom: 1px solid var(--cobalt);
+}
+
+.backButton:hover {
+  color: var(--cobalt);
+}
+
+.readingMeta p {
+  font-size: 11px;
+  margin-top: 13px;
+}
+
+.navigator {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0;
+  background: var(--ocean);
+  border-top: 1px solid var(--bluegray);
+  border-bottom: 1px solid var(--cobalt);
+  margin-bottom: 28px;
+}
+
+.navLabel {
+  display: flex;
+  align-items: center;
+  padding: 16px 25px 16px 0;
+  color: var(--cobalt);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+}
+
+.navigator button {
+  display: flex;
+  flex: 1 1 240px;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 12px;
+  background: transparent;
+  color: var(--mist);
+  border: 0;
+  border-left: 1px solid var(--bluegray);
+  border-bottom: 3px solid transparent;
+  padding: 16px 18px 13px;
+  text-align: left;
+  min-height: 75px;
+}
+
+.navigator button:hover {
+  background: var(--bluegray);
+}
+
+.navigator button[aria-current="true"] {
+  background: var(--bluegray);
+  border-bottom-color: var(--gold);
+}
+
+.navNumber {
+  align-self: flex-start;
+  color: var(--cobalt);
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+}
+
+.navigator strong,
+.navigator small {
+  display: block;
+}
+
+.navigator strong {
+  font-size: 13px;
+}
+
+.navigator small {
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 400;
+}
+
+.navStatus {
+  color: var(--gold);
+  font-size: 9px;
+  margin-left: auto;
+}
+
+.document {
+  max-width: 1050px;
+  margin-inline: auto;
+}
+
+.sourceSection {
+  scroll-margin-top: 112px;
+}
+
+.sourceSection:focus {
+  outline: none;
+}
+
+.sourceSection:focus-visible .fileBand {
+  outline: 3px solid var(--cobalt);
+  outline-offset: -3px;
+}
+
+.annotation {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  background: var(--bluegray);
+  border-left: 4px solid var(--cobalt);
+  margin-block: 5px 16px;
+}
+
+.annotation .annotationGutter {
+  color: var(--gold);
+}
+
+.annotationBody {
+  min-width: 0;
+  padding: 25px 36px 27px 16px;
+}
+
+.annotation h2 {
+  font-family: "Trebuchet MS", sans-serif;
+  font-size: 26px;
+  line-height: 1.2;
+  letter-spacing: -0.7px;
+  margin-block: 13px 22px;
+  max-width: 620px;
+}
+
+.activeAnnotation {
+  background: var(--mist);
+  color: var(--ocean);
+  border-left-color: var(--gold);
+}
+
+.activeAnnotation .annotationGutter {
+  color: var(--ocean);
+}
+
+.resolvedAnnotation:not(.activeAnnotation) {
+  border-left-color: var(--gold);
+}
+
+.detailLabel {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  margin-bottom: 8px;
+}
+
+.claim p,
+.fix p {
+  max-width: 620px;
+  line-height: 1.7;
+  font-size: 14px;
+}
+
+.fix {
+  border-top: 1px solid var(--bluegray);
+  padding-top: 20px;
+  margin-top: 24px;
+}
+
+.fix pre {
+  background: var(--ocean);
+  color: var(--mist);
+  margin: 15px 0 0;
+  padding: 17px 18px;
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.fix code {
+  font-family: inherit;
+}
+
+.fixPlus {
+  color: var(--gold);
+  padding-right: 13px;
+}
+
+.fix small {
+  display: block;
+  font-size: 11px;
+  margin-top: 9px;
+}
+
+.localAction {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 20px;
+  margin-top: 22px;
+}
+
+.localAction button {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 11px 15px;
+  min-height: 44px;
+  border: 1px solid var(--ocean);
+  background: transparent;
+  color: var(--ocean);
+  font-weight: 700;
+  font-size: 12px;
+}
+
+.localAction button:hover {
+  background: var(--ocean);
+  color: var(--mist);
+}
+
+.localAction > span {
+  font-size: 11px;
+}
+
+.notes {
+  border-top: 1px solid var(--bluegray);
+  margin-top: 28px;
+  padding-top: 20px;
+}
+
+.noteHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.noteHeading label {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.noteHeading > span {
+  font-size: 10px;
+}
+
+.savedNote {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  border-left: 2px solid var(--bluegray);
+  padding: 9px 13px;
+  margin-bottom: 13px !important;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.notes textarea {
+  width: 100%;
+  display: block;
+  min-height: 78px;
+  resize: vertical;
+  border: 0;
+  border-bottom: 1px solid var(--bluegray);
+  padding: 10px 0;
+  background: transparent;
+  color: var(--ocean);
+  border-radius: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.notes textarea::placeholder {
+  color: var(--bluegray);
+  opacity: 1;
+}
+
+.noteFooter {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin-top: 9px;
+}
+
+.noteFooter p {
+  font-size: 10px;
+}
+
+.noteFooter button {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  min-height: 44px;
+  background: none;
+  border: 0;
+  color: var(--ocean);
+  padding: 8px 0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.noteFooter button:not(:disabled):hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.collapsedAnnotation {
+  width: 100%;
+  display: block;
+  text-align: left;
+  color: var(--mist);
+  background: none;
+  border: 0;
+  padding: 0;
+}
+
+.collapsedAnnotation h2 {
+  margin-bottom: 16px;
+  font-size: 23px;
+}
+
+.collapsedAnnotation > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  align-items: center;
+  color: var(--cobalt);
+  font-size: 12px;
+  min-height: 25px;
+}
+
+.collapsedAnnotation:hover > span {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.readingEnd {
+  border-top: 1px solid var(--bluegray);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  align-items: baseline;
+  padding: 28px 32px;
+}
+
+.readingEnd > span {
+  color: var(--gold);
+  font-size: 21px;
+}
+
+.readingEnd > div {
+  flex: 1 1 300px;
+}
+
+.readingEnd strong {
+  font-family: "Trebuchet MS", sans-serif;
+  font-size: 18px;
+}
+
+.readingEnd p {
+  font-size: 11px;
+  line-height: 1.7;
+  margin-top: 9px;
+  max-width: 560px;
+}
+
+.readingEnd button {
+  padding: 10px 0;
+  min-height: 44px;
+  border: 0;
+  background: none;
+  color: var(--cobalt);
+  font-size: 11px;
+}
+
+.readingEnd button:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+@media (max-width: 1050px) {
+  .landing {
+    grid-template-columns: 235px minmax(0, 1fr);
+    gap: 30px;
+  }
+
+  .intro h1 {
+    font-size: 52px;
+  }
+
+  .navLabel {
+    width: 100%;
+    padding-block: 12px;
+  }
+
+  .navigator button {
+    flex-basis: 200px;
+    padding-inline: 12px;
+  }
+
+  .sourceSection {
+    scroll-margin-top: 145px;
+  }
+}
+
+@media (max-width: 780px) {
+  .canvas {
+    padding: 24px 24px 20px;
+  }
+
+  .masthead {
+    padding-bottom: 22px;
+  }
+
+  .landing {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+  }
+
+  .intro {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0 28px;
+    padding-top: 10px;
+  }
+
+  .kicker,
+  .intro h1,
+  .introCopy,
+  .description {
+    grid-column: 1;
+  }
+
+  .intro h1 {
+    font-size: 54px;
+  }
+
+  .intake {
+    grid-column: 2;
+    grid-row: 2 / span 3;
+    margin-top: 23px;
+  }
+
+  .sampleButton {
+    grid-column: 2;
+    grid-row: 5;
+    justify-content: space-between;
+    margin-top: 7px;
+  }
+
+  .introFoot {
+    display: none;
+  }
+
+  .readingHeader {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .readingMeta {
+    text-align: left;
+  }
+
+  .readingMeta p {
+    margin-top: 7px;
+  }
+
+  .navigator button {
+    flex-basis: 180px;
+  }
+
+  .navigator {
+    position: relative;
+  }
+
+  .sourceSection {
+    scroll-margin-top: 18px;
+  }
+}
+
+@media (max-width: 520px) {
+  .canvas {
+    padding: 22px 16px 20px;
+  }
+
+  .masthead {
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+  }
+
+  .wordmark {
+    font-size: 20px;
+  }
+
+  .localLabel {
+    font-size: 10px;
+  }
+
+  .intro {
+    display: block;
+  }
+
+  .intro h1 {
+    font-size: 52px;
+    letter-spacing: -2.7px;
+    margin-block: 20px;
+  }
+
+  .introCopy {
+    max-width: 310px;
+    font-size: 18px;
+  }
+
+  .description {
+    max-width: 300px;
+    font-size: 13px;
+    margin-top: 12px !important;
+  }
+
+  .intake {
+    margin-top: 28px;
+  }
+
+  .intake input,
+  .notes textarea {
+    font-size: 16px;
+  }
+
+  .sampleButton {
+    width: 100%;
+  }
+
+  .folioTitle,
+  .documentBand {
+    padding: 15px;
+    font-size: 9px;
+    letter-spacing: 1px;
+  }
+
+  .fileBand {
+    grid-template-columns: 42px minmax(0, 1fr);
+    padding-right: 10px;
+  }
+
+  .fileBand strong {
+    font-size: 11px;
+    padding-block: 13px;
+  }
+
+  .fileBand > span:last-child {
+    display: none;
+  }
+
+  .codeLine,
+  .previewAnnotation,
+  .annotation,
+  .continuation,
+  .marginNote {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .codeLine {
+    padding-right: 13px;
+  }
+
+  .codeLine code {
+    padding-left: 12px;
+    font-size: 11px;
+    line-height: 1.85;
+  }
+
+  .lineNumber {
+    font-size: 10px;
+  }
+
+  .previewCopy {
+    padding: 23px 18px 23px 9px;
+  }
+
+  .previewCopy > strong {
+    font-size: 27px;
+    letter-spacing: -0.8px;
+  }
+
+  .previewCopy > span:nth-last-child(2) {
+    font-size: 13px;
+  }
+
+  .annotationGutter {
+    padding-top: 23px;
+    font-size: 22px;
+  }
+
+  .annotationEyebrow {
+    font-size: 9px;
+    gap: 5px 14px;
+    letter-spacing: 0.6px;
+  }
+
+  .annotationBody {
+    padding: 22px 16px 24px 9px;
+  }
+
+  .annotation h2,
+  .collapsedAnnotation h2 {
+    font-size: 23px;
+    letter-spacing: -0.5px;
+  }
+
+  .claim p,
+  .fix p {
+    font-size: 13px;
+  }
+
+  .fix pre {
+    font-size: 11px;
+    padding: 13px 12px;
+  }
+
+  .fixPlus {
+    padding-right: 8px;
+  }
+
+  .localAction button {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .localAction > span {
+    font-size: 10px;
+  }
+
+  .noteFooter {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .noteFooter button {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .continuation > span:last-child,
+  .marginNote p {
+    padding-left: 12px;
+  }
+
+  .marginNote p {
+    font-size: 12px;
+    padding-right: 14px;
+  }
+
+  .folioEnd {
+    padding-inline: 16px;
+    font-size: 11px;
+  }
+
+  .readingHeader h1 {
+    font-size: 42px;
+    letter-spacing: -2px;
+  }
+
+  .navigator button {
+    flex-basis: 100%;
+    min-height: 63px;
+    padding-block: 12px 9px;
+    border-left: 0;
+    border-top: 1px solid var(--bluegray);
+  }
+
+  .navNumber {
+    align-self: center;
+  }
+
+  .navStatus {
+    font-size: 10px;
+  }
+
+  .readingEnd {
+    padding: 23px 17px;
+    gap: 10px 14px;
+  }
+
+  .readingEnd > div {
+    flex-basis: calc(100% - 35px);
+  }
+
+  .readingEnd strong {
+    font-size: 17px;
+  }
+
+  .readingEnd button {
+    margin-left: 25px;
+  }
+
+  .pageFooter {
+    margin-top: 35px;
+    font-size: 9px;
+    gap: 8px;
+  }
+}

@@ -62,6 +62,9 @@ export function ExplorationGallery({
         <Link href="/" className={s.brand}>
           meteroite<span> / design lab</span>
         </Link>
+        <a href="/dev/designs/patchlight-round">
+          New: Patchlight-inspired round ↗
+        </a>
       </header>
       <section className={s.heading}>
         <p>New ways to see a change</p>
