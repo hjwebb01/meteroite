@@ -49,6 +49,9 @@ type RemoteMode =
   | "private-scope"
   | "workflow-scope"
   | "stale"
+  | "base-stale"
+  | "snapshot-unknown"
+  | "head-unknown"
   | "target-changed"
   | "race"
   | "protected"
@@ -107,8 +110,8 @@ async function fixture(mode: RemoteMode = "normal") {
       status: "completed",
       progress: "Complete",
       updatedAt: 0,
-      headSha: "source",
-      baseSha: "base",
+      headSha: mode === "head-unknown" ? undefined : "source",
+      baseSha: mode === "snapshot-unknown" ? undefined : "base",
       sourceOwner: "fork",
       sourceRepo: "app",
     });
@@ -269,6 +272,7 @@ async function fixture(mode: RemoteMode = "normal") {
           return {
             data: {
               state: "open",
+              base: { sha: mode === "base-stale" ? "new-base" : "base" },
               head: {
                 sha: head,
                 ref: mode === "target-changed" ? "other" : "feature",
@@ -756,3 +760,18 @@ test("dispatch failure recovery remains owner scoped and cannot interrupt a clai
     generation: 0,
   });
 });
+
+test.each(["base-stale", "snapshot-unknown", "head-unknown"] as const)(
+  "%s blocks applying a patch without assuming the saved review context is current",
+  async (mode) => {
+    const f = await fixture(mode);
+    await f.post();
+    await f.run();
+    expect((await f.saved())[0]).toMatchObject({
+      status: "blocked",
+      blockReason: "stale",
+      error: expect.stringMatching(/base.*changed|saved snapshot.*unavailable/),
+    });
+    expect(f.graphql).not.toHaveBeenCalled();
+  },
+);

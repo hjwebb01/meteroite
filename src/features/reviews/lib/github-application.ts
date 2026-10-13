@@ -124,6 +124,12 @@ export async function inspectApplicationTarget(
     .catch((error: unknown) =>
       accessFailure(error, `${review.repoOwner}/${review.repoName}`),
     );
+  const savedBaseTip = review.baseTipSha ?? review.baseSha;
+  if (!review.headSha || !savedBaseTip || pr.base.sha !== savedBaseTip)
+    throw new ApplicationBlockedError(
+      "stale",
+      "The PR base revision changed or the saved snapshot is unavailable. Review the latest commits and investigate again before applying.",
+    );
   if (
     pr.state !== "open" ||
     pr.head.repo?.owner.login.toLowerCase() !==
