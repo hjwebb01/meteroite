@@ -40,8 +40,6 @@ export const claim = internalMutation({
   },
 });
 
-// This transaction is the authorization point for each exact immutable payload.
-// A conclusion arriving between preview/claim and the remote write invalidates it.
 export const authorizeWrite = internalMutation({
   args: { id: v.id("reviews"), ownerId: v.string(), attemptId: v.string() },
   handler: async (ctx, { id, ownerId, attemptId }) => {
@@ -76,8 +74,6 @@ export const fail = internalMutation({
   },
 });
 
-// The server must first complete a fresh GitHub lookup with no matching post.
-// Reset is explicitly requested; it never retries the remote write itself.
 export const reset = internalMutation({
   args: { id: v.id("reviews"), ownerId: v.string(), attemptId: v.string() },
   handler: async (ctx, { id, ownerId, attemptId }) => {

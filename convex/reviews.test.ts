@@ -9,6 +9,7 @@ import schema from "./schema";
 import { DEFAULT_CODING_MODEL_ID } from "./lib/coding_models";
 import { createAssessment } from "./lib/review_assessment";
 import { assessmentCalibrationFixtures } from "../src/features/reviews/lib/assessment-fixtures";
+import { MAX_REVIEW_ACTIVITY } from "./lib/review_stage";
 
 const modules = import.meta.glob("./**/*.ts");
 const request = {
@@ -152,6 +153,86 @@ describe("private PR reviews", () => {
     const review = await alice.query(api.reviews.get, { id });
     expect(review.status).toBe("cancelled");
     expect(review.result).toBeUndefined();
+  });
+
+  test("progress records the stage and the latest action; a stage change clears the action", async () => {
+    const t = convexTest(schema, modules);
+    const alice = t.withIdentity({ subject: "alice" });
+    const { id } = await alice.mutation(api.reviews.start, request);
+    await t.mutation(internal.reviewJobs.progress, {
+      id,
+      progress: "Investigating changes and related code",
+      stage: "investigate",
+    });
+    await t.mutation(internal.reviewJobs.progress, {
+      id,
+      action: { tool: "readFile", text: "Reading src/cart.js" },
+    });
+    let review = await alice.query(api.reviews.get, { id });
+    expect(review).toMatchObject({
+      stage: "investigate",
+      latestAction: "Reading src/cart.js",
+      progress: "Investigating changes and related code",
+      activity: [
+        { stage: "investigate", tool: "readFile", text: "Reading src/cart.js" },
+      ],
+    });
+    await t.mutation(internal.reviewJobs.progress, {
+      id,
+      progress: "Checking evidence and preparing findings",
+      stage: "finish",
+    });
+    review = await alice.query(api.reviews.get, { id });
+    expect(review.stage).toBe("finish");
+    expect(review.latestAction).toBeUndefined();
+  });
+
+  test("activity keeps earlier calls across stage changes and drops the oldest past the cap", async () => {
+    const t = convexTest(schema, modules);
+    const alice = t.withIdentity({ subject: "alice" });
+    const { id } = await alice.mutation(api.reviews.start, request);
+    await t.mutation(internal.reviewJobs.progress, {
+      id,
+      progress: "Investigating changes and related code",
+      stage: "investigate",
+    });
+    for (let i = 0; i < MAX_REVIEW_ACTIVITY + 5; i++)
+      await t.mutation(internal.reviewJobs.progress, {
+        id,
+        action: { tool: "searchText", text: `Searching for call ${i}` },
+      });
+    await t.mutation(internal.reviewJobs.progress, {
+      id,
+      progress: "Checking evidence and preparing findings",
+      stage: "finish",
+    });
+    const review = await alice.query(api.reviews.get, { id });
+    expect(review.activity).toHaveLength(MAX_REVIEW_ACTIVITY);
+    expect(review.activity?.[0]?.text).toBe("Searching for call 5");
+    expect(review.activity?.at(-1)).toMatchObject({
+      stage: "investigate",
+      text: `Searching for call ${MAX_REVIEW_ACTIVITY + 4}`,
+    });
+  });
+
+  test("finished parts are counted against the part total", async () => {
+    const t = convexTest(schema, modules);
+    const alice = t.withIdentity({ subject: "alice" });
+    const { id } = await alice.mutation(api.reviews.start, request);
+    await t.mutation(internal.reviewJobs.progress, {
+      id,
+      progress: "Investigating a large change in 2 parts",
+      stage: "investigate",
+      parts: 2,
+    });
+    await t.mutation(internal.reviewJobs.partFinished, { id });
+    await t.mutation(internal.reviewJobs.partFinished, { id });
+    const review = await alice.query(api.reviews.get, { id });
+    expect(review).toMatchObject({ parts: 2, partsDone: 2 });
+    await t.mutation(internal.reviewJobs.finish, { id, result });
+    expect(await t.mutation(internal.reviewJobs.partFinished, { id })).toBe(
+      false,
+    );
   });
 
   test("repeat reviews keep the previous completed run and cannot overwrite it", async () => {

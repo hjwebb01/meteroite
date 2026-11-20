@@ -59,9 +59,7 @@ export function useChatGPT() {
           );
           return;
         }
-      } catch {
-        /* A transient local request failure should not end sign-in. */
-      }
+      } catch {}
       if (disposed) return;
       if (Date.now() > deadline) {
         setPending(false);

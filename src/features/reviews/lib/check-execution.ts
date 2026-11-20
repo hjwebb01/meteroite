@@ -27,7 +27,6 @@ export type ProposalFiles = Array<{
 }>;
 type Heartbeat = (progress?: string) => Promise<void>;
 
-// Internal seam: the isolated runtime and controlled tests supply these operations.
 type ExecutionAdapter = {
   sourceSha: string;
   run(command: string[], signal: AbortSignal): Promise<ExecutionCheck>;
@@ -35,7 +34,6 @@ type ExecutionAdapter = {
   verifyFiles(files: ProposalFiles, signal: AbortSignal): Promise<void>;
 };
 
-/** Command outcomes only validate source that still matches the pinned snapshot or Proposal. */
 export function createCheckExecution(adapter: ExecutionAdapter) {
   async function unavailable(
     error: unknown,
@@ -45,7 +43,6 @@ export function createCheckExecution(adapter: ExecutionAdapter) {
   ): Promise<ExecutionCheck> {
     if (error instanceof ProposalRejectedError) throw error;
     if (findingStopReason(error, signal) !== "infrastructure") throw error;
-    // A runner failure must not hide cancellation or expiry of this Attempt.
     await heartbeat();
     return {
       command,
@@ -70,7 +67,6 @@ export function createCheckExecution(adapter: ExecutionAdapter) {
     try {
       await adapter.verifyFiles(files, signal);
     } catch (error) {
-      // An ended Lease must stop the work, rather than become an unavailable Check.
       if (findingStopReason(error, signal) !== "infrastructure") throw error;
       await heartbeat();
       const [source, target] = files.length

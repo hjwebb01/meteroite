@@ -62,7 +62,6 @@ export function isLocalChatGPTRuntime() {
 
 function requestUrl(request: Request) {
   const url = new URL(request.url);
-  // Next's dev server can normalize 127.0.0.1 to localhost in request.url.
   const host = request.headers.get("host");
   if (host) url.host = host;
   return url;
@@ -108,7 +107,6 @@ async function save(path: string, value: unknown) {
   }
 }
 
-/** A filesystem lock also serializes rotating refresh tokens across Next workers. */
 async function locked<T>(
   userId: string,
   operation: () => Promise<T>,
@@ -232,7 +230,6 @@ async function readPending(request: Request) {
   return { pending, url, state };
 }
 
-/** Return to the initiating host so its Clerk session can bind account linking. */
 export async function getChatGPTCallbackRedirect(request: Request) {
   const { pending, url } = await readPending(request);
   if (
@@ -257,7 +254,6 @@ export async function completeChatGPTSignIn(request: Request, userId: string) {
       "Return to the Meteroite account that started this sign-in.",
     );
   try {
-    // Rename atomically so a callback can only be consumed once across workers.
     const consumed = `${pendingPath(state)}.${randomUUID()}.used`;
     await rename(pendingPath(state), consumed);
     await rm(consumed);
@@ -390,10 +386,6 @@ async function fetchModels(userId: string, account: Account) {
     }));
 }
 
-/**
- * Keyed on the connection so a disconnect or reconnect never reuses a catalog.
- * Failures are not stored, which keeps "Retry loading models" a fresh request.
- */
 const MODEL_CACHE_MS = 60_000;
 const modelCache = new Map<
   string,
@@ -421,8 +413,7 @@ async function listModels(userId: string, account: Account) {
 }
 
 export async function getChatGPTStatus(userId: string): Promise<ChatGPTStatus> {
-  if (!isLocalChatGPTRuntime())
-    return UNAVAILABLE_CHATGPT_STATUS;
+  if (!isLocalChatGPTRuntime()) return UNAVAILABLE_CHATGPT_STATUS;
   const account = await readAccount(userId);
   if (!account?.accessToken)
     return { ...UNAVAILABLE_CHATGPT_STATUS, available: true };
@@ -460,7 +451,6 @@ export async function getChatGPTStatus(userId: string): Promise<ChatGPTStatus> {
   }
 }
 
-/** Validates outside the lock because listModels acquires it for credentials. */
 async function connectionIdForModel(userId: string, model: string) {
   const account = await readAccount(userId);
   if (
@@ -481,7 +471,6 @@ export async function setChatGPTSettings(
   await locked(userId, async () => {
     const account = await readAccount(userId);
     if (!account?.accessToken) throw new Error("Connect ChatGPT first.");
-    // A reconnect or disconnect during validation invalidates the catalog check.
     if (validatedConnectionId && account.connectionId !== validatedConnectionId)
       throw new Error(
         "ChatGPT changed while choosing a model. Choose the model again.",
@@ -507,7 +496,6 @@ export async function getChatGPTSelection(
   return { userId, connectionId: account.connectionId, model };
 }
 
-/** A review explicitly chooses its provider independently of the coding preference. */
 export async function getChatGPTReviewSelection(
   userId: string,
   request: Request,
@@ -557,7 +545,6 @@ export async function disconnectChatGPT(userId: string) {
         revoked = false;
       }
     }
-    // Retain registration identity and host ID for a later sign-in, clear all tokens.
     await save(accountPath(userId), {
       clientId: account.clientId,
       subject: account.subject,

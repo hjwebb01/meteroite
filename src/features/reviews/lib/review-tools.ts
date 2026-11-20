@@ -4,14 +4,8 @@ import type { createRepositoryReader, loadPullRequest } from "./github-context";
 
 const MAX_LISTED_PATHS = 50;
 
-/**
- * SDK-independent contract for read-only review tools. Provider adapters
- * (AI SDK, ChatGPT Responses) derive their definitions from these fields and
- * dispatch calls through `execute`, which validates arguments first.
- */
 export type ReviewToolCall = { callId: string; signal: AbortSignal };
 
-/** Arguments the model can correct; adapters report it back instead of failing the run. */
 export class ReviewToolInputError extends ToolInputError {}
 
 export type ReviewTool = {
@@ -138,4 +132,34 @@ export function createRepositoryTools(
         reader.searchText(query, pathPrefix, cursor),
     }),
   ];
+}
+
+const MAX_ACTION_LENGTH = 120;
+
+export function describeReviewAction(name: string, args: unknown): string {
+  const input = z.record(z.string(), z.unknown()).safeParse(args).data ?? {};
+  const text = (value: unknown, fallback: string) =>
+    typeof value === "string" && value.trim() ? value : fallback;
+  const templates: Record<string, string> = {
+    readFile: `Reading ${text(input.path, "a file")}`,
+    getChangedLines: `Checking changed lines in ${text(input.path, "a file")}`,
+    listFiles: `Listing ${text(input.prefix, "the repository")}`,
+    searchText: `Searching ${text(input.pathPrefix, "the repository")}`,
+  };
+  const action = templates[name] ?? `Running ${name}`;
+  const oneLine = action.replace(/\p{Cc}+/gu, " ").trim();
+  return oneLine.length > MAX_ACTION_LENGTH
+    ? `${oneLine.slice(0, MAX_ACTION_LENGTH - 1)}…`
+    : oneLine;
+}
+
+export function describeReviewTarget(name: string, args: unknown) {
+  const input = z.record(z.string(), z.unknown()).safeParse(args).data ?? {};
+  const path = input.path ?? input.prefix ?? input.pathPrefix;
+  if (typeof path !== "string" || !path || path.length > 500) return {};
+  if (name !== "readFile") return { path };
+  const { startLine: start, endLine: end } = input;
+  return typeof start === "number" && typeof end === "number"
+    ? { path, start, end }
+    : { path };
 }

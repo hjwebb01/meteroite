@@ -1,3 +1,5 @@
+import { formatTimestamp } from "@/lib/utils";
+import { Disclosure, DisclosureSummary } from "@/components/ui/disclosure";
 import { useId } from "react";
 import {
   readAssessment,
@@ -82,10 +84,10 @@ export function ReviewAssessment({
           <p className="mt-4 text-xs leading-5 text-muted-foreground">
             These signals guide human attention. They do not approve merging.
           </p>
-          <details className="mt-4 border-t pt-3">
-            <summary className="cursor-pointer rounded-md py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
+          <Disclosure className="mt-4 border-t pt-3">
+            <DisclosureSummary className="py-3 text-sm font-medium">
               Readiness and scrutiny reasons
-            </summary>
+            </DisclosureSummary>
             <div className="mt-3 space-y-5 text-sm leading-6">
               <div>
                 <h3 className="font-medium">Readiness</h3>
@@ -160,7 +162,7 @@ export function ReviewAssessment({
                       : `${signal.state}. ${signal.reason}`}
                     {" · Observed "}
                     <time dateTime={new Date(signal.observedAt).toISOString()}>
-                      {new Date(signal.observedAt).toLocaleString()}
+                      {formatTimestamp(signal.observedAt)}
                     </time>
                   </p>
                 ))}
@@ -176,13 +178,13 @@ export function ReviewAssessment({
                 </div>
               )}
             </div>
-          </details>
+          </Disclosure>
         </>
       )}
-      <details className="mt-3 border-t pt-3">
-        <summary className="cursor-pointer rounded-md py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-ring">
+      <Disclosure className="mt-3 border-t pt-3">
+        <DisclosureSummary className="py-3 text-sm font-medium">
           How scrutiny is scored
-        </summary>
+        </DisclosureSummary>
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
           The strongest need across impact, complexity, uncertainty, and
           coverage sets the score. Insufficient evidence produces an incomplete
@@ -201,7 +203,7 @@ export function ReviewAssessment({
         <p className="mt-3 text-xs text-muted-foreground">
           Rubric {SCRUTINY_RUBRIC.version}
         </p>
-      </details>
+      </Disclosure>
     </section>
   );
 }

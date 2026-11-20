@@ -18,7 +18,6 @@ export function chatGPTError(code?: string | null) {
   return "ChatGPT could not complete this request. Check your connection and available plan usage, then try again.";
 }
 
-/** Non-strict: schemas Zod emits are not guaranteed to satisfy strict mode. */
 export function functionDefinition(
   name: string,
   description: string | undefined,
@@ -92,7 +91,6 @@ export async function completeChatGPTResponse(
     }
     return completed;
   } catch (error) {
-    // SDK errors can carry request metadata. Return only a user-facing reason.
     if (error instanceof OpenAI.APIError)
       throw new Error(chatGPTError(error.code));
     throw error;

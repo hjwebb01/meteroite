@@ -17,10 +17,8 @@ import { synthesizeParts } from "./review-synthesis";
 import { finalizeReview } from "./review-finalization";
 import type { PartSummary, ReviewRun } from "./review-run";
 
-// A diff beyond one model context is reviewed in at most this many parts.
 const MAX_REVIEW_PARTS = 4;
 
-// Stays well under Convex's per-call argument size limit.
 const SAVE_FILES_BATCH_CHARS = 2_000_000;
 
 function batchBySize<T extends { patch?: string }>(
@@ -68,7 +66,6 @@ export const reviewPullRequest = inngest.createFunction(
     const { reviewId, ownerId, provider } = event.data as {
       reviewId: Id<"reviews">;
       ownerId: string;
-      /** Absent on events queued before Model providers; those use OpenRouter. */
       provider?: ModelProvider;
     };
     const { review, previous, previousFiles } = await step.run(
@@ -88,7 +85,11 @@ export const reviewPullRequest = inngest.createFunction(
     const snapshot = await step.run("load-pinned-pr", async () => {
       const active = await getConvexAdminClient().mutation(
         internal.reviewJobs.progress,
-        { id: reviewId, progress: "Loading pull request and repository" },
+        {
+          id: reviewId,
+          progress: "Loading pull request and repository",
+          stage: "load",
+        },
       );
       if (!active) throw new NonRetriableError("Review cancelled");
       const octokit = await createUserOctokit(ownerId);
@@ -134,7 +135,6 @@ export const reviewPullRequest = inngest.createFunction(
         throw new NonRetriableError(
           "The review stopped or its pinned snapshot changed. Start a new review.",
         );
-      // Display patches go straight to Convex so they stay out of step state.
       const { diffs, ...pinned } = loaded;
       for (const batch of batchBySize(diffs, SAVE_FILES_BATCH_CHARS))
         await getConvexAdminClient().mutation(internal.reviewJobs.saveFiles, {
@@ -157,6 +157,17 @@ export const reviewPullRequest = inngest.createFunction(
         { id: reviewId, ownerId },
       );
       if (status !== "running") throw new NonRetriableError("Review cancelled");
+    };
+    const reportAction = async (
+      tool: string,
+      text: string,
+      target: { path?: string; start?: number; end?: number } = {},
+    ) => {
+      const active = await getConvexAdminClient().mutation(
+        internal.reviewJobs.progress,
+        { id: reviewId, action: { tool, text, ...target } },
+      );
+      if (!active) throw new NonRetriableError("Review cancelled");
     };
     const run: ReviewRun = {
       reviewId,
@@ -187,27 +198,27 @@ export const reviewPullRequest = inngest.createFunction(
           : { model: openRouter.chat(review.model) },
       budget,
       checkActive,
+      reportAction,
       prepareFindings: async () => {
         await checkActive();
         await getConvexAdminClient().mutation(internal.reviewJobs.progress, {
           id: reviewId,
           progress: "Checking evidence and preparing findings",
+          stage: "finish",
         });
       },
     };
-    const reportProgress = async (progress: string) => {
+    const reportProgress = async (
+      progress: string,
+      stage: { stage: "investigate" | "finish"; parts?: number },
+    ) => {
       const active = await getConvexAdminClient().mutation(
         internal.reviewJobs.progress,
-        { id: reviewId, progress, title: snapshot.title },
+        { id: reviewId, progress, title: snapshot.title, ...stage },
       );
       if (!active) throw new NonRetriableError("Review cancelled");
     };
 
-    /**
-     * A diff too large for one model context is split into bounded parts,
-     * each investigated in its own step. A tool-free synthesis call then
-     * merges their summaries, citing only evidence the parts inspected.
-     */
     let summaries: PartSummary[] = [];
     if (parts > 1) {
       summaries = await Promise.all(
@@ -215,12 +226,11 @@ export const reviewPullRequest = inngest.createFunction(
           step.run(`investigate-part-${part + 1}`, async () => {
             await reportProgress(
               `Investigating a large change in ${parts} parts`,
+              { stage: "investigate", parts },
             );
             const octokit = await createUserOctokit(ownerId);
-            // Parts finish while others still investigate; only synthesis
-            // announces that findings are being prepared.
             const partRun = { ...run, prepareFindings: checkActive };
-            return summarizePart(
+            const summary = summarizePart(
               run,
               await investigate(octokit, partRun, {
                 index: part,
@@ -228,6 +238,11 @@ export const reviewPullRequest = inngest.createFunction(
               }),
               part,
             );
+            await getConvexAdminClient().mutation(
+              internal.reviewJobs.partFinished,
+              { id: reviewId },
+            );
+            return summary;
           }),
         ),
       );
@@ -240,6 +255,7 @@ export const reviewPullRequest = inngest.createFunction(
           parts === 1
             ? "Investigating changes and related code"
             : "Combining findings from every part",
+          parts === 1 ? { stage: "investigate" } : { stage: "finish" },
         );
         const octokit = await createUserOctokit(ownerId);
         const report =

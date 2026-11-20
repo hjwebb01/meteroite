@@ -38,7 +38,6 @@ export const reviewFinding = v.object({
     }),
   ),
   previousFindingId: v.union(v.string(), v.null()),
-  // Absent on reviews saved before findings were categorised and scored.
   category: v.optional(
     v.union(...FINDING_CATEGORIES.map((category) => v.literal(category))),
   ),
@@ -83,7 +82,6 @@ export const reviewFreshness = v.union(
     reason: v.string(),
   }),
 );
-// The pull request review posted to GitHub from this saved review.
 export const githubReview = v.object({
   id: v.number(),
   url: v.string(),

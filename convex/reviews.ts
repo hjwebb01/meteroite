@@ -16,6 +16,9 @@ export type ReviewHistoryRow = {
   pullNumber: number;
   title?: string;
   status: Doc<"reviews">["status"];
+  stage?: Doc<"reviews">["stage"];
+  parts?: number;
+  partsDone?: number;
   findingCount?: number;
   readCount: number;
   sectionCount: number;
@@ -54,6 +57,9 @@ async function historyRow(
     pullNumber: review.pullNumber,
     title: review.title,
     status: review.status,
+    stage: review.stage,
+    parts: review.parts,
+    partsDone: review.partsDone,
     findingCount: review.result?.findings.length,
     readCount: (await sectionReads(ctx, review)).length,
     sectionCount:

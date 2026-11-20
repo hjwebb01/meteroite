@@ -1,0 +1,47 @@
+{
+  "src/components/ui/chart.tsx": {
+    "local/no-comments": {
+      "count": 2
+    }
+  },
+  "src/components/ui/input-group.tsx": {
+    "local/no-comments": {
+      "count": 3
+    }
+  },
+  "src/components/ui/sidebar.tsx": {
+    "local/no-comments": {
+      "count": 11
+    }
+  },
+  "src/features/auth/components/unauthenticated-view.tsx": {
+    "no-restricted-syntax": {
+      "count": 6
+    }
+  },
+  "src/features/chatgpt/lib/tool-loop.ts": {
+    "local/no-comments": {
+      "count": 3
+    }
+  },
+  "src/features/reviews/inngest/review-agent.ts": {
+    "local/no-comments": {
+      "count": 7
+    }
+  },
+  "src/features/reviews/inngest/review-finalization.ts": {
+    "local/no-comments": {
+      "count": 3
+    }
+  },
+  "src/features/reviews/inngest/review-investigation.ts": {
+    "local/no-comments": {
+      "count": 2
+    }
+  },
+  "src/features/reviews/lib/timing-temp.ts": {
+    "local/no-comments": {
+      "count": 1
+    }
+  }
+}

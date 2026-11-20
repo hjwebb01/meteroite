@@ -8,6 +8,10 @@ Add documentation only when Hunter explicitly requests it or explicitly invokes 
 
 Periodically review permitted documentation while working on the related area. Update it to reflect current behavior and decisions, and remove stale details. Do not create additional documents as part of that review.
 
+## Checks
+
+Run the narrowest check that covers the change: `npm run typecheck`, `npm run lint`, `npm test -- <path>`, `npm run check:convex` after `convex/` edits. `npm run verify` runs the full suite in a clean checkout (slow; the pre-push hook runs it anyway). Review judgement calls live in `CODING_STANDARDS.md`; past decisions in `docs/adr/`. No code comments (ADR 0001).
+
 ## Verification in the app
 
 `npm run check:env` reports which flows can run locally and the secret each blocked flow needs. Sign in through the T3 preview as `meteroite-agent+clerk_test@example.com` with code `424242` (Clerk development test address; no inbox needed).

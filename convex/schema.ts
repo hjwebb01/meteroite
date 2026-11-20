@@ -1,4 +1,5 @@
 import { applicationFields } from "./lib/review_application_fields";
+import { reviewActivity, reviewStage } from "./lib/review_stage";
 import { proposalFields } from "./lib/review_proposal_fields";
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
@@ -33,6 +34,11 @@ export default defineSchema({
       v.literal("cancelled"),
     ),
     progress: v.string(),
+    stage: v.optional(reviewStage),
+    latestAction: v.optional(v.string()),
+    activity: v.optional(v.array(reviewActivity)),
+    parts: v.optional(v.number()),
+    partsDone: v.optional(v.number()),
     updatedAt: v.number(),
     title: v.optional(v.string()),
     headSha: v.optional(v.string()),
@@ -83,7 +89,6 @@ export default defineSchema({
     .index("by_review", ["reviewId"])
     .index("by_owner_request", ["ownerId", "requestId"]),
 
-  // The diff each review was run against, one document per changed file.
   reviewFiles: defineTable({
     reviewId: v.id("reviews"),
     ...reviewFileDiff.fields,

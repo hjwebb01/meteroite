@@ -1,5 +1,6 @@
 "use client";
 
+import { Disclosure, DisclosureSummary } from "@/components/ui/disclosure";
 import { useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -13,6 +14,7 @@ import {
 } from "../../../../convex/lib/review_navigation";
 import type { ReviewNavigationTarget } from "../lib/review-diff";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
 export function ReviewNavigation({
@@ -92,10 +94,10 @@ export function ReviewNavigation({
             hunks.filter((hunk) => hunk.id === id),
           );
           return (
-            <details key={group.id} className="rounded-md border p-3">
-              <summary className="cursor-pointer text-sm font-medium">
+            <Disclosure key={group.id} boxed>
+              <DisclosureSummary className="text-sm font-medium">
                 {group.title} · {members.length} hunks
-              </summary>
+              </DisclosureSummary>
               <p className="mt-2 text-xs leading-5 text-muted-foreground">
                 {group.purpose}
               </p>
@@ -109,13 +111,13 @@ export function ReviewNavigation({
                   feedback?.some((entry) => entry.groupId === group.id) ?? false
                 }
               />
-            </details>
+            </Disclosure>
           );
         })}
-        <details className="rounded-md border p-3">
-          <summary className="cursor-pointer text-sm font-medium">
+        <Disclosure boxed>
+          <DisclosureSummary className="text-sm font-medium">
             Ungrouped changes · {ungrouped.length} hunks
-          </summary>
+          </DisclosureSummary>
           <p className="mt-2 text-xs text-muted-foreground">
             {groups.length
               ? "These saved hunks are outside the generated groups."
@@ -124,7 +126,7 @@ export function ReviewNavigation({
           <div className="mt-2">
             {ungrouped.map((hunk) => hunkButton(hunk))}
           </div>
-        </details>
+        </Disclosure>
       </div>
       <label htmlFor={searchId} className="mt-5 block text-xs font-medium">
         Find a changed file or hunk
@@ -141,15 +143,15 @@ export function ReviewNavigation({
       </p>
       <div className="mt-2 max-h-72 overflow-y-auto">
         {matchingFiles.map((file) => (
-          <details key={file.filename} className="border-t py-2">
-            <summary className="cursor-pointer break-all text-xs">
+          <Disclosure key={file.filename} className="border-t py-2">
+            <DisclosureSummary className="break-all text-xs">
               <code>{file.filename}</code>
               {file.previousFilename && (
                 <span className="block text-muted-foreground">
                   Renamed from {file.previousFilename}
                 </span>
               )}
-            </summary>
+            </DisclosureSummary>
             <button
               type="button"
               onClick={() => onNavigate({ kind: "file", path: file.filename })}
@@ -173,7 +175,7 @@ export function ReviewNavigation({
             {hunks
               .filter((hunk) => hunk.path === file.filename)
               .map((hunk) => hunkButton(hunk))}
-          </details>
+          </Disclosure>
         ))}
       </div>
     </section>
@@ -235,7 +237,7 @@ function GroupingFeedback({
           <label htmlFor={`group-feedback-${group.id}`} className="text-xs">
             What doesn’t belong together?
           </label>
-          <textarea
+          <Textarea
             id={`group-feedback-${group.id}`}
             required
             maxLength={1000}
@@ -244,7 +246,7 @@ function GroupingFeedback({
               setReason(event.target.value);
               requestId.current = null;
             }}
-            className="mt-2 min-h-20 w-full rounded-md border bg-background p-2 text-xs focus-visible:outline-2 focus-visible:outline-ring"
+            className="mt-2 min-h-20 p-2 text-xs md:text-xs"
           />
           <p className="mt-1 text-xs text-muted-foreground">
             Private feedback. Groups stay available.

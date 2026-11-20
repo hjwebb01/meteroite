@@ -15,9 +15,6 @@ type Proposal = Omit<
   "workId" | "attempt"
 >;
 
-// The worker's side of one Attempt's Lease. Every write is refused with a
-// ConvexError (reason "cancelled" or "time-limit") once the Lease has ended;
-// pass whatever stopped the worker to `fail` to record the outcome.
 export function findingLease(
   convex: ReturnType<typeof getConvexAdminClient>,
   {
@@ -30,7 +27,6 @@ export function findingLease(
   const lease = { workId, attempt };
   let stage = "Inspecting pinned source";
   return {
-    // Confirms the Lease is still held, reporting the current stage.
     heartbeat: async (next?: string) => {
       if (next) stage = next;
       await convex.mutation(jobs.progress, { ...lease, progress: stage });
@@ -54,7 +50,6 @@ export function findingLease(
       }),
     finish: (result: Conclusion) =>
       convex.mutation(jobs.finish, { ...lease, result }),
-    // Fails this Attempt only; a newer Attempt or ended work is left alone.
     fail: (error: unknown, signal?: AbortSignal) => {
       const reason = findingStopReason(error, signal);
       const cause =

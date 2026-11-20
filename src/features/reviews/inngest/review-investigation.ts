@@ -1,9 +1,15 @@
 import type { Octokit } from "octokit";
 import { createRepositoryReader } from "../lib/github-context";
 import { validateFindings, type ChangedFile } from "../lib/review";
-import { createRepositoryTools } from "../lib/review-tools";
+import {
+  createRepositoryTools,
+  describeReviewAction,
+  describeReviewTarget,
+  type ReviewToolCall,
+} from "../lib/review-tools";
 import { runReviewAgent } from "./review-agent";
 import type { PartReport, PartSummary, ReviewRun } from "./review-run";
+import { mark } from "../lib/timing-temp"; // TIMING-TEMP
 
 const SYSTEM = `You are a private code reviewer. Investigate the supplied pull request and its repository before producing a review.
 Find concrete bugs introduced by the change: correctness, security, data loss, broken contracts, and meaningful regressions. Do not report stylistic preferences or speculative issues. No finding is better than an unsupported finding.
@@ -21,11 +27,6 @@ Be explicit about unverified assumptions and review coverage. This is static ana
 const BUDGET_WARNING =
   "The investigation stopped early to keep the review within the model input budget; coverage is partial.";
 
-/**
- * Investigates the whole pull request, or one part of it when `part` is set.
- * A part sees its own patches; other changed files are listed without them.
- * Every investigation returns the same report shape.
- */
 export async function investigate(
   octokit: Octokit,
   run: ReviewRun,
@@ -36,6 +37,7 @@ export async function investigate(
         file.part === part.index ? file : { ...file, patch: undefined },
       )
     : run.snapshot.files;
+  mark("investigate-start", { part: part?.index ?? null }); // TIMING-TEMP
   const reader = createRepositoryReader(
     octokit,
     { ...run.snapshot, files },
@@ -65,7 +67,19 @@ export async function investigate(
     system: SYSTEM,
     context,
     budget: run.budget,
-    tools: createRepositoryTools(run.snapshot, reader, run.checkActive),
+    tools: createRepositoryTools(run.snapshot, reader, run.checkActive).map(
+      (tool) => ({
+        ...tool,
+        execute: async (args: unknown, call: ReviewToolCall) => {
+          await run.reportAction(
+            tool.name,
+            describeReviewAction(tool.name, args),
+            describeReviewTarget(tool.name, args),
+          );
+          return tool.execute(args, call);
+        },
+      }),
+    ),
     limitTurn: reader.limitTurn,
     maxTurns: 8,
     signal: AbortSignal.timeout(300_000),
@@ -85,10 +99,6 @@ function partScope({ index, count }: { index: number; count: number }) {
   return `This pull request is too large for one review, so it is reviewed in ${count} parts. You review part ${index + 1}: the changedFiles entries that include a patch. Other changed files are listed without patches and are reviewed separately; read them only where your part depends on them.`;
 }
 
-/**
- * Serializable result of one part. Findings are validated against the lines
- * this part delivered, and only cited lines cross into synthesis.
- */
 export function summarizePart(
   run: ReviewRun,
   report: PartReport,

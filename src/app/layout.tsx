@@ -12,7 +12,6 @@ const sans = Hanken_Grotesk({
   fallback: ["system-ui", "Segoe UI", "Helvetica", "Arial", "sans-serif"],
 });
 
-// Code, file paths and revision ids only.
 const code = Spline_Sans_Mono({
   variable: "--font-code-face",
   subsets: ["latin"],

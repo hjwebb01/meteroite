@@ -202,7 +202,5 @@ test("a deadline that expires during authorization cannot send a write later", a
       async () => controller.signal,
     ),
   ).rejects.toThrow();
-  // The custom transport cannot observe browser abort semantics; the helper
-  // itself must reject before invoking any transport.
   expect(fetch).not.toHaveBeenCalled();
 });

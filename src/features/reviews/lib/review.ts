@@ -44,7 +44,6 @@ export function parsePullRequestUrl(value: string) {
 
 const MAX_FINDINGS = 20;
 
-// A missing or unrecognised label only drops the label, never the finding.
 const categorySchema = z
   .enum(FINDING_CATEGORIES)
   .nullish()
@@ -81,9 +80,6 @@ export const findingSchema = z.object({
   confidence: confidenceSchema,
 });
 
-// The response shapes carry no length or count bounds, so one hotspot or
-// finding that breaks a bound is rejected on its own by validateHotspots or
-// validateFindings instead of failing the whole review.
 const side = z.enum(["LEFT", "RIGHT"]);
 const hotspotResponseSchema = z.object({
   kind: hotspotDraftSchema.shape.kind,
@@ -124,7 +120,6 @@ export type ChangedFile = {
   previous_filename?: string;
   status: string;
   patch?: string;
-  /** Which review part's model context carries this patch. */
   part?: number;
   anchors?: { LEFT: number[]; RIGHT: number[] };
   hunks?: ChangeHunk[];

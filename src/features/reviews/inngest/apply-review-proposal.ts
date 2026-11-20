@@ -82,7 +82,6 @@ export const applyReviewProposal = inngest.createFunction(
             confirmed = await commitApplication(octokit, application, proposal);
           } catch (error) {
             if (!(error instanceof ApplicationWriteRejectedError)) throw error;
-            // Reconcile even a rejection: an earlier attempt may have committed.
             confirmed = await reconcileApplication(
               octokit,
               application,

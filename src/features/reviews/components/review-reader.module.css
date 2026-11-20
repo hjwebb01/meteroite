@@ -18,12 +18,6 @@
   border-radius: calc(var(--radius) - 2px);
 }
 
-.sections {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
-  gap: 1rem;
-}
-
 .reading {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -32,7 +26,6 @@
   display: none;
 }
 
-/* A 17rem context spine and at least 45rem of source must both fit. */
 @container (min-width: 64rem) {
   .reading:has(> .brief) {
     grid-template-columns: 17rem minmax(0, 1fr);

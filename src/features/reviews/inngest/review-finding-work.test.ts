@@ -87,7 +87,6 @@ test.each([
       outputMicrosPerToken: 1,
       quotedAt: Date.now(),
     }));
-    // Without a runner or within the size limit, no check can execute.
     const staticOnly = [
       "oversize",
       "truncated",

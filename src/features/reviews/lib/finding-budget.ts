@@ -4,7 +4,6 @@ export type FindingPrice = {
   outputMicrosPerToken: number;
   quotedAt: number;
 };
-// A model that cannot be priced is refused with a message for the user.
 export class FindingPriceError extends Error {
   name = "FindingPriceError";
 }
@@ -52,7 +51,6 @@ const PRICE_QUOTE_TTL_MS = 15 * 60_000;
 const isPriceQuoteCurrent = (price: FindingPrice) =>
   Date.now() - price.quotedAt <= PRICE_QUOTE_TTL_MS;
 
-// Queued or retried work can outlive the quote taken when it was requested.
 export async function currentFindingPrice(
   model: string,
   saved?: FindingPrice,

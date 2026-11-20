@@ -18,9 +18,6 @@ export type PublicationSnapshot = {
   source: string;
 };
 
-// Read the same latest conclusions used by reviewInteractions.verdicts in one
-// transaction with the saved review. The source binds all eligible content,
-// including content omitted by GitHub's body limit, and explicit exclusions.
 export async function publicationSnapshot(
   ctx: QueryCtx,
   review: Doc<"reviews">,

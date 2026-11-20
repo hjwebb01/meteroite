@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import styles from "./sample-review.module.css";
 
 interface SampleLine {
@@ -16,7 +16,13 @@ interface SampleSection {
   purpose: string;
   file: string;
   location: string;
-  findingCount: number;
+  finding: {
+    line: number;
+    severity: "High" | "Low";
+    title: string;
+    text: string;
+    meta: ReactNode;
+  };
   lines: SampleLine[];
 }
 
@@ -25,10 +31,21 @@ const sections: SampleSection[] = [
     id: "calculation",
     title: "Calculate the discounted total",
     purpose:
-      "Applies a fixed discount to the subtotal. Start here: this is the amount that reaches payment.",
+      "Applies a fixed discount to the subtotal. This is the amount that reaches payment.",
     file: "src/checkout/total.ts",
     location: "new 18–25",
-    findingCount: 1,
+    finding: {
+      line: 24,
+      severity: "High",
+      title: "The total can go below zero",
+      text: "When the discount is larger than the subtotal, line 24 returns a negative amount, and that amount reaches payment.",
+      meta: (
+        <>
+          Evidence: total.ts new 19 and 24 · Suggested fix: clamp with{" "}
+          <code>Math.max(0, …)</code>
+        </>
+      ),
+    },
     lines: [
       {
         oldLine: 18,
@@ -78,7 +95,18 @@ const sections: SampleSection[] = [
       "Trims the entered code before looking up its discount. This is the input path into the total.",
     file: "src/checkout/discount-code.ts",
     location: "new 7–11",
-    findingCount: 0,
+    finding: {
+      line: 10,
+      severity: "Low",
+      title: "Codes match case-sensitively",
+      text: "A shopper typing save10 will not match SAVE10. Worth confirming whether that is intended.",
+      meta: (
+        <>
+          Evidence: discount-code.ts new 8 and 10 · Suggested fix: confirm the
+          intent, or normalize the code before lookup
+        </>
+      ),
+    },
     lines: [
       {
         oldLine: 7,
@@ -115,7 +143,6 @@ const sections: SampleSection[] = [
   },
 ];
 
-/** The landing's live fragment: choose a purpose and the brief folds into a spine beside its source. */
 export function SampleReview() {
   const id = useId();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -169,19 +196,19 @@ export function SampleReview() {
       {!selected && (
         <div className={styles.brief}>
           <div className={styles.briefIntro}>
-            <p className={styles.briefLabel}>
-              Generated brief · illustrative, not live model output
-            </p>
             <p className={styles.orientation}>
               A checkout code now changes the payment total. Open a purpose to
               read its exact diff.
             </p>
           </div>
           <ul className={styles.sections} aria-label="Sample purpose sections">
-            {sections.map((section) => {
+            {sections.map((section, index) => {
               const read = readIds.includes(section.id);
               return (
-                <li key={section.id} className={styles.purpose}>
+                <li
+                  key={section.id}
+                  className={`${styles.purpose} ${index === 0 ? styles.purposeLead : ""}`}
+                >
                   <button
                     ref={(node) => registerButton(section.id, node)}
                     type="button"
@@ -190,13 +217,18 @@ export function SampleReview() {
                     aria-expanded={false}
                     onClick={() => openSection(section.id)}
                   >
-                    <span className={styles.purposeTitle}>{section.title}</span>
+                    <span className={styles.purposeTitle}>
+                      {section.title}
+                      {index === 0 && (
+                        <span className={styles.startHere}>Start here</span>
+                      )}
+                    </span>
                     <span className={styles.purposeDescription}>
                       {section.purpose}
                     </span>
                     <span className={styles.grounding}>
-                      <code>{section.file}</code> · {section.location} ·{" "}
-                      {section.findingCount === 1 ? "1 finding" : "no findings"}
+                      <code>{section.file}</code> · {section.location} · 1
+                      finding
                     </span>
                   </button>
                   <button
@@ -205,7 +237,7 @@ export function SampleReview() {
                     aria-pressed={read}
                     onClick={() => toggleRead(section.id)}
                   >
-                    {read ? "Read" : "Mark read"}
+                    {read ? "Marked read" : "Mark read"}
                     <span className="sr-only">: {section.title}</span>
                   </button>
                 </li>
@@ -213,15 +245,16 @@ export function SampleReview() {
             })}
           </ul>
           <p className={styles.note}>
-            Ungrouped: 0 hunks · All changes (2 files). Read marks stay in this
-            visit and never approve the change.
+            Sample brief: generated text, not live model output. Every changed
+            hunk belongs to a purpose. Read marks are yours, reset on reload,
+            and never approve the change.
           </p>
         </div>
       )}
 
       <div className={selected ? styles.reading : undefined} hidden={!selected}>
         {selected && (
-          <nav className={styles.spine} aria-label="Context spine">
+          <nav className={styles.spine} aria-label="Sections of this brief">
             <button
               type="button"
               className={styles.back}
@@ -229,7 +262,7 @@ export function SampleReview() {
             >
               ← Back to brief
             </button>
-            <p className={styles.spineLabel}>Generated brief</p>
+            <p className={styles.spineLabel}>Sections</p>
             {sections.map((section) => {
               const active = section.id === selected.id;
               const read = readIds.includes(section.id);
@@ -244,8 +277,7 @@ export function SampleReview() {
                 >
                   <span className={styles.spineTitle}>{section.title}</span>
                   <span className={styles.spineState}>
-                    {active ? "Reading" : read ? "Read" : "Unread"} ·{" "}
-                    {section.findingCount === 1 ? "1 finding" : "no findings"}
+                    {active ? "Reading" : read ? "Read" : "Unread"} · 1 finding
                   </span>
                 </button>
               );
@@ -256,7 +288,9 @@ export function SampleReview() {
               aria-pressed={readIds.includes(selected.id)}
               onClick={() => toggleRead(selected.id)}
             >
-              {readIds.includes(selected.id) ? "Read · undo" : "Mark read"}
+              {readIds.includes(selected.id)
+                ? "Marked read · undo"
+                : "Mark read"}
             </button>
           </nav>
         )}
@@ -269,11 +303,7 @@ export function SampleReview() {
           {selected && (
             <>
               <div className={styles.sourceHeader}>
-                <h3
-                  ref={sourceHeading}
-                  id={`${id}-source-title`}
-                  tabIndex={-1}
-                >
+                <h3 ref={sourceHeading} id={`${id}-source-title`} tabIndex={-1}>
                   <code>{selected.file}</code>
                 </h3>
                 <p>{selected.location} · unified</p>
@@ -316,32 +346,25 @@ export function SampleReview() {
                       </span>
                       <code>{line.text || " "}</code>
                     </div>
-                    {selected.id === "calculation" && line.newLine === 24 && (
-                      <div className={styles.finding}>
+                    {line.newLine === selected.finding.line && (
+                      <div
+                        className={styles.finding}
+                        data-severity={selected.finding.severity.toLowerCase()}
+                      >
                         <p className={styles.severity}>
-                          High · new line 24 · 8c21e4a
+                          {selected.finding.severity} · new line{" "}
+                          {selected.finding.line} · 8c21e4a
                         </p>
-                        <h4>The total can go below zero</h4>
-                        <p>
-                          When the discount is larger than the subtotal, line
-                          24 returns a negative amount, and that amount reaches
-                          payment.
-                        </p>
+                        <h4>{selected.finding.title}</h4>
+                        <p>{selected.finding.text}</p>
                         <p className={styles.findingMeta}>
-                          Evidence: total.ts new 19 and 24 · Suggested fix:
-                          clamp with <code>Math.max(0, …)</code>
+                          {selected.finding.meta}
                         </p>
                       </div>
                     )}
                   </div>
                 ))}
               </div>
-              {selected.findingCount === 0 && (
-                <p className={styles.noFindings}>
-                  No finding in this section. That is not a claim that the code
-                  is safe.
-                </p>
-              )}
             </>
           )}
         </section>

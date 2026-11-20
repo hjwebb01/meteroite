@@ -247,7 +247,6 @@ export function createAssessment({
               : [
                   "The assessment's source evidence could not be validated against inspected code.",
                   ...unsupported.map(({ path, line, quote }) => {
-                    // Keeps a 500-character path within the 700-character entry limit.
                     const cited = quote.trim();
                     const shown =
                       cited.length > 160 ? `${cited.slice(0, 159)}…` : cited;
