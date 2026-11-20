@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useState } from "react";
 import styles from "./landing.module.css";
 
 const findings = [
@@ -22,17 +22,11 @@ const findings = [
   },
 ] as const;
 
-type ReviewType = "comment" | "changes";
-
-/** Sample of the publication preview: toggles change the exact text GitHub would receive. */
 export function LandingPublicationDemo() {
-  const id = useId();
-  const [reviewType, setReviewType] = useState<ReviewType>("comment");
   const [included, setIncluded] = useState<Record<string, boolean>>({
     "negative-total": true,
     "case-sensitive": false,
   });
-  const [fallback, setFallback] = useState(false);
   const chosen = findings.filter((finding) => included[finding.id]);
   const summary =
     chosen.length === 0
@@ -43,64 +37,10 @@ export function LandingPublicationDemo() {
 
   return (
     <div className={styles.demo}>
-      <div
-        className={styles.demoOutput}
-        aria-live="polite"
-        aria-label="Sample publication output"
-      >
-        <div className={styles.demoHead}>
-          <span>To hjwebb01/meteroite-review-fixture #1</span>
-          <span>{reviewType === "comment" ? "Comment" : "Request changes"}</span>
-        </div>
-        <div className={styles.demoBody}>
-          <p className={styles.demoLabel}>Review body</p>
-          <p>Meteroite review of 8c21e4a</p>
-          <p>{summary}</p>
-          {chosen.map((finding) => (
-            <p key={finding.id}>
-              – {finding.body}
-              {fallback && `: ${finding.inline}`}
-            </p>
-          ))}
-        </div>
-        {!fallback &&
-          chosen.map((finding) => (
-            <div key={finding.id} className={styles.demoInline}>
-              <p className={styles.demoLabel}>
-                Inline comment · <code>{finding.target}</code>
-              </p>
-              <p>{finding.inline}</p>
-            </div>
-          ))}
-        {fallback && (
-          <p className={styles.demoNote}>
-            Summary-only fallback: used only if GitHub rejects inline placement.
-            The comments move into the body.
-          </p>
-        )}
-      </div>
-
+      <p className="sr-only" role="status">
+        {chosen.length} inline comments included
+      </p>
       <div className={styles.demoControls}>
-        <div
-          role="radiogroup"
-          aria-labelledby={`${id}-type`}
-          className={styles.demoRow}
-        >
-          <span id={`${id}-type`}>Review type</span>
-          <div className={styles.segmented}>
-            {(["comment", "changes"] as const).map((type) => (
-              <button
-                key={type}
-                type="button"
-                role="radio"
-                aria-checked={reviewType === type}
-                onClick={() => setReviewType(type)}
-              >
-                {type === "comment" ? "Comment" : "Request changes"}
-              </button>
-            ))}
-          </div>
-        </div>
         {findings.map((finding) => (
           <label key={finding.id} className={styles.demoRow}>
             <span>{finding.label}</span>
@@ -118,28 +58,33 @@ export function LandingPublicationDemo() {
             />
           </label>
         ))}
-        <label className={styles.demoRow}>
-          <span>Show fallback version</span>
-          <input
-            type="checkbox"
-            role="switch"
-            className={styles.switch}
-            checked={fallback}
-            onChange={(event) => setFallback(event.target.checked)}
-          />
-        </label>
-        <dl className={styles.demoFacts}>
-          <div>
-            <dt>Inline comments</dt>
-            <dd>{fallback ? 0 : chosen.length}</dd>
+      </div>
+
+      <div
+        className={styles.demoOutput}
+        role="region"
+        aria-label="Sample publication output"
+      >
+        <div className={styles.demoHead}>
+          <span>To hjwebb01/meteroite-review-fixture #1</span>
+          <span>Sample output</span>
+        </div>
+        <div className={styles.demoBody}>
+          <p className={styles.demoLabel}>Review body · posts as a comment</p>
+          <p>Meteroite review of 8c21e4a</p>
+          <p>{summary}</p>
+          {chosen.map((finding) => (
+            <p key={finding.id}>– {finding.body}</p>
+          ))}
+        </div>
+        {chosen.map((finding) => (
+          <div key={finding.id} className={styles.demoInline}>
+            <p className={styles.demoLabel}>
+              Inline comment · <code>{finding.target}</code>
+            </p>
+            <p>{finding.inline}</p>
           </div>
-          <div>
-            <dt>Saved revision</dt>
-            <dd>
-              <code>8c21e4a</code>
-            </dd>
-          </div>
-        </dl>
+        ))}
       </div>
     </div>
   );

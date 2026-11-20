@@ -75,8 +75,6 @@ export const thread = query({
   },
 });
 
-// The latest reconsidered verdict per finding, so a retraction stays visible
-// wherever the original claim is shown.
 export const verdicts = query({
   args: { reviewId: v.id("reviews") },
   handler: async (ctx, { reviewId }) => {

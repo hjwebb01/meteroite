@@ -41,21 +41,17 @@
   --radius-md: var(--radius);
   --radius-lg: var(--radius);
   --radius-xl: var(--radius);
-  /* Surfaces are separated by tone, never by a resting shadow. */
   --shadow-2xs: 0 0 #0000;
   --shadow-xs: 0 0 #0000;
   --shadow-sm: 0 0 #0000;
-  /* Hanken sets small; one step up keeps running text at 15px and above. */
   --text-xs: 0.8125rem;
   --text-xs--line-height: 1.5;
   --text-sm: 0.9375rem;
   --text-sm--line-height: 1.55;
 }
 
-/* One production appearance; shared component tokens keep their public names. */
 :root,
 .dark {
-  /* Controls and surfaces are square; only avatars and status dots stay round. */
   --radius: 0rem;
   --background: var(--review-bg);
   --foreground: var(--review-text);
@@ -120,7 +116,6 @@
   @apply rounded-full bg-border border-[1px] border-transparent border-solid bg-clip-padding;
 }
 
-/* Charcoal grounds, sage marks the one action; the concrete field holds notes the reader must weigh. */
 :root {
   --font-ui-face: var(--font-sans-face, system-ui);
   --font-display-face: var(--font-sans-face, system-ui);
@@ -219,7 +214,6 @@
   }
 }
 
-/* Finding dismissal keeps its existing local feedback, without ambient motion. */
 @keyframes cool {
   from {
     color: var(--heat);
@@ -236,7 +230,6 @@
   }
 }
 
-/* Press feedback does not shift the source or contract reading surfaces. */
 @layer base {
   :where(button, [role="button"], a[data-slot="button"]):not(:disabled) {
     transition-property: color, background-color, border-color;
@@ -263,14 +256,13 @@
   .review-field :where(a) {
     color: var(--review-field-ink);
   }
-  /* Secondary ink and links darken on the field so they keep their contrast. */
   .review-field {
     --muted-foreground: #4a4a44;
     --review-text-muted: #4a4a44;
-    --review-text-dim: #5a5a54;
-    --review-link: #3f5a3e;
+    --review-text-dim: #4a4a44;
+    --review-link: #2f4a2e;
     --border: #a9a69b;
-    --ring: #3f5a3e;
+    --ring: #2f4a2e;
   }
   .review-field .bg-review-bg {
     color: var(--review-text);

@@ -6,8 +6,6 @@ import type {
   OptionalRestArgs,
 } from "convex/server";
 
-// HTTP calls support internal references at runtime with admin authentication;
-// the SDK's public declarations only accept public references.
 type ConvexAdminClient = {
   query<Query extends FunctionReference<"query", "internal">>(
     query: Query,
@@ -19,15 +17,10 @@ type ConvexAdminClient = {
   ): Promise<FunctionReturnType<Mutation>>;
 };
 
-// The installed SDK implements setAdminAuth but strips this @internal method
-// from its published declarations. Keep that compatibility cast here.
 type AdminConvexHttpClient = ConvexHttpClient & {
   setAdminAuth(token: string): void;
 };
 
-// Cloud deploy keys look like `dev:<deployment>|…` or `prod:<deployment>|…`.
-// Preview keys, or keys for another deployment, are rejected by Convex with a
-// bare "Not authorized", so name the mismatch before any call is made.
 export function convexDeployKeyProblem(): string | null {
   const deployKey = process.env.CONVEX_DEPLOY_KEY;
   if (!deployKey) return "CONVEX_DEPLOY_KEY is not configured";

@@ -3,18 +3,36 @@ import { fixupConfigRules } from "@eslint/compat";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 
+const DIRECTIVE =
+  /^\s*(eslint|@ts-|@vitest|@jsx|istanbul|v8 ignore|prettier-ignore)|^\/\s*<reference/;
+
+const noComments = {
+  meta: {
+    type: "problem",
+    messages: {
+      comment:
+        "Delete the comment. A decision worth keeping goes in docs/adr; a hack it excuses needs an issue.",
+    },
+    schema: [],
+  },
+  create: (context) => ({
+    Program() {
+      for (const comment of context.sourceCode.getAllComments()) {
+        if (!DIRECTIVE.test(comment.value))
+          context.report({ loc: comment.loc, messageId: "comment" });
+      }
+    },
+  }),
+};
+
 const eslintConfig = defineConfig([
-  // Next's React, import, and accessibility plugins still use pre-v10 rule APIs.
   ...fixupConfigRules([...nextVitals, ...nextTs]),
-  // Override default ignores of eslint-config-next.
   globalIgnores([
-    // Default ignores of eslint-config-next:
     ".next/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
     "convex/_generated/**",
-    // Local, gitignored video projects.
     "motion/**",
   ]),
   {
@@ -30,8 +48,12 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    files: ["**/*.{js,mjs,ts,mts,tsx}"],
+    plugins: { local: { rules: { "no-comments": noComments } } },
+    rules: { "local/no-comments": "error" },
+  },
+  {
     files: ["src/**/*.tsx"],
-    // Page-level shells render once, so fixed ids there cannot collide.
     ignores: ["src/features/reviews/components/reviews-workspace.tsx"],
     rules: {
       "no-restricted-syntax": [
@@ -46,7 +68,6 @@ const eslintConfig = defineConfig([
     },
   },
   {
-    // Vendored AI Elements render blob and data URLs that next/image cannot load.
     files: ["src/components/ai-elements/**"],
     rules: { "@next/next/no-img-element": "off" },
   },

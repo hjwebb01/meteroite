@@ -17,10 +17,8 @@ const MAX_FILE_BYTES = 250_000;
 const MAX_READS = 60;
 const MAX_SEARCH_FILES = 25;
 const MAX_SEARCH_MATCHES = 20;
-// Keeps one stored diff well under Convex's 1 MiB document limit.
 const MAX_DISPLAY_PATCH_CHARS = 400_000;
 
-/** The full GitHub patch saved for display, including files the model was not given. */
 export type ReviewFileDiff = {
   filename: string;
   previousFilename?: string;
@@ -106,12 +104,6 @@ export async function loadReviewSignals(
   return { draft: draftSignal, checks };
 }
 
-/**
- * Packs patch sizes into at most `maxParts` model contexts of `capacity`
- * tokens each. Files stay in listing order, so neighbouring paths share a
- * part; once every part is open, later files take any part with room.
- * Returns each file's part, or undefined when its patch is left out.
- */
 export function assignReviewParts(
   sizes: (number | undefined)[],
   capacity: number,
@@ -159,7 +151,6 @@ export async function loadPullRequest(
   const listed: Awaited<
     ReturnType<Octokit["rest"]["pulls"]["listFiles"]>
   >["data"] = [];
-  // GitHub listFiles returns 100 per page. A second page handles a concurrent increase.
   for (let page = 1; page <= 2; page++) {
     const { data } = await octokit.rest.pulls.listFiles({
       owner,
@@ -408,8 +399,6 @@ export function createRepositoryReader(
 
   for (const file of snapshot.files) {
     if (!file.patch) continue;
-    // Quoted evidence comes from the head revision only. Deleted anchors may
-    // still cite other head files to explain a regression caused by removal.
     evidence.set(file.filename, changedLineAnchors(file.patch, "RIGHT"));
   }
 
@@ -657,7 +646,6 @@ export function createRepositoryReader(
     );
   }
 
-  /** Caps lines delivered until the next call so one turn cannot overflow the model input. */
   function limitTurn(tokens: number) {
     turnTokens = tokens;
   }

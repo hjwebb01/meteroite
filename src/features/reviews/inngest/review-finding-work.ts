@@ -111,8 +111,6 @@ async function respondToFinding({
   ]);
   const poll = setInterval(() => {
     void heartbeat().catch((error) => {
-      // A transient transport failure is not an ended Lease. The next
-      // synchronous heartbeat still guards every saved result.
       const reason = findingStopReason(error);
       if (reason !== "infrastructure")
         cancellation.abort(
@@ -346,8 +344,6 @@ function unavailableCheck(output: string, sourceSha: string) {
   return { command: [], status: "unavailable" as const, output, sourceSha };
 }
 
-// Without a usable runner the investigation continues as static inspection,
-// and the limitation is recorded where checks would appear.
 async function openExecution(
   octokit: Octokit,
   work: WorkDoc,

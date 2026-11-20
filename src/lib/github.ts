@@ -8,11 +8,6 @@ export const getGithubToken = async (userId: string) => {
   return tokens.data[0]?.token ?? null;
 };
 
-/**
- * Builds an Octokit for the user inside an Inngest step. Call it in each step
- * that needs GitHub and never return the token: event payloads and step
- * results are persisted by Inngest.
- */
 export const createUserOctokit = async (userId: string) => {
   const token = await getGithubToken(userId);
   if (!token) {

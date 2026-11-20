@@ -48,7 +48,6 @@ async function recordPublication(
       githubReview,
     });
   } catch {
-    // GitHub confirmed the review. Its stable marker recovers failed recording.
   }
   return githubReview;
 }
@@ -171,7 +170,6 @@ export async function POST(request: Request) {
   let github;
   try {
     github = await createUserOctokit(identity.userId);
-    // Recovery is read-only and remains possible even when the PR has moved.
     const recovered = await findPostedGithubReview(github, review);
     if (recovered)
       return NextResponse.json({
@@ -286,7 +284,6 @@ export async function POST(request: Request) {
       review,
       findings,
       async () => {
-        // Called before both normal publication and the possible 422 fallback.
         remoteAttempted = false;
         const live = await observeReviewFreshness(github, review);
         if (
@@ -297,8 +294,6 @@ export async function POST(request: Request) {
               ? "The outgoing review changed. Refresh the preview and confirm again."
               : live.reason,
           );
-        // Start the deadline before authorization, so a delayed response cannot
-        // resume with a new unbounded remote write after the attempt is reset.
         const signal = AbortSignal.timeout(60_000);
         const authorized = await getConvexAdminClient().mutation(
           internal.reviewPublications.authorizeWrite,
@@ -339,7 +334,6 @@ export async function POST(request: Request) {
             ),
           });
       } catch {
-        // Absence or failed lookup cannot prove that the write did not happen.
       }
     }
     try {
@@ -350,7 +344,6 @@ export async function POST(request: Request) {
         uncertain,
       });
     } catch {
-      // Keep the existing claim recoverable if persistence is unavailable.
     }
     return NextResponse.json(
       {

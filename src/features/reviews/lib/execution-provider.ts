@@ -42,7 +42,6 @@ const CAPABILITY_TTL_MS = 60_000;
 let cachedCapability: { value: ExecutionCapability; expiresAt: number } | null =
   null;
 
-// Probing starts a systemd unit, so share one result across requests.
 export async function executionCapability(): Promise<ExecutionCapability> {
   if (cachedCapability && cachedCapability.expiresAt > Date.now())
     return cachedCapability.value;

@@ -1,8 +1,9 @@
 "use client";
 
 import ChevronDownIcon from "@boxicons/react/ChevronDown";
-import LoaderIcon from "@boxicons/react/LoaderLines";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { StatusDot } from "@/components/ui/status-dot";
 import {
   Popover,
   PopoverContent,
@@ -27,12 +28,11 @@ export function ChatGPTProvider({
           className="gap-2 text-review-body hover:text-foreground"
           aria-label="ChatGPT connection settings"
         >
-          <span
-            aria-hidden="true"
+          <StatusDot
             className={
               status.connected
-                ? "size-1.5 rounded-full bg-sev-resolved"
-                : "size-1.5 rounded-full border border-review-muted"
+                ? "bg-sev-resolved"
+                : "border border-review-muted bg-transparent"
             }
           />
           {status.connected ? "ChatGPT" : "Connect ChatGPT"}
@@ -48,13 +48,13 @@ export function ChatGPTProvider({
       >
         <div>
           <h2 className="text-sm font-medium">ChatGPT connection</h2>
-          <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+          <p className="mt-1 text-xs leading-relaxed text-review-muted">
             Connect your ChatGPT account to add its models to the review model
             picker. Each review uses the provider selected there.
           </p>
         </div>
         {status.connected && (
-          <p className="break-all text-xs text-muted-foreground">
+          <p className="break-all text-xs text-review-muted">
             Connected as {status.email ?? "your ChatGPT account"}
           </p>
         )}
@@ -69,10 +69,7 @@ export function ChatGPTProvider({
         {pending && (
           <div className="space-y-2">
             <p role="status" className="flex items-center gap-2 text-xs">
-              <LoaderIcon
-                aria-hidden="true"
-                className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none"
-              />
+              <Spinner aria-hidden="true" className="size-3.5" />
               Finish signing in in the new tab.
             </p>
             <Button
@@ -85,7 +82,6 @@ export function ChatGPTProvider({
             </Button>
           </div>
         )}
-        {/* Keep the form mounted while the browser performs its native submission. */}
         <form
           hidden={pending}
           action="/api/providers/chatgpt"
@@ -100,12 +96,7 @@ export function ChatGPTProvider({
             disabled={busy}
             type="submit"
           >
-            {busy && (
-              <LoaderIcon
-                aria-hidden="true"
-                className="size-3.5 shrink-0 animate-spin motion-reduce:animate-none"
-              />
-            )}
+            {busy && <Spinner aria-hidden="true" className="size-3.5" />}
             {status.connected ? "Reconnect ChatGPT" : "Continue with ChatGPT"}
           </Button>
         </form>
@@ -133,7 +124,7 @@ export function ChatGPTProvider({
             Retry loading models
           </Button>
         )}
-        <p className="text-xs leading-relaxed text-muted-foreground">
+        <p className="text-xs leading-relaxed text-review-muted">
           Uses your eligible ChatGPT plan and its usage limits. Your connection
           is saved locally.
         </p>

@@ -7,12 +7,17 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint --max-warnings 0",
+    "lint:ratchet": "eslint --prune-suppressions",
     "format": "prettier --write .",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "check:convex": "node scripts/check-convex-modules.mjs",
     "check:env": "node scripts/check-env.mjs",
     "check:models": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-models.mts",
+    "verify": "node scripts/verify.mjs",
+    "verify:push": "node scripts/verify-push.mjs",
+    "test:hooks": "node scripts/test-hooks.mjs",
+    "hooks:install": "node scripts/install-hooks.mjs",
     "prepare": "git config core.hooksPath .githooks"
   },
   "dependencies": {

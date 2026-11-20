@@ -240,8 +240,6 @@ export const expire = internalMutation({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
-    // Queued work has no deadline yet (retry clears it), so it expires when it
-    // has waited too long since it was last queued.
     const stale = {
       queued: now - QUEUED_WORK_TTL_MS,
       running: now - 60_000,

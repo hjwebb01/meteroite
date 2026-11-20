@@ -1,5 +1,6 @@
 "use client";
 
+import { Disclosure, DisclosureSummary } from "@/components/ui/disclosure";
 import type { Doc } from "../../../../convex/_generated/dataModel";
 import type { Hotspot } from "../../../../convex/lib/review_navigation";
 import { fileCoverageGaps } from "../../../../convex/lib/review_navigation";
@@ -86,8 +87,8 @@ export function ReviewHotspots({
         </article>
       ))}
       {files.some((file) => fileCoverageGaps(file).length) && (
-        <details className="mt-4 rounded-md border p-4 text-xs text-muted-foreground">
-          <summary className="cursor-pointer">File coverage limits</summary>
+        <Disclosure className="mt-4 rounded-md border p-4 text-xs text-muted-foreground">
+          <DisclosureSummary>File coverage limits</DisclosureSummary>
           <ul className="mt-3 space-y-3">
             {files.flatMap((file) =>
               fileCoverageGaps(file).map((gap) => (
@@ -105,7 +106,7 @@ export function ReviewHotspots({
               )),
             )}
           </ul>
-        </details>
+        </Disclosure>
       )}
     </section>
   );

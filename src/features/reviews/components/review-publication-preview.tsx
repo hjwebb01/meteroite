@@ -156,8 +156,6 @@ function PublicationPlane({
       }
       setPublished(data.githubReview);
     } catch (cause) {
-      // A lost response can follow a successful write. Require status recovery,
-      // not a second blind confirmation using the same preview.
       setPreview((current) =>
         current ? { ...current, confirmation: null } : current,
       );

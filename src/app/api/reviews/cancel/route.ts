@@ -27,14 +27,12 @@ export async function POST(request: Request) {
       { status: 404 },
     );
   }
-  // Cancellation is already saved; a missed event cannot revive the run.
   try {
     await inngest.send({
       name: "review/cancel",
       data: { reviewId: parsed.data.reviewId },
     });
   } catch {
-    /* The worker also checks the persisted status. */
   }
   return NextResponse.json({ success: true });
 }

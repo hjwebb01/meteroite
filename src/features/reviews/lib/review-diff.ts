@@ -40,15 +40,10 @@ export function navigationLocation(target: ReviewNavigationTarget) {
   };
 }
 
-/**
- * The diff side a code reference is annotated on. Only removed lines are
- * "deletions"; a missing side reads as "additions".
- */
 export function diffSideOf(side?: "LEFT" | "RIGHT") {
   return side === "LEFT" ? ("deletions" as const) : ("additions" as const);
 }
 
-/** Identifies the diff annotation a target renders as; other targets have none. */
 export function annotationKey(target: ReviewAnnotation): string;
 export function annotationKey(
   target: ReviewNavigationTarget,
@@ -68,14 +63,11 @@ type SavedFile = {
   status: string;
   patch?: string;
 };
-/** GitHub's per-file patch is hunks only; Pierre needs git file headers. */
 export function toGitPatch(file: SavedFile & { patch: string }) {
   const from = file.previousFilename ?? file.filename;
   const header = [`diff --git a/${from} b/${file.filename}`];
   if (file.status === "added") header.push("new file mode 100644");
   if (file.status === "removed") header.push("deleted file mode 100644");
-  // Pierre reads renames from the similarity line. GitHub gives no score; a
-  // renamed file with a patch changed, so any value below 100% is accurate.
   if (from !== file.filename)
     header.push(
       "similarity index 50%",
@@ -107,10 +99,6 @@ export function parseSavedDiffs(files: SavedFile[]): SavedDiff[] {
   });
 }
 
-/**
- * One CodeView item per diff, with findings anchored on their changed line.
- * All saved files remain present; annotations and navigation only affect expansion.
- */
 export function buildDiffItems(
   diffs: SavedDiff[],
   findings: ReviewFinding[],
@@ -151,7 +139,6 @@ export function buildDiffItems(
       fileDiff,
       annotations,
       collapsed,
-      // CodeView re-renders an existing item only when its version changes.
       version: hashString(
         `${collapsed}:${annotations.map((a) => (a.metadata.kind === "finding" ? a.metadata.finding.id : a.metadata.hotspot.id + a.lineNumber)).join()}`,
       ),

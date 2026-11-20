@@ -1,7 +1,3 @@
-// Convex rejects deployed module paths containing characters other than
-// letters, digits, underscores, and periods, but only at deploy time.
-// Mirrors the CLI's entry-point rules (convex/dist/cli.bundle.cjs `entryPoints`)
-// so `convex/lib/foo-bar.ts` fails here instead.
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 
@@ -18,7 +14,6 @@ const isEntryPoint = (relPath) => {
     !base.startsWith("#") &&
     base !== "schema.ts" &&
     base !== "schema.js" &&
-    // Multiple dots (foo.test.ts, auth.config.ts) are skipped by the CLI.
     (base.match(/\./g) ?? []).length <= 1 &&
     !relPath.includes(" ")
   );
@@ -28,7 +23,6 @@ const walk = (dir) =>
   readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const full = path.join(dir, entry.name);
     if (!entry.isDirectory()) return [full];
-    // Nested components are bundled separately.
     if (existsSync(path.join(full, "convex.config.ts"))) return [];
     return walk(full);
   });

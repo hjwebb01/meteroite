@@ -1,6 +1,5 @@
 import { cn } from "@/lib/utils";
 
-/** The product name beside its etched-cut mark: a slab with one corner sliced away. */
 export function Wordmark({ className }: { className?: string }) {
   return (
     <span

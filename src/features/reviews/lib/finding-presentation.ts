@@ -17,7 +17,6 @@ export const CATEGORY_LABEL: Record<
   maintainability: "Maintainability",
 };
 
-/** Worst severity first, then the finding the reviewer is surest of. */
 export function sortFindings<T extends Finding>(findings: T[]) {
   return [...findings].sort(
     (a, b) =>
@@ -26,7 +25,6 @@ export function sortFindings<T extends Finding>(findings: T[]) {
   );
 }
 
-/** Low-severity style or coverage remarks, or guesses, stay out of the main list. */
 export function isNitpick(finding: Finding) {
   return (
     finding.severity === "low" &&
@@ -42,7 +40,6 @@ export function severityCounts(findings: Finding[]) {
   return counts;
 }
 
-/** A self-contained brief a coding agent can act on without this review open. */
 export function findingAgentPrompt(finding: Finding, review: Review) {
   const location = `${finding.path}:${finding.line}${finding.side === "LEFT" ? " (removed line)" : ""}`;
   const source = `${review.sourceOwner ?? review.repoOwner}/${review.sourceRepo ?? review.repoName}`;

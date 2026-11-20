@@ -1,4 +1,5 @@
 "use client";
+import { Disclosure, DisclosureSummary } from "@/components/ui/disclosure";
 import dynamic from "next/dynamic";
 const ReviewProposalPanel = dynamic(() => import("./review-proposal-panel"), {
   ssr: false,
@@ -10,6 +11,11 @@ import type { Doc } from "../../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { CODING_MODELS } from "../../../../convex/lib/coding_models";
 import { isActiveWork } from "../../../../convex/lib/finding_lease";
+import { Input } from "@/components/ui/input";
+import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select";
 import { Textarea } from "@/components/ui/textarea";
 import { fileAtCommitUrl } from "../lib/review";
 import { useDiscussionSession } from "./discussion-sessions";
@@ -125,7 +131,7 @@ export function ReviewFindingPanel({
         ref={history}
         tabIndex={0}
         aria-label="Discussion history"
-        className="mt-4 max-h-80 overflow-y-auto space-y-4 focus-visible:outline-2 focus-visible:outline-review-link"
+        className="mt-4 max-h-80 overflow-y-auto space-y-4"
       >
         {thread?.messages.map((message) => (
           <li key={message._id} className="rounded-md border p-3 text-sm">
@@ -171,14 +177,16 @@ export function ReviewFindingPanel({
                   ))}
                 </ul>
                 {message.conclusion.assumptions.length > 0 && (
-                  <details className="mt-2">
-                    <summary>Assumptions and limits</summary>
+                  <Disclosure className="mt-2">
+                    <DisclosureSummary>
+                      Assumptions and limits
+                    </DisclosureSummary>
                     <ul className="mt-2 list-disc pl-4 text-xs">
                       {message.conclusion.assumptions.map((item, i) => (
                         <li key={i}>{item}</li>
                       ))}
                     </ul>
-                  </details>
+                  </Disclosure>
                 )}
               </>
             )}
@@ -251,10 +259,10 @@ export function ReviewFindingPanel({
           </p>
         )}
       </form>
-      <details className="mt-5 rounded-md border p-3" open={Boolean(active)}>
-        <summary className="cursor-pointer py-2 text-sm font-medium focus-visible:outline-2 focus-visible:outline-review-link">
+      <Disclosure boxed className="mt-5" open={Boolean(active)}>
+        <DisclosureSummary className="py-2 text-sm font-medium">
           Investigate and propose fix
-        </summary>
+        </DisclosureSummary>
         {thread?.work
           .filter((w) => ["queued", "failed", "cancelled"].includes(w.status))
           .slice(0, 3)
@@ -324,25 +332,25 @@ export function ReviewFindingPanel({
           are deleted after work; saved evidence and checks remain private.
           Additional spending requires another explicit request.
         </p>
-        <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3 text-xs">
+        <div className="mt-3 grid grid-cols-1 gap-3 text-xs sm:grid-cols-3 [&_[data-slot=native-select-wrapper]]:w-full">
           <label>
             Model
-            <select
-              className="mt-1 w-full rounded-md border bg-background p-2 text-base sm:text-sm"
+            <NativeSelect
+              className="mt-1"
               value={model}
               onChange={(e) => update({ model: e.target.value })}
             >
               {CODING_MODELS.map((m) => (
-                <option key={m.id} value={m.id}>
+                <NativeSelectOption key={m.id} value={m.id}>
                   {m.name} · OpenRouter
-                </option>
+                </NativeSelectOption>
               ))}
-            </select>
+            </NativeSelect>
           </label>
           <label>
             Time limit (seconds)
-            <input
-              className="mt-1 w-full rounded-md border bg-background p-2 text-base sm:text-sm"
+            <Input
+              className="mt-1"
               type="number"
               min={30}
               max={300}
@@ -352,8 +360,8 @@ export function ReviewFindingPanel({
           </label>
           <label>
             Cost cap ($)
-            <input
-              className="mt-1 w-full rounded-md border bg-background p-2 text-base sm:text-sm"
+            <Input
+              className="mt-1"
               type="number"
               min={0.1}
               max={10}
@@ -425,20 +433,22 @@ export function ReviewFindingPanel({
                 </p>
               )}
               {w.checks?.map((check, i) => (
-                <details key={i} className="mt-2">
-                  <summary>
+                <Disclosure key={i} className="mt-2">
+                  <DisclosureSummary>
                     {check.status}: {check.command.join(" ")}
-                  </summary>
+                  </DisclosureSummary>
                   <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap">
                     {check.output}
                   </pre>
-                </details>
+                </Disclosure>
               ))}
             </div>
           ))}
         {Boolean(thread?.attempts.length) && (
-          <details className="mt-3 rounded-md border p-3 text-xs">
-            <summary>Earlier attempts ({thread?.attempts.length})</summary>
+          <Disclosure boxed className="mt-3 text-xs">
+            <DisclosureSummary>
+              Earlier attempts ({thread?.attempts.length})
+            </DisclosureSummary>
             <div
               className="max-h-48 overflow-y-auto"
               tabIndex={0}
@@ -446,14 +456,11 @@ export function ReviewFindingPanel({
             >
               {" "}
               {thread?.attempts.map((previous) => (
-                <details
-                  key={previous._id}
-                  className="mt-3 rounded-md border p-3 text-xs"
-                >
-                  <summary>
+                <Disclosure key={previous._id} boxed className="mt-3 text-xs">
+                  <DisclosureSummary>
                     Earlier attempt {previous.attempt}: {previous.status}{" "}
                     {previous.stopReason && `· ${previous.stopReason}`}
-                  </summary>
+                  </DisclosureSummary>
                   {previous.result && (
                     <p className="mt-2">
                       {previous.result.verdict}: {previous.result.explanation}
@@ -461,19 +468,19 @@ export function ReviewFindingPanel({
                   )}
                   {previous.proposalError && <p>{previous.proposalError}</p>}
                   {previous.checks.map((check, i) => (
-                    <details key={i} className="mt-2">
-                      <summary>
+                    <Disclosure key={i} className="mt-2">
+                      <DisclosureSummary>
                         {check.status}: {check.command.join(" ")}
-                      </summary>
+                      </DisclosureSummary>
                       <pre className="max-h-40 overflow-auto whitespace-pre-wrap">
                         {check.output}
                       </pre>
-                    </details>
+                    </Disclosure>
                   ))}
-                </details>
+                </Disclosure>
               ))}
             </div>
-          </details>
+          </Disclosure>
         )}
         {proposals?.map((proposal) => (
           <ReviewProposalPanel
@@ -482,7 +489,7 @@ export function ReviewFindingPanel({
             onReviewLatest={onReviewLatest}
           />
         ))}
-      </details>
+      </Disclosure>
     </section>
   );
 }

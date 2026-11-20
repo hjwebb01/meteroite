@@ -1,5 +1,6 @@
 "use client";
 
+import { Disclosure, DisclosureSummary } from "@/components/ui/disclosure";
 import type { Doc, Id } from "../../../../convex/_generated/dataModel";
 import type { ReviewNavigationTarget } from "../lib/review-diff";
 import { fileAtCommitUrl } from "../lib/review";
@@ -95,10 +96,10 @@ export function ReviewReassessment({
             {comparison.absentFindingIds.length} prior findings are absent from
             this run. Absence does not prove they were fixed.
           </p>
-          <details className="mt-3">
-            <summary className="cursor-pointer text-xs font-medium">
+          <Disclosure className="mt-3">
+            <DisclosureSummary className="text-xs font-medium">
               Supporting-code comparison · {comparison.contexts.length} contexts
-            </summary>
+            </DisclosureSummary>
             <ul className="mt-3 space-y-4">
               {comparison.contexts.map((context) => {
                 const source =
@@ -179,14 +180,14 @@ export function ReviewReassessment({
                 );
               })}
             </ul>
-          </details>
+          </Disclosure>
         </>
       )}
-      <details className="mt-4">
-        <summary className="cursor-pointer text-xs font-medium">
+      <Disclosure className="mt-4">
+        <DisclosureSummary className="text-xs font-medium">
           Prior assessment at{" "}
           {previous.headSha?.slice(0, 7) ?? "its saved snapshot"}
-        </summary>
+        </DisclosureSummary>
         <div className="mt-3">
           <ReviewAssessment
             heading="Prior PR assessment"
@@ -195,7 +196,7 @@ export function ReviewReassessment({
             sourceRepo={previous.sourceRepo ?? previous.repoName}
           />
         </div>
-      </details>
+      </Disclosure>
     </section>
   );
 }

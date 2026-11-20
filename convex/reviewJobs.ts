@@ -15,6 +15,11 @@ import {
   changeHunkSchema,
 } from "./lib/review_navigation";
 import { getOwnedReview } from "./lib/owned_review";
+import {
+  MAX_REVIEW_ACTIVITY,
+  reviewActionInput,
+  reviewStage,
+} from "./lib/review_stage";
 
 export const get = internalQuery({
   args: { id: v.id("reviews"), ownerId: v.string() },
@@ -56,16 +61,45 @@ export const status = internalQuery({
 export const progress = internalMutation({
   args: {
     id: v.id("reviews"),
-    progress: v.string(),
+    progress: v.optional(v.string()),
     title: v.optional(v.string()),
+    stage: v.optional(reviewStage),
+    parts: v.optional(v.number()),
+    action: v.optional(reviewActionInput),
   },
-  handler: async (ctx, { id, ...fields }) => {
+  handler: async (ctx, { id, action, ...fields }) => {
+    const review = await ctx.db.get("reviews", id);
+    if (!review || (review.status !== "queued" && review.status !== "running"))
+      return false;
+    const activity = action
+      ? [
+          ...(review.activity ?? []),
+          {
+            stage: fields.stage ?? review.stage ?? "load",
+            at: Date.now(),
+            ...action,
+          },
+        ].slice(-MAX_REVIEW_ACTIVITY)
+      : review.activity;
+    await ctx.db.patch("reviews", id, {
+      ...fields,
+      latestAction: action?.text,
+      activity,
+      status: "running",
+      updatedAt: Date.now(),
+    });
+    return true;
+  },
+});
+
+export const partFinished = internalMutation({
+  args: { id: v.id("reviews") },
+  handler: async (ctx, { id }) => {
     const review = await ctx.db.get("reviews", id);
     if (!review || (review.status !== "queued" && review.status !== "running"))
       return false;
     await ctx.db.patch("reviews", id, {
-      ...fields,
-      status: "running",
+      partsDone: (review.partsDone ?? 0) + 1,
       updatedAt: Date.now(),
     });
     return true;
@@ -100,7 +134,6 @@ export const pinSnapshot = internalMutation({
   },
 });
 
-/** Upserts by filename so a retried load step does not duplicate files. */
 export const saveFiles = internalMutation({
   args: {
     id: v.id("reviews"),
@@ -277,7 +310,6 @@ export const recordFreshness = internalMutation({
       review.freshness.observedAt > observation.observedAt
     )
       return;
-    // A failed lookup says nothing about a previously observed newer branch.
     if (
       observation.state === "unavailable" &&
       review.freshness?.state === "outdated"

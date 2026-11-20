@@ -20,6 +20,7 @@ import {
   type ReviewBudget,
 } from "../lib/context-budget";
 import { reviewOutputSchema, type ReviewOutput } from "../lib/review";
+import { mark } from "../lib/timing-temp"; // TIMING-TEMP
 import type { ReviewTool } from "../lib/review-tools";
 
 export type ReviewProvider =
@@ -27,12 +28,11 @@ export type ReviewProvider =
 
 const FINAL_INSTRUCTION = `Return the final review. ${REVIEW_GUIDANCE}`;
 
-/**
- * Investigates with read-only tools for up to `maxTurns` turns, then returns
- * the structured review. Each turn is metered from provider-reported usage;
- * when another turn could crowd out the final call, investigation stops and
- * the review proceeds with partial coverage instead of failing.
- */
+// TIMING-TEMP experiment: lower reasoning effort to cut output-token latency.
+const REVIEW_REASONING = {
+  openrouter: { reasoning: { effort: "low" as const } },
+};
+
 export async function runReviewAgent({
   provider,
   system,
@@ -49,9 +49,7 @@ export async function runReviewAgent({
   system: string;
   context: string;
   budget: ReviewBudget;
-  /** Empty for a tool-free call. */
   tools: ReviewTool[];
-  /** Caps repository tokens the coming turn's tools may deliver. */
   limitTurn?: (tokens: number) => void;
   maxTurns: number;
   signal: AbortSignal;
@@ -90,7 +88,6 @@ export async function runReviewAgent({
   }
 }
 
-/** Adapts canonical review tools to AI SDK tools; the SDK validates input before execution. */
 function toAiSdkTools(tools: ReviewTool[], signal: AbortSignal): ToolSet {
   return Object.fromEntries(
     tools.map((definition) => [
@@ -136,6 +133,7 @@ async function runOpenRouterReview({
   let allowance = contextBudget.allowance();
   const investigate = maxTurns > 0 && allowance > 0;
   let budgetStopped = maxTurns > 0 && !investigate;
+  let lastStepAt = Date.now(); // TIMING-TEMP
   const investigation = investigate
     ? await generateText({
         model,
@@ -143,11 +141,17 @@ async function runOpenRouterReview({
         prompt: context,
         maxOutputTokens: 6000,
         abortSignal: signal,
+        providerOptions: REVIEW_REASONING,
         stopWhen: [isStepCount(maxTurns), () => budgetStopped],
         onStepEnd: (step) => {
+          mark("openrouter-step", {
+            ms: Date.now() - lastStepAt,
+            calls: step.toolCalls.map((c) => c.toolName),
+            usage: step.usage,
+          }); // TIMING-TEMP
+          lastStepAt = Date.now(); // TIMING-TEMP
           contextBudget.record(step.usage, step.content, step.toolResults);
           allowance = contextBudget.allowance();
-          // A step without tool calls ends the investigation on its own.
           budgetStopped = allowance <= 0 && step.toolCalls.length > 0;
         },
         tools: toAiSdkTools(tools, signal),
@@ -156,11 +160,13 @@ async function runOpenRouterReview({
   await prepareFindings();
   contextBudget.prepareFinal();
   try {
-    const { output } = await generateText({
+    const finalStarted = Date.now(); // TIMING-TEMP
+    const { output, usage } = await generateText({
       model,
       system,
       maxOutputTokens: budget.outputTokens,
       abortSignal: signal,
+      providerOptions: REVIEW_REASONING,
       output: Output.object({ schema: reviewOutputSchema }),
       messages: [
         { role: "user", content: context },
@@ -168,6 +174,7 @@ async function runOpenRouterReview({
         { role: "user", content: FINAL_INSTRUCTION },
       ],
     });
+    mark("openrouter-final", { ms: Date.now() - finalStarted, usage }); // TIMING-TEMP
     return { output, budgetStopped };
   } catch (error) {
     if (!NoObjectGeneratedError.isInstance(error)) throw error;
