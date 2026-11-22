@@ -10,7 +10,7 @@ Periodically review permitted documentation while working on the related area. U
 
 ## Checks
 
-Run the narrowest check that covers the change: `npm run typecheck`, `npm run lint`, `npm test -- <path>`, `npm run check:convex` after `convex/` edits. `npm run verify` runs the full suite in a clean checkout (slow; the pre-push hook runs it anyway). Review judgement calls live in `CODING_STANDARDS.md`; past decisions in `docs/adr/`. No code comments (ADR 0001).
+Run the narrowest check that covers the change: `npm run typecheck`, `npm run lint`, `npm test -- <path>`, `npm run check:convex` after `convex/` edits. `npm run verify` runs the full suite in a clean checkout (slow). Review judgement calls live in `CODING_STANDARDS.md`; past decisions in `docs/adr/`. No code comments (ADR 0001).
 
 ## Verification in the app
 
