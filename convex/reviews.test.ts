@@ -136,6 +136,27 @@ describe("private PR reviews", () => {
     );
   });
 
+  test("expires only reviews silent past the stall limit", async () => {
+    const t = convexTest(schema, modules);
+    const alice = t.withIdentity({ subject: "alice" });
+    const { id: stale } = await alice.mutation(api.reviews.start, request);
+    const { id: fresh } = await alice.mutation(api.reviews.start, {
+      ...request,
+      pullNumber: 13,
+    });
+    await t.run((ctx) =>
+      ctx.db.patch("reviews", stale, { updatedAt: Date.now() - 16 * 60_000 }),
+    );
+    await t.mutation(internal.reviewJobs.expireStalled, {});
+    const after = await t.run(async (ctx) => ({
+      stale: await ctx.db.get("reviews", stale),
+      fresh: await ctx.db.get("reviews", fresh),
+    }));
+    expect(after.stale?.status).toBe("failed");
+    expect(after.stale?.error).toContain("stopped reporting progress");
+    expect(after.fresh?.status).toBe("queued");
+  });
+
   test("a cancelled review cannot be revived by late worker updates", async () => {
     const t = convexTest(schema, modules);
     const alice = t.withIdentity({ subject: "alice" });

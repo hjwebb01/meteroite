@@ -61,7 +61,8 @@ export default defineSchema({
     ),
   })
     .index("by_owner", ["ownerId"])
-    .index("by_owner_url", ["ownerId", "url"]),
+    .index("by_owner_url", ["ownerId", "url"])
+    .index("by_status_updated", ["status", "updatedAt"]),
 
   reviewActivity: defineTable({
     reviewId: v.id("reviews"),

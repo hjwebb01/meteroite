@@ -3,6 +3,10 @@ import type { MutationCtx } from "../_generated/server";
 
 type Review = Doc<"reviews">;
 
+const STALL_LIMIT_MS = 15 * 60_000;
+const STALLED_REVIEW_ERROR =
+  "The review stopped reporting progress and was ended. Try again.";
+
 const ACTIVE_STATUSES = ["queued", "running"] as const;
 
 export const isActiveReview = (status: Review["status"]) =>
@@ -46,4 +50,18 @@ export async function cancelReview(ctx: MutationCtx, review: Review) {
     progress: "Review cancelled",
     updatedAt: Date.now(),
   });
+}
+
+export async function expireStalledReviews(ctx: MutationCtx) {
+  const cutoff = Date.now() - STALL_LIMIT_MS;
+  for (const status of ACTIVE_STATUSES) {
+    const rows = await ctx.db
+      .query("reviews")
+      .withIndex("by_status_updated", (q) =>
+        q.eq("status", status).lt("updatedAt", cutoff),
+      )
+      .take(100);
+    for (const review of rows)
+      await failReview(ctx, review, STALLED_REVIEW_ERROR);
+  }
 }

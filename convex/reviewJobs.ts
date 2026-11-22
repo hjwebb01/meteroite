@@ -18,6 +18,7 @@ import { getOwnedReview } from "./lib/owned_review";
 import { reviewActionInput, reviewStage } from "./lib/review_stage";
 import {
   completeReview,
+  expireStalledReviews,
   failReview,
   loadActiveReview,
 } from "./lib/review_lifecycle";
@@ -264,6 +265,11 @@ export const fail = internalMutation({
     if (!review) return;
     await failReview(ctx, review, error);
   },
+});
+
+export const expireStalled = internalMutation({
+  args: {},
+  handler: expireStalledReviews,
 });
 
 export const recordFreshness = internalMutation({

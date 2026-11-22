@@ -16,6 +16,10 @@ _Avoid_: execution provider (that is the Check sandbox)
 An assessment of one pull request, pinned to the head and base commits it was run against.
 _Avoid_: review job, review run
 
+**Stalled Review**:
+A Review that is still queued or running but has recorded no progress within the stall limit. It is treated as a dead worker and ends as failed.
+_Avoid_: hung review, timed-out review
+
 **Finding**:
 One issue a Review reports in the pull request.
 _Avoid_: comment, issue
