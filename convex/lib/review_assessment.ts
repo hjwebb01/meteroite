@@ -75,7 +75,7 @@ const evidence = z.object({
   quote: z.string().min(8).max(500),
 });
 
-export const assessmentDraftSchema = z.discriminatedUnion("state", [
+const assessmentDraftSchema = z.discriminatedUnion("state", [
   z.object({
     state: z.literal("complete"),
     dimensions,
@@ -101,8 +101,7 @@ export const assessmentResponseSchema = z.union([
   assessmentDraftSchema.options[1],
 ]);
 export type AssessmentDraft = z.infer<typeof assessmentDraftSchema>;
-export type ScrutinyScore = z.infer<typeof level>;
-export type AssessmentDimensions = z.infer<typeof dimensions>;
+type ScrutinyScore = z.infer<typeof level>;
 
 type Observation<T> = { headSha: string; observedAt: number } & (
   | { state: "known"; value: T }

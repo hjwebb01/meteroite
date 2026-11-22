@@ -21,7 +21,7 @@ export async function githubApplicationClient(ownerId: string) {
   );
   return { octokit, scopes: grant.scopes ?? [] };
 }
-export function applicationMarker(applicationId: string, digest: string) {
+function applicationMarker(applicationId: string, digest: string) {
   return `Meteroite-Application: ${applicationId}\nMeteroite-Proposal: ${digest}`;
 }
 

@@ -84,7 +84,7 @@ export async function loadReviewBudget(modelId: string): Promise<ReviewBudget> {
 
 export class ContextBudgetError extends Error {}
 
-export type CallUsage = { inputTokens?: number; outputTokens?: number };
+type CallUsage = { inputTokens?: number; outputTokens?: number };
 
 export function createReviewContextBudget({
   budget,

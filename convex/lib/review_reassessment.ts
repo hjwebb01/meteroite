@@ -26,7 +26,7 @@ export const reassessmentSchema = z.object({
   ),
   absentFindingIds: z.array(z.string()),
 });
-export type ReassessmentContext = z.infer<typeof reassessmentSchema>;
+type ReassessmentContext = z.infer<typeof reassessmentSchema>;
 type Finding = {
   id: string;
   path: string;

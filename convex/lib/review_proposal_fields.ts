@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { workCheck, workConclusion } from "./review_work_fields";
-export const proposalFile = v.object({
+const proposalFile = v.object({
   path: v.string(),
   expectedBlobSha: v.union(v.string(), v.null()),
   original: v.union(v.string(), v.null()),

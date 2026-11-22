@@ -57,7 +57,7 @@ const confidenceSchema = z
   .transform((value) => value ?? undefined)
   .optional();
 
-export const findingSchema = z.object({
+const findingSchema = z.object({
   severity: z.enum(["high", "medium", "low"]),
   title: z.string().min(1).max(180),
   path: z.string().min(1).max(500),

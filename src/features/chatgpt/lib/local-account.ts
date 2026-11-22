@@ -56,7 +56,7 @@ const tokenSchema = z.object({
   scope: z.string().optional(),
 });
 
-export function isLocalChatGPTRuntime() {
+function isLocalChatGPTRuntime() {
   return !process.env.VERCEL && process.env.NODE_ENV !== "production";
 }
 

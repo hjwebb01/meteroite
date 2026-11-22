@@ -1,7 +1,7 @@
 const DECISIONS_URL = "https://api.openai.com/v1/decisions";
 const DECISIONS_MODEL = "gpt-6-luna";
 
-export const TRIAGE_THRESHOLDS = {
+const TRIAGE_THRESHOLDS = {
   withholdDefectBelow: 0.2,
   withholdDuplicateAbove: 0.8,
   severityConfidence: 0.7,

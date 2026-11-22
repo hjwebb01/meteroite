@@ -2,7 +2,7 @@ import type { Doc } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { latestVerdicts } from "./review_verdicts";
 
-export const PUBLICATION_RECONCILE_AFTER_MS = 15 * 60_000;
+const PUBLICATION_RECONCILE_AFTER_MS = 15 * 60_000;
 
 export function canResetPublication(review: Doc<"reviews">) {
   const attempt = review.githubPublication;

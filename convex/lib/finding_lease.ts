@@ -6,11 +6,11 @@ import type { workStatus, workStopReason } from "./review_work_fields";
 type FindingWork = Doc<"reviewFindingWork">;
 type WorkStatus = Infer<typeof workStatus>;
 
-export const ACTIVE_WORK_STATUSES = ["queued", "running"] as const;
+const ACTIVE_WORK_STATUSES = ["queued", "running"] as const;
 export const isActiveWork = (status: WorkStatus) =>
   (ACTIVE_WORK_STATUSES as readonly WorkStatus[]).includes(status);
 
-export type LeaseLostReason = "cancelled" | "time-limit";
+type LeaseLostReason = "cancelled" | "time-limit";
 const LEASE_LOST_MESSAGES: Record<LeaseLostReason, string> = {
   cancelled: "Finding work cancelled or superseded",
   "time-limit": "Finding work exceeded its deadline",

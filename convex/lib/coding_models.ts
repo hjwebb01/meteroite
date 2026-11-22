@@ -8,8 +8,8 @@ export const CODING_MODELS = [
   { id: "z-ai/glm-5.3-flash", name: "GLM 5.3 Flash", provider: "zai" },
 ] as const;
 
-export type CodingModel = (typeof CODING_MODELS)[number];
-export type CodingModelId = CodingModel["id"];
+type CodingModel = (typeof CODING_MODELS)[number];
+type CodingModelId = CodingModel["id"];
 
 export const DEFAULT_CODING_MODEL_ID: CodingModelId = "openai/gpt-6-luna";
 

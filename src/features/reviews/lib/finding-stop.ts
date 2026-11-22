@@ -1,5 +1,5 @@
 import { ConvexError } from "convex/values";
-export type FindingStopReason =
+type FindingStopReason =
   "time-limit" | "cost-limit" | "cancelled" | "infrastructure";
 export class FindingStopped extends Error {
   constructor(

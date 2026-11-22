@@ -37,7 +37,7 @@ const properties = [
   "NoNewPrivileges=yes",
 ];
 
-export type ExecutionCapability = { available: boolean; reason: string };
+type ExecutionCapability = { available: boolean; reason: string };
 const CAPABILITY_TTL_MS = 60_000;
 let cachedCapability: { value: ExecutionCapability; expiresAt: number } | null =
   null;

@@ -8,7 +8,7 @@ import type {
 import { getChatGPTCredentials } from "./local-account";
 import type { ChatGPTSelection } from "./types";
 
-export function chatGPTError(code?: string | null) {
+function chatGPTError(code?: string | null) {
   if (
     code === "subscription_sharing_usage_limit_exceeded" ||
     code === "subscription_sharing_usage_unavailable"

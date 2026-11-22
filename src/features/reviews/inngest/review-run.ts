@@ -30,7 +30,7 @@ export type PartReport = {
   warnings: string[];
 };
 
-export type CitedLine = { path: string; line: number; text: string };
+type CitedLine = { path: string; line: number; text: string };
 
 export type PartSummary = {
   report: ReviewOutput;

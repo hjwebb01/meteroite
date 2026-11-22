@@ -3,7 +3,6 @@ import { persistedAssessmentSchema } from "./review_assessment";
 import {
   changeGroupSchema,
   changeHunkSchema,
-  codeReferenceSchema,
   hotspotSchema,
 } from "./review_navigation";
 import { reassessmentSchema } from "./review_reassessment";
@@ -18,7 +17,7 @@ export const FINDING_CATEGORIES = [
   "maintainability",
 ] as const;
 
-export const reviewFinding = v.object({
+const reviewFinding = v.object({
   id: v.string(),
   severity: v.union(v.literal("high"), v.literal("medium"), v.literal("low")),
   title: v.string(),
@@ -52,10 +51,9 @@ export const reviewFinding = v.object({
   ),
 });
 
-export const reviewAssessment = zodValidator(persistedAssessmentSchema);
-export const codeReference = zodValidator(codeReferenceSchema);
-export const reviewHotspot = zodValidator(hotspotSchema);
-export const fileCoverageGap = v.object({
+const reviewAssessment = zodValidator(persistedAssessmentSchema);
+const reviewHotspot = zodValidator(hotspotSchema);
+const fileCoverageGap = v.object({
   kind: v.union(
     v.literal("text_patch_unavailable"),
     v.literal("model_context_omitted"),
@@ -64,10 +62,10 @@ export const fileCoverageGap = v.object({
   reason: v.string(),
 });
 
-export const changeHunk = zodValidator(changeHunkSchema);
-export const changeGroup = zodValidator(changeGroupSchema);
+const changeHunk = zodValidator(changeHunkSchema);
+const changeGroup = zodValidator(changeGroupSchema);
 
-export const reviewReassessment = zodValidator(reassessmentSchema);
+const reviewReassessment = zodValidator(reassessmentSchema);
 export const reviewFreshness = v.union(
   v.object({
     state: v.union(v.literal("current"), v.literal("outdated")),

@@ -85,7 +85,7 @@ export function diffItemId(path: string) {
   return `diff:${path}`;
 }
 
-export type SavedDiff = { path: string; fileDiff: FileDiffMetadata };
+type SavedDiff = { path: string; fileDiff: FileDiffMetadata };
 
 export function parseSavedDiffs(files: SavedFile[]): SavedDiff[] {
   return files.flatMap((file) => {

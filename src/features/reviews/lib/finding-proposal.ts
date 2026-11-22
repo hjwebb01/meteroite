@@ -19,7 +19,7 @@ export const proposedChangeSchema = z.object({
       "Planned offline validation commands to execute against the proposed files after generation; these need not have run during investigation.",
     ),
 });
-export type ProposalFile = {
+type ProposalFile = {
   path: string;
   expectedBlobSha: string | null;
   original: string | null;

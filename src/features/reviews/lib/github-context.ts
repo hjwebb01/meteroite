@@ -19,7 +19,7 @@ const MAX_SEARCH_FILES = 25;
 const MAX_SEARCH_MATCHES = 20;
 const MAX_DISPLAY_PATCH_CHARS = 400_000;
 
-export type ReviewFileDiff = {
+type ReviewFileDiff = {
   filename: string;
   previousFilename?: string;
   status: string;
@@ -32,7 +32,7 @@ export type ReviewFileDiff = {
   hunks?: ChangeHunk[];
 };
 
-export type SearchCursor = { fileOffset: number; lineOffset: number };
+type SearchCursor = { fileOffset: number; lineOffset: number };
 
 export async function loadReviewSignals(
   octokit: Octokit,

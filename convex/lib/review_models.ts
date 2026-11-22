@@ -9,7 +9,7 @@ export const REVIEW_MODELS = [
   { id: "openai/gpt-5.1-codex-mini", name: "GPT-5.1 Codex Mini" },
 ] as const;
 
-export const CHATGPT_REVIEW_PREFIX = "chatgpt:";
+const CHATGPT_REVIEW_PREFIX = "chatgpt:";
 
 export const chatGPTReviewModelId = (slug: string) =>
   `${CHATGPT_REVIEW_PREFIX}${slug}`;

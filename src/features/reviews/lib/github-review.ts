@@ -10,7 +10,7 @@ import {
 
 type Review = Doc<"reviews">;
 
-export type GithubReviewComment = {
+type GithubReviewComment = {
   path: string;
   line: number;
   side: "LEFT" | "RIGHT";

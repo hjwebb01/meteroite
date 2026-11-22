@@ -50,7 +50,7 @@ import { ReviewHeadline } from "./review-headline";
 import { ReviewReader } from "./review-reader";
 import { ReviewPublicationPreview } from "./review-publication-preview";
 
-export type Availability = {
+type Availability = {
   ready: boolean;
   historyAvailable: boolean;
   reason: string;

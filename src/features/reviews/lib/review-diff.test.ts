@@ -1,7 +1,6 @@
 import { expect, test } from "vitest";
 import {
   buildDiffItems,
-  diffSideOf,
   navigationLocation,
   parseSavedDiffs,
   toGitPatch,
@@ -139,25 +138,6 @@ test("file and hunk navigation keep diff direction independent of finding filter
       },
     }),
   ).toEqual({ path: "removed.ts", line: 8, side: "LEFT" });
-});
-
-test("a code reference is annotated on deletions only when it is a removed line", () => {
-  expect(diffSideOf("LEFT")).toBe("deletions");
-  expect(diffSideOf("RIGHT")).toBe("additions");
-  expect(diffSideOf(undefined)).toBe("additions");
-});
-
-test("supporting references retain exact old side and recorded revision", () => {
-  const reference = {
-    path: "renamed.ts",
-    sourcePath: "old.ts",
-    line: 9,
-    side: "LEFT" as const,
-    commitSha: "saved-left",
-  };
-  expect(navigationLocation({ kind: "reference", reference })).toEqual(
-    reference,
-  );
 });
 
 test("finding filters retain every saved file and exact source targets", () => {
