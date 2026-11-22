@@ -32,7 +32,7 @@ try {
     });
     checkInterrupted();
     try {
-      await cp(join(source, 'node_modules'), join(checkout, 'node_modules'), { recursive: true });
+      await cp(join(source, 'node_modules'), join(checkout, 'node_modules'), { recursive: true, verbatimSymlinks: true });
     } catch (error) {
       if (error?.code !== 'ENOENT') throw error;
       await mkdir(join(checkout, 'node_modules'), { recursive: true });
