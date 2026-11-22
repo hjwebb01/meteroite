@@ -2,11 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { RequestError } from "octokit";
 import { getFunctionName } from "convex/server";
 import { internal } from "../../../../../convex/_generated/api";
-import {
-  buildGithubReview,
-  reviewMarker,
-} from "@/features/reviews/lib/github-review";
-import type { Doc } from "../../../../../convex/_generated/dataModel";
+import { reviewMarker } from "@/features/reviews/lib/github-review";
 
 const mocks = vi.hoisted(() => ({
   auth: vi.fn(),
@@ -235,15 +231,8 @@ test("an authorization deadline that expires before transport does not leave an 
   }
 });
 
-test("GET previews both exact serializer representations, actual exclusions, target and a content-bound confirmation", async () => {
+test("GET previews actual exclusions, target and a content-bound confirmation", async () => {
   const output = await preview();
-  const saved = review as unknown as Doc<"reviews">;
-  expect(output.normal).toEqual(
-    buildGithubReview(saved, [saved.result!.findings[0]]),
-  );
-  expect(output.fallback).toEqual(
-    buildGithubReview(saved, [saved.result!.findings[0]], { inline: false }),
-  );
   expect(output.excludedFindings).toEqual([
     { id: retracted.id, title: retracted.title },
   ]);

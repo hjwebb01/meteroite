@@ -192,6 +192,9 @@ describe("private PR reviews", () => {
       stage: "investigate",
       progress: "Investigating changes and related code",
     });
+    expect(await alice.query(api.reviews.activity, { id })).toMatchObject([
+      { stage: "investigate", tool: "readFile", text: "Reading src/cart.js" },
+    ]);
     await t.mutation(internal.reviewJobs.progress, {
       id,
       progress: "Checking evidence and preparing findings",
@@ -212,9 +215,6 @@ describe("private PR reviews", () => {
     });
     for (let i = 0; i < 30; i++)
       await t.mutation(internal.reviewJobs.progress, {
-    expect(await alice.query(api.reviews.activity, { id })).toMatchObject([
-      { stage: "investigate", tool: "readFile", text: "Reading src/cart.js" },
-    ]);
         id,
         action: { tool: "searchText", text: `Searching for call ${i}` },
       });
@@ -274,17 +274,17 @@ describe("private PR reviews", () => {
 
   test("rejects invalid PR identifiers, unsupported models, and oversized preferences", async () => {
     const t = convexTest(schema, modules).withIdentity({ subject: "alice" });
-    for (const invalid of [
-      { pullNumber: 0 },
-      { pullNumber: 1.5 },
-      { repoOwner: "alice/other" },
-      { repoName: "../app" },
-      { model: "arbitrary-model" },
-      { instructions: "x".repeat(4001) },
-    ]) {
+    for (const [invalid, message] of [
+      [{ pullNumber: 0 }, /Invalid review request/],
+      [{ pullNumber: 1.5 }, /Invalid review request/],
+      [{ repoOwner: "alice/other" }, /Invalid review request/],
+      [{ repoName: "../app" }, /Invalid review request/],
+      [{ model: "arbitrary-model" }, /Unsupported review model/],
+      [{ instructions: "x".repeat(4001) }, /Invalid review request/],
+    ] as const) {
       await expect(
         t.mutation(api.reviews.start, { ...request, ...invalid }),
-      ).rejects.toThrow();
+      ).rejects.toThrow(message);
     }
   });
 });

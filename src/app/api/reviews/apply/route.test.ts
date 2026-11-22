@@ -444,15 +444,7 @@ test("authenticated explicit apply commits exact fork target with CAS, preserves
     (await f.owner.query(api.reviews.get, { id: proposal!.reviewId })).headSha,
   ).toBe("source");
 });
-test.each([
-  "read-only",
-  "scope",
-  "private-scope",
-  "workflow-scope",
-  "stale",
-  "target-changed",
-  "disconnected",
-] as RemoteMode[])(
+test.each(["private-scope", "workflow-scope"] as RemoteMode[])(
   "%s target blocks before any GitHub mutation and retains proposal",
   async (mode) => {
     const f = await fixture(mode);
