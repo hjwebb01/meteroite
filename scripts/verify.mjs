@@ -3,20 +3,14 @@ import { spawn, spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createTempDirectory } from './temp-root.mjs';
+import { createInterrupts, onceClose, terminate, throwIfInterrupted } from './interrupts.mjs';
 
 const source = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const tempRoot = await createTempDirectory('meteroite-verify-');
 const snapshotCommit = process.env.METEROITE_VERIFICATION_SNAPSHOT;
 const checkout = snapshotCommit ? source : join(tempRoot, 'checkout');
-let interruptedBy;
-let activeChild;
-
-const onSignal = (signal) => {
-  interruptedBy ??= signal;
-  if (activeChild) terminate(activeChild, signal);
-};
-process.on('SIGINT', () => onSignal('SIGINT'));
-process.on('SIGTERM', () => onSignal('SIGTERM'));
+const interrupt = createInterrupts();
+const checkInterrupted = () => throwIfInterrupted(interrupt);
 
 try {
   if (snapshotCommit) {
@@ -53,19 +47,18 @@ try {
 
   console.log('\n[verify] All six required checks passed.');
 } catch (error) {
-  if (interruptedBy) {
-    process.exitCode = 128 + (interruptedBy === 'SIGINT' ? 2 : 15);
-    console.error(`[verify] Interrupted by ${interruptedBy}; temporary verification copy will be removed.`);
+  if (interrupt.by) {
+    process.exitCode = 128 + (interrupt.by === 'SIGINT' ? 2 : 15);
+    console.error(`[verify] Interrupted by ${interrupt.by}; temporary verification copy will be removed.`);
   } else {
     console.error(error instanceof Error ? error.message : error);
     process.exitCode = 1;
   }
 } finally {
-  process.off('SIGINT', onSignal);
-  process.off('SIGTERM', onSignal);
-  if (activeChild) {
-    terminate(activeChild, interruptedBy ?? 'SIGTERM');
-    await onceClose(activeChild);
+  interrupt.dispose();
+  if (interrupt.child) {
+    terminate(interrupt.child, interrupt.by ?? 'SIGTERM');
+    await onceClose(interrupt.child);
   }
   await rm(tempRoot, { recursive: true, force: true });
 }
@@ -102,10 +95,6 @@ function checks() {
   ];
 }
 
-function checkInterrupted() {
-  if (interruptedBy) throw new Error(`Interrupted by ${interruptedBy}`);
-}
-
 function safeEnvironment(tempRoot) {
   const names = ['PATH', 'TMPDIR', 'TMP', 'TEMP', 'SystemRoot', 'COMSPEC', 'PATHEXT', 'LANG', 'LC_ALL'];
   const env = Object.fromEntries(names.filter((name) => process.env[name]).map((name) => [name, process.env[name]]));
@@ -121,36 +110,15 @@ function safeEnvironment(tempRoot) {
 function run(command, args, cwd, env) {
   console.log(`[verify] ${command} ${args.join(' ')} (${cwd})`);
   const child = spawn(command, args, { cwd, env, stdio: 'inherit', detached: process.platform !== 'win32' });
-  activeChild = child;
+  interrupt.child = child;
   return new Promise((resolvePromise, reject) => {
     child.once('error', (error) => reject(new Error(`[verify] Could not start ${command}: ${error.message}`)));
     child.once('close', (code, signal) => {
-      activeChild = undefined;
-      if (interruptedBy) return reject(new Error(`Interrupted by ${interruptedBy}`));
+      interrupt.child = undefined;
+      if (interrupt.by) return reject(new Error(`Interrupted by ${interrupt.by}`));
       if (code !== 0) return reject(new Error(`[verify] npm run ${args[1]} failed${signal ? ` (${signal})` : ` with exit code ${code}`}.`));
       resolvePromise();
     });
-    if (interruptedBy) terminate(child, interruptedBy);
+    if (interrupt.by) terminate(child, interrupt.by);
   });
-}
-
-function terminate(child, signal) {
-  if (!child.pid || child.exitCode !== null || child.signalCode !== null) return;
-  try {
-    if (process.platform !== 'win32') process.kill(-child.pid, signal);
-    else child.kill(signal);
-  } catch {}
-  const escalation = setTimeout(() => {
-    if (child.exitCode !== null || child.signalCode !== null) return;
-    try {
-      if (process.platform !== 'win32') process.kill(-child.pid, 'SIGKILL');
-      else child.kill('SIGKILL');
-    } catch {}
-  }, 1500);
-  escalation.unref();
-}
-
-function onceClose(child) {
-  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
-  return new Promise((resolvePromise) => child.once('close', resolvePromise));
 }
