@@ -49,6 +49,7 @@ const reviewFinding = v.object({
       v.literal(5),
     ),
   ),
+  habit: v.optional(v.string()),
 });
 
 const reviewAssessment = zodValidator(persistedAssessmentSchema);

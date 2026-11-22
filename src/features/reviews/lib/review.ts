@@ -56,6 +56,14 @@ const confidenceSchema = z
   .catch(undefined)
   .transform((value) => value ?? undefined)
   .optional();
+const habitSchema = z
+  .string()
+  .max(80)
+  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
+  .nullish()
+  .catch(undefined)
+  .transform((value) => value ?? undefined)
+  .optional();
 
 const findingSchema = z.object({
   severity: z.enum(["high", "medium", "low"]),
@@ -78,6 +86,7 @@ const findingSchema = z.object({
   previousFindingId: z.string().nullable(),
   category: categorySchema,
   confidence: confidenceSchema,
+  habit: habitSchema,
 });
 
 const side = z.enum(["LEFT", "RIGHT"]);
@@ -101,6 +110,7 @@ const findingResponseSchema = z.object({
   previousFindingId: z.string().nullable(),
   category: z.string().nullable(),
   confidence: z.number().nullable(),
+  habit: z.string().nullable(),
 });
 
 export const reviewOutputSchema = z.object({
