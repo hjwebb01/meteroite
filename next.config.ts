@@ -21,7 +21,7 @@ const sentryBuildOptions = {
 
   widenClientFileUpload: true,
 
-  tunnelRoute: "/monitoring",
+  tunnelRoute: process.env.NODE_ENV === "development" ? undefined : "/monitoring",
 
   webpack: {
     automaticVercelMonitors: true,
