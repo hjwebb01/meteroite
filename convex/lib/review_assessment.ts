@@ -75,7 +75,7 @@ const evidence = z.object({
   quote: z.string().min(8).max(500),
 });
 
-export const assessmentDraftSchema = z.discriminatedUnion("state", [
+const assessmentDraftSchema = z.discriminatedUnion("state", [
   z.object({
     state: z.literal("complete"),
     dimensions,
@@ -101,8 +101,7 @@ export const assessmentResponseSchema = z.union([
   assessmentDraftSchema.options[1],
 ]);
 export type AssessmentDraft = z.infer<typeof assessmentDraftSchema>;
-export type ScrutinyScore = z.infer<typeof level>;
-export type AssessmentDimensions = z.infer<typeof dimensions>;
+type ScrutinyScore = z.infer<typeof level>;
 
 type Observation<T> = { headSha: string; observedAt: number } & (
   | { state: "known"; value: T }
@@ -247,7 +246,6 @@ export function createAssessment({
               : [
                   "The assessment's source evidence could not be validated against inspected code.",
                   ...unsupported.map(({ path, line, quote }) => {
-                    // Keeps a 500-character path within the 700-character entry limit.
                     const cited = quote.trim();
                     const shown =
                       cited.length > 160 ? `${cited.slice(0, 159)}…` : cited;

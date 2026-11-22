@@ -15,7 +15,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   home: "",
   publicKey: undefined as CryptoKey | undefined,
-  /** Runs while a model catalog request is in flight, before it responds. */
   duringCatalog: undefined as (() => Promise<void>) | undefined,
 }));
 vi.mock("node:os", async (original) => ({

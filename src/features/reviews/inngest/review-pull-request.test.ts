@@ -193,6 +193,7 @@ test.each(["small-model", "large-model"])(
                             previousFindingId: null,
                             category: null,
                             confidence: null,
+                            habit: null,
                           },
                         ],
                         limitations: [],
@@ -337,6 +338,7 @@ test("a diff beyond one model context is reviewed in parts and merged from their
     previousFindingId: null,
     category: null,
     confidence: null,
+    habit: null,
   });
   const review = (findings: unknown[]) => ({
     assessment: null,
@@ -405,7 +407,6 @@ test("a diff beyond one model context is reviewed in parts and merged from their
     "synthesize-review",
     "save-review",
   ]);
-  // Each part sees only its own patch; synthesis sees reports, not patches.
   const parts = requests.filter((body) => body.includes("reviewScope"));
   expect(parts.filter((body) => body.includes("+newAuth();"))).toHaveLength(2);
   expect(
@@ -417,13 +418,13 @@ test("a diff beyond one model context is reviewed in parts and merged from their
   const synthesis = requests.find((body) => body.includes("partReports"))!;
   expect(synthesis).not.toContain("+newAuth();");
   expect(synthesis).not.toContain("+chargeCard();");
-  // Only synthesis announces finding preparation in a split review.
   const progress = mocks.mutation.mock.calls
     .filter(([ref]) => getFunctionName(ref) === "reviewJobs:progress")
-    .map(([, args]) => args.progress);
-  expect(progress.filter((text: string) => text.includes("preparing"))).toEqual(
-    ["Checking evidence and preparing findings"],
-  );
+    .map(([, args]) => args.progress)
+    .filter((text): text is string => text !== undefined);
+  expect(progress.filter((text) => text.includes("preparing"))).toEqual([
+    "Checking evidence and preparing findings",
+  ]);
   expect(progress.at(-1)).toBe("Checking evidence and preparing findings");
   const saved = mocks.mutation.mock.calls.find(
     ([ref]) => getFunctionName(ref) === "reviewJobs:finish",

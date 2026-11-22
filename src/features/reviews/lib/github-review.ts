@@ -10,7 +10,7 @@ import {
 
 type Review = Doc<"reviews">;
 
-export type GithubReviewComment = {
+type GithubReviewComment = {
   path: string;
   line: number;
   side: "LEFT" | "RIGHT";
@@ -22,12 +22,10 @@ export type GithubReviewPayload = {
 };
 export type PublishedGithubReview = { id: number; url: string };
 
-// GitHub rejects review and comment bodies longer than this.
 const MAX_BODY_CHARS = 65_000;
 
 const SEVERITY_LABEL = { high: "High", medium: "Medium", low: "Low" } as const;
 
-/** Hidden in the rendered review; finds a post whose result was never recorded. */
 export function reviewMarker(reviewId: string) {
   return `<!-- meteroite-review:${reviewId} -->`;
 }
@@ -59,11 +57,6 @@ function location(finding: Finding) {
   return `\`${finding.path}:${finding.line}\`${finding.side === "LEFT" ? " (removed line)" : ""}`;
 }
 
-/**
- * One GitHub review per saved review: inline comments for main findings,
- * nitpicks folded into the summary. `inline: false` puts every finding in
- * the summary, for when GitHub cannot resolve an inline anchor.
- */
 export function buildGithubReview(
   review: Review,
   findings: Finding[],
@@ -141,10 +134,6 @@ export async function findPostedGithubReview(
   return null;
 }
 
-/**
- * Posts the review as a non-blocking COMMENT review on the reviewed commit.
- * The caller must claim publication and check findPostedGithubReview first.
- */
 export async function publishGithubReview(
   octokit: Octokit,
   review: Review,
@@ -169,7 +158,6 @@ export async function publishGithubReview(
     const { data } = await post(true);
     return { id: data.id, url: data.html_url };
   } catch (error) {
-    // 422: an anchor no longer resolves, e.g. the commit left the PR.
     if (!(error instanceof RequestError && error.status === 422)) throw error;
     const { data } = await post(false);
     return { id: data.id, url: data.html_url };

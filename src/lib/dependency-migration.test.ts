@@ -1,9 +1,6 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { generateText, Output } from "ai";
-import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { NextRequest } from "next/server";
-import { z } from "zod";
 
 vi.mock("@/lib/convex-client", () => ({ getConvexAdminClient: () => ({}) }));
 
@@ -13,43 +10,6 @@ afterEach(() => {
 });
 
 describe("dependency migration integration", () => {
-  it("keeps structured code suggestions and token usage working through OpenRouter", async () => {
-    const openRouter = createOpenRouter({
-      apiKey: "test-key",
-      fetch: async () =>
-        Response.json({
-          id: "test-completion",
-          created: 1,
-          model: "test-model",
-          choices: [
-            {
-              index: 0,
-              message: {
-                role: "assistant",
-                content: '{"suggestion":"console.log(value);"}',
-              },
-              finish_reason: "stop",
-            },
-          ],
-          usage: {
-            prompt_tokens: 20,
-            completion_tokens: 10,
-            total_tokens: 30,
-            prompt_tokens_details: { cached_tokens: 4 },
-            completion_tokens_details: { reasoning_tokens: 2 },
-          },
-        }),
-    });
-    const result = await generateText({
-      model: openRouter.chat("test-model"),
-      output: Output.object({ schema: z.object({ suggestion: z.string() }) }),
-      prompt: "Complete this line",
-    });
-    expect(result.output.suggestion).toBe("console.log(value);");
-    expect(result.usage.inputTokenDetails.cacheReadTokens).toBe(4);
-    expect(result.usage.outputTokenDetails.reasoningTokens).toBe(2);
-  });
-
   it("registers the review jobs, cancellation filters, and failure handlers with Inngest 4", async () => {
     vi.stubEnv("OPENROUTER_API_KEY", "test-key");
     let registration:

@@ -73,7 +73,7 @@ describe("finding labels from the model", () => {
 
   test("unknown labels drop the label, not the finding", () => {
     const { findings, rejected } = validateFindings(
-      [{ ...draft, category: "vibes", confidence: 9 }],
+      [{ ...draft, category: "vibes", confidence: 9, habit: "Not A Slug" }],
       files,
       evidence,
       [],
@@ -82,14 +82,24 @@ describe("finding labels from the model", () => {
     expect(rejected).toBe(0);
     expect(findings[0].category).toBeUndefined();
     expect(findings[0].confidence).toBeUndefined();
+    expect(findings[0].habit).toBeUndefined();
   });
 
   test("valid labels are kept and null means unlabelled", () => {
     const [kept, bare] = [
-      { ...draft, category: "security", confidence: 4 },
+      {
+        ...draft,
+        category: "security",
+        confidence: 4,
+        habit: "discount-applied-twice",
+      },
       { ...draft, title: "Other", category: null, confidence: null },
     ].map((d) => validateFindings([d], files, evidence, [], "r").findings[0]);
-    expect(kept).toMatchObject({ category: "security", confidence: 4 });
+    expect(kept).toMatchObject({
+      category: "security",
+      confidence: 4,
+      habit: "discount-applied-twice",
+    });
     expect(bare.category).toBeUndefined();
   });
 });

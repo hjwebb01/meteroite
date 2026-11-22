@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 export type FindingVerdict =
   "supported" | "incorrect" | "could-not-reproduce" | "inconclusive";
 
-export const FINDING_VERDICT_LABELS: Record<
+const FINDING_VERDICT_LABELS: Record<
   FindingVerdict,
   { badge: string; compact: string }
 > = {

@@ -1,5 +1,3 @@
-// Reports which end-to-end flows can run locally, so verification stops at a
-// named missing secret instead of a mocked test.
 import { existsSync, readFileSync } from "node:fs";
 
 const fileEnv = existsSync(".env.local")
@@ -14,8 +12,6 @@ const fileEnv = existsSync(".env.local")
 const env = (name) => process.env[name] || fileEnv[name];
 const has = (name) => Boolean(env(name));
 
-// Mirrors convexDeployKeyProblem in src/lib/convex-client.ts: a preview key or
-// another deployment's key is present but every admin call is unauthorized.
 const deployKeyMismatch = () => {
   const url = env("NEXT_PUBLIC_CONVEX_URL");
   const key = env("CONVEX_DEPLOY_KEY");
@@ -29,8 +25,6 @@ const deployKeyMismatch = () => {
     : `CONVEX_DEPLOY_KEY for ${deployment} (current key is "${key.split("|")[0]}")`;
 };
 
-// Live review acceptance runs as the AGENTS.md test user, whose GitHub
-// connection only a person can grant (Clerk OAuth in the browser).
 const TEST_USER = "meteroite-agent+clerk_test@example.com";
 const testUserGithub = async () => {
   const clerk = (path) =>

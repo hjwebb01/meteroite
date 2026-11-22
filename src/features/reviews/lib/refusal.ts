@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { ConvexError } from "convex/values";
 
-// A refusal is an error written for the user: a ConvexError carrying its
-// message. Anything else is an infrastructure failure, logged on the server
-// and reported without its details.
 export function refusalResponse(error: unknown, fallback: string) {
   const message = refusalMessage(error);
   if (message !== undefined)

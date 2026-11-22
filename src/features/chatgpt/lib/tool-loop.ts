@@ -11,7 +11,6 @@ import {
 } from "./responses";
 import type { ChatGPTSelection } from "./types";
 
-/** Arguments the model can correct; the loop reports it back instead of failing the run. */
 export class ToolInputError extends Error {}
 
 export type LoopTool = {
@@ -24,7 +23,7 @@ export type LoopTool = {
   ) => Promise<unknown>;
 };
 
-export type ToolCallRecord = {
+type ToolCallRecord = {
   name: string;
   input: Record<string, unknown>;
   output: string;
@@ -38,25 +37,15 @@ type Finish =
       description: string;
       schema: z.ZodType;
       instruction: string;
-      /** Runs before each final call; receives any correction input being added. */
       before?: (
         additionalInput?: ResponseInput,
       ) => Promise<boolean | void> | boolean | void;
-      /** Maximum structured final attempts. Defaults to one. */
       maxAttempts?: 1 | 2;
     };
 
 const MAX_CALLS_PER_TURN = 16;
 const NAMESPACE = "meteroite";
 
-/**
- * Runs a ChatGPT Responses tool loop. Native output items, including encrypted
- * reasoning, are replayed across turns. Investigation ends when the model stops
- * calling tools, the budget leaves no room for another turn, or `maxTurns` is
- * reached. A text finish forces a tool-free answer on the last turn; a
- * structured finish makes a final call that must return `finish.name`, whose
- * parsed arguments are `value` (undefined when malformed).
- */
 export async function runToolLoop<Value = unknown>({
   selection,
   instructions,
@@ -74,20 +63,16 @@ export async function runToolLoop<Value = unknown>({
   selection: ChatGPTSelection;
   instructions: string;
   input: ResponseInput;
-  /** Describes the tool namespace to the model. */
   toolset: string;
   tools: LoopTool[];
   maxTurns?: number;
   finish: Finish;
   signal?: AbortSignal;
-  /** Runs before every inference and tool call; throw to stop the run. */
   beforeCall?: () => Promise<void>;
   budget?: {
-    /** Tokens the coming turn may use; zero or less ends investigation. */
     allowance(): number;
     record(response: Response, results: ResponseInput): void;
   };
-  /** Wraps each inference, e.g. in a durable step. */
   runStep?: (name: string, run: () => Promise<Response>) => Promise<Response>;
   complete?: typeof completeChatGPTResponse;
 }): Promise<{
@@ -110,7 +95,6 @@ export async function runToolLoop<Value = unknown>({
     name: string,
     parameters: Parameters<typeof completeChatGPTResponse>[1],
   ) =>
-    // Resolve credentials inside the step, never as serialized step output.
     runStep(name, () =>
       complete(selection, { instructions, ...parameters }, { signal }),
     );
@@ -157,7 +141,6 @@ export async function runToolLoop<Value = unknown>({
       throw new Error(
         "ChatGPT repeated the same tool requests. Please try a more specific instruction.",
       );
-    // Responses output is valid replay input, even after JSON serialization.
     input.push(...(response.output as ResponseInput));
     const results: ResponseInput = [];
     const records: ToolCallRecord[] = [];
@@ -236,8 +219,6 @@ export async function runToolLoop<Value = unknown>({
     }
     if (value !== undefined) return { value, turns, budgetStopped };
 
-    // Invalid structured responses still consume provider budget. Never retry
-    // transport or stream errors: they escape from infer above.
     budget?.record(response, []);
     if (attempt + 1 >= maxAttempts || !rejection)
       return { turns, budgetStopped };

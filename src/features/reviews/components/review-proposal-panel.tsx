@@ -1,4 +1,5 @@
 "use client";
+import { Disclosure, DisclosureSummary } from "@/components/ui/disclosure";
 import { applicationAction } from "../../../../convex/lib/review_application";
 import { useQuery } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
@@ -70,15 +71,15 @@ export default function ReviewProposalPanel({
         </p>
       )}
       {proposal.checks.map((check, i) => (
-        <details key={i} className="mt-3">
-          <summary>
+        <Disclosure key={i} className="mt-3">
+          <DisclosureSummary>
             {check.status}:{" "}
             {check.command.join(" ") || "validation unavailable"}
-          </summary>
+          </DisclosureSummary>
           <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap">
             {check.output}
           </pre>
-        </details>
+        </Disclosure>
       ))}
       {(action === "reassess" || action === "applied") && (
         <div className="mt-4">

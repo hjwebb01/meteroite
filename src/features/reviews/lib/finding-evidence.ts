@@ -21,7 +21,7 @@ export const conclusionSchema = z.object({
     .max(8),
   assumptions: z.array(z.string().max(500)).max(10),
 });
-export type PinnedFindingSource = {
+type PinnedFindingSource = {
   headSha: string;
   baseSha: string;
   sourceOwner: string;
@@ -30,7 +30,7 @@ export type PinnedFindingSource = {
   repoName: string;
   diffLeftSha?: string;
 };
-export type FindingEvidence = z.infer<
+type FindingEvidence = z.infer<
   typeof conclusionSchema
 >["evidence"][number] & { commit: string; blobSha: string };
 

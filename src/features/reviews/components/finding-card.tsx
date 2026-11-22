@@ -1,3 +1,4 @@
+import { Disclosure, DisclosureSummary } from "@/components/ui/disclosure";
 import { useId, useState } from "react";
 import Check from "@boxicons/react/Check";
 import Copy from "@boxicons/react/Copy";
@@ -113,16 +114,16 @@ export function FindingCard({
         )}
       </div>
       <div className="p-4">
-        <h3 className="font-serif text-[19px] leading-tight tracking-[-0.01em]">
+        <h3 className="font-serif text-[1.125rem] leading-tight tracking-[-0.01em]">
           {f.title}
         </h3>
         <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-review-body">
           {f.explanation}
         </p>
-        <details className="mt-4 text-sm">
-          <summary className="cursor-pointer font-medium">
+        <Disclosure className="mt-4 text-sm">
+          <DisclosureSummary className="font-medium">
             Source evidence
-          </summary>
+          </DisclosureSummary>
           <div className="mt-3 space-y-3">
             {f.evidence.map((e, i) => (
               <div key={i}>
@@ -157,7 +158,7 @@ export function FindingCard({
               </div>
             ))}
           </div>
-        </details>
+        </Disclosure>
         <div className="mt-5 border-t pt-4">
           <p className="text-xs font-medium text-foreground">Suggested fix</p>
           <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-muted-foreground">

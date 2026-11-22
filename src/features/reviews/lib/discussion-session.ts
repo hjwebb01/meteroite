@@ -35,7 +35,6 @@ export function investigationRequestFor(session: DiscussionSession) {
     : { ...parameters, requestId: crypto.randomUUID() };
 }
 
-/** Owned by the saved reader, so virtualized annotations can safely unmount. */
 export function createDiscussionSessions() {
   const sessions = new Map<string, DiscussionSession>();
   const listeners = new Set<() => void>();

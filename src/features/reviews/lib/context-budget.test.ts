@@ -26,7 +26,6 @@ test("bounds counting work on long repetitive source without losing compression"
   const started = performance.now();
   expect(estimateTokens(source)).toBe(57_500);
   expect(performance.now() - started).toBeLessThan(2_000);
-  // A chunk boundary must not split a Unicode surrogate pair.
   expect(
     estimateTokens("a".repeat(4_095) + "🌍" + "a".repeat(4_095)),
   ).toBeGreaterThan(0);

@@ -1,8 +1,10 @@
 "use client";
 
+import { Disclosure, DisclosureSummary } from "@/components/ui/disclosure";
 import {
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -15,7 +17,6 @@ import ArrowUpRight from "@boxicons/react/ArrowUpRight";
 import Check from "@boxicons/react/Check";
 import ChevronRight from "@boxicons/react/ChevronRight";
 import Clock from "@boxicons/react/Clock";
-import LoaderCircle from "@boxicons/react/LoaderLines";
 import LockKeyhole from "@boxicons/react/LockKeyhole";
 import Plus from "@boxicons/react/Plus";
 import RotateCcw from "@boxicons/react/RefreshCcw";
@@ -26,6 +27,7 @@ import { Dialog, DropdownMenu } from "radix-ui";
 import { api } from "../../../../convex/_generated/api";
 import { Doc, Id } from "../../../../convex/_generated/dataModel";
 import type { ReviewHistoryRow } from "../../../../convex/reviews";
+import { isActiveReview } from "../../../../convex/lib/review_lifecycle";
 import { DEFAULT_CODING_MODEL_ID } from "../../../../convex/lib/coding_models";
 import {
   REVIEW_MODELS,
@@ -34,17 +36,23 @@ import {
 import { useChatGPT } from "@/features/chatgpt/hooks/use-chatgpt";
 import { ChatGPTProvider } from "@/features/chatgpt/components/chatgpt-provider";
 import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+import { Textarea } from "@/components/ui/textarea";
 import {
   NativeSelect,
   NativeSelectOptGroup,
 } from "@/components/ui/native-select";
 import { Wordmark } from "@/components/wordmark";
-import { cn } from "@/lib/utils";
+import { cn, formatTimestamp } from "@/lib/utils";
 import { parsePullRequestUrl } from "../lib/review";
+import { buildActivityRows, type ActivityEntry } from "../lib/review-activity";
+import { reviewStageLabel } from "../lib/review-stage";
+import { ReviewActivityFeed } from "./review-activity-feed";
+import { ReviewHeadline } from "./review-headline";
 import { ReviewReader } from "./review-reader";
 import { ReviewPublicationPreview } from "./review-publication-preview";
 
-export type Availability = {
+type Availability = {
   ready: boolean;
   historyAvailable: boolean;
   reason: string;
@@ -63,9 +71,7 @@ const statusLabel = {
   cancelled: "Cancelled",
 };
 
-// Each worker step reports progress, and a step is bounded at a few minutes,
-// so a longer silence means the worker died without recording why.
-const STALLED_AFTER_MS = 15 * 60_000;
+const noActivity: ActivityEntry[] = [];
 
 function useNow(intervalMs: number) {
   const [now, setNow] = useState(() => Date.now());
@@ -174,7 +180,6 @@ function UserReviewWorkspace({
     : chatGPT.status?.connected
       ? chatGPT.status.models
       : [];
-  // The selection can outlive its provider, such as after ChatGPT disconnects.
   const model = [
     ...openRouterModels.map((m) => m.id),
     ...chatGPTModels.map((m) => chatGPTReviewModelId(m.id)),
@@ -213,9 +218,7 @@ function UserReviewWorkspace({
           model: nextModel,
         }),
       );
-    } catch {
-      // The live form remains usable if storage is unavailable.
-    }
+    } catch {}
   }
 
   async function checkSetup() {
@@ -247,7 +250,6 @@ function UserReviewWorkspace({
           if (active) setChecking(false);
         });
     };
-    // OAuth can return in another tab; refresh access when this workspace regains focus.
     window.addEventListener("focus", refresh);
     refresh();
     return () => {
@@ -500,18 +502,18 @@ function UserReviewWorkspace({
                 <p className="text-sm font-medium">
                   Review service isn’t ready yet
                 </p>
-                <p className="mt-1 text-sm text-muted-foreground [overflow-wrap:anywhere]">
+                <p className="mt-1 text-sm text-review-muted [overflow-wrap:anywhere]">
                   {setupError || availability?.reason}
                 </p>
                 {!!availability?.missing.length && (
-                  <details className="mt-3 text-xs">
-                    <summary className="cursor-pointer text-muted-foreground">
+                  <Disclosure className="mt-3 text-xs">
+                    <DisclosureSummary className="text-review-muted">
                       Setup requirements
-                    </summary>
+                    </DisclosureSummary>
                     <p className="mt-2 [overflow-wrap:anywhere]">
                       <code>{availability.missing.join(", ")}</code>
                     </p>
-                  </details>
+                  </Disclosure>
                 )}
               </div>
               <Button
@@ -563,7 +565,7 @@ function UserReviewWorkspace({
               }}
             />
           ) : (
-            <p role="status" className="text-sm text-muted-foreground">
+            <p role="status" className="text-sm text-review-muted">
               Loading review…
             </p>
           )
@@ -633,12 +635,7 @@ function UserReviewWorkspace({
                           : undefined
                       }
                     >
-                      {submitting && (
-                        <LoaderCircle
-                          aria-hidden="true"
-                          className="size-4 animate-spin motion-reduce:animate-none"
-                        />
-                      )}
+                      {submitting && <Spinner aria-hidden="true" />}
                       {needsGitHub
                         ? "Connect GitHub"
                         : submitting
@@ -684,7 +681,7 @@ function UserReviewWorkspace({
                       Optional
                     </span>
                   </label>
-                  <textarea
+                  <Textarea
                     id={`${formId}-focus`}
                     maxLength={4000}
                     rows={3}
@@ -700,7 +697,7 @@ function UserReviewWorkspace({
                       }
                     }}
                     placeholder="Saved with this review."
-                    className="block max-h-60 min-h-[92px] w-full resize-none border border-review-border-strong bg-review-reading px-4 py-3.5 text-base leading-6 outline-none transition-colors [field-sizing:content] placeholder:text-review-dim focus:border-review-link motion-reduce:transition-none"
+                    className="block max-h-60 min-h-[92px] resize-none rounded-none border-review-border-strong bg-review-reading px-4 py-3.5 leading-6 shadow-none placeholder:text-review-dim focus-visible:border-review-link focus-visible:ring-0 motion-reduce:transition-none dark:bg-review-reading"
                   />
                 </div>
                 <div className="flex flex-wrap items-end gap-x-4 gap-y-2">
@@ -793,12 +790,12 @@ function UserReviewWorkspace({
               >
                 <h2
                   id={`${formId}-continue`}
-                  className="text-[26px] leading-[1.15] font-medium tracking-[-0.02em]"
+                  className="text-[1.75rem] leading-[1.15] font-medium tracking-[-0.02em]"
                 >
                   Continue review
                 </h2>
                 <div className="flex flex-col gap-1">
-                  <p className="text-[22px] leading-[1.25] font-medium tracking-[-0.01em] break-words">
+                  <p className="text-[1.125rem] leading-[1.35] font-medium tracking-[-0.01em] break-words">
                     {history[0].title ||
                       `${history[0].repoName} #${history[0].pullNumber}`}
                   </p>
@@ -859,7 +856,6 @@ function RailNote({ children }: { children: ReactNode }) {
 
 const DAY_MS = 86_400_000;
 
-// Collapses newest-first history into one newest-first run list per pull request.
 function groupByPullRequest(items: History[]) {
   const groups = new Map<string, History[]>();
   for (const item of items) {
@@ -871,7 +867,6 @@ function groupByPullRequest(items: History[]) {
   return [...groups.values()];
 }
 
-// Buckets pull requests by the calendar age of their latest run, preserving order.
 function groupByAge(prs: History[][]) {
   const today = new Date().setHours(0, 0, 0, 0);
   const groups = new Map<string, History[][]>();
@@ -962,7 +957,7 @@ function PullRequestItem({
                 )}
               >
                 <span className="min-w-0 flex-1 truncate">
-                  {formatRunTime(run._creationTime)}
+                  {formatTimestamp(run._creationTime)}
                 </span>
                 <RunMeta run={run} />
               </button>
@@ -974,15 +969,6 @@ function PullRequestItem({
   );
 }
 
-function formatRunTime(time: number) {
-  return new Date(time).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
-
 const menuItem =
   "flex h-8 cursor-default items-center gap-2 rounded-sm px-2 text-[13px] text-review-body outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-accent data-[highlighted]:text-foreground [&>svg]:text-review-muted";
 
@@ -990,11 +976,13 @@ function RunMeta({ run }: { run: History }) {
   return (
     <span
       className={cn(
-        "shrink-0 text-right text-[11px] leading-5 text-review-muted",
+        "shrink-0 text-right text-xs leading-5 text-review-muted",
         run.status === "failed" && "text-diff-del",
       )}
     >
-      <span className="block">{statusLabel[run.status]}</span>
+      <span className="block">
+        {reviewStageLabel(run) ?? statusLabel[run.status]}
+      </span>
       {run.findingCount !== undefined && (
         <span className="block">
           {run.findingCount} {run.findingCount === 1 ? "finding" : "findings"}
@@ -1037,9 +1025,15 @@ function ReviewDetail({
   const verdicts = useQuery(api.reviewInteractions.verdicts, {
     reviewId: review._id,
   });
-  const now = useNow(30_000);
-  const running = review.status === "queued" || review.status === "running";
-  const stalled = running && now - review.updatedAt > STALLED_AFTER_MS;
+  const activity =
+    useQuery(api.reviews.activity, { id: review._id }) ?? noActivity;
+  const running = isActiveReview(review.status);
+  const now = useNow(running ? 1_000 : 30_000);
+  const stageLabel = reviewStageLabel(review);
+  const activityRows = useMemo(
+    () => buildActivityRows(review, activity),
+    [review, activity],
+  );
   const changed =
     review.freshness?.state === "outdated" ||
     (review.result?.outdated === true && review.freshness?.state !== "current");
@@ -1109,6 +1103,8 @@ function ReviewDetail({
     verdicts,
     previous: previous ?? null,
     initialFindingId,
+    activity,
+    activityRows,
     onRerun,
     onSelectReview,
   };
@@ -1128,7 +1124,7 @@ function ReviewDetail({
             </a>
             <span>
               · {statusLabel[review.status]}, started{" "}
-              {formatRunTime(review._creationTime)}
+              {formatTimestamp(review._creationTime)}
             </span>
           </p>
           <h1 className="mt-3 break-words text-[clamp(20px,2.6vw,32px)] leading-snug tracking-[-0.035em]">
@@ -1250,7 +1246,7 @@ function ReviewDetail({
                 ? "Historical revision · newer source detected. "
                 : "PR freshness is unknown. "}
             {review.freshness.reason} Checked{" "}
-            {formatRunTime(review.freshness.observedAt)}.
+            {formatTimestamp(review.freshness.observedAt)}.
           </>
         ) : review.headSha ? (
           "Saved source is pinned. PR freshness has not been confirmed."
@@ -1347,34 +1343,38 @@ function ReviewDetail({
               <p className="text-xs text-review-link">
                 Analysis activity · {statusLabel[review.status]}
               </p>
-              <h2 className="mt-5 flex items-start gap-3 text-xl leading-snug">
-                {running && !stalled && (
-                  <LoaderCircle
-                    aria-hidden="true"
-                    className="mt-0.5 size-5 shrink-0 animate-spin motion-reduce:animate-none"
-                  />
-                )}
-                {stalled
-                  ? "This review has stopped reporting"
-                  : review.status === "failed"
-                    ? "Analysis couldn’t finish"
-                    : review.status === "cancelled"
-                      ? "Analysis cancelled"
-                      : review.progress}
+              <h2 className="mt-5 text-xl leading-snug">
+                {review.status === "failed"
+                  ? "Analysis couldn’t finish"
+                  : review.status === "cancelled"
+                    ? "Analysis cancelled"
+                    : (stageLabel ?? review.progress)}
               </h2>
+              <p className="sr-only" aria-live="polite">
+                {running ? stageLabel : ""}
+              </p>
+              {running && (
+                <ReviewHeadline
+                  stage={stageLabel ?? review.progress}
+                  elapsedMs={now - review._creationTime}
+                  files={files}
+                  activity={activity}
+                />
+              )}
+              <ReviewActivityFeed
+                sections={activityRows}
+                live={running}
+                startedAt={review._creationTime}
+              />
               <p
-                role={
-                  stalled || review.status === "failed" ? "alert" : "status"
-                }
+                role={review.status === "failed" ? "alert" : "status"}
                 className="mt-4 break-words text-sm leading-7 text-review-muted"
               >
-                {stalled
-                  ? `No progress since ${formatRunTime(review.updatedAt)}. Last reported step: ${review.progress}. Cancel this run before requesting a new review.`
-                  : review.status === "failed"
-                    ? review.error
-                    : review.status === "cancelled"
-                      ? "The saved work is retained. Request another review when you’re ready."
-                      : "This is actual background activity, not a completed change brief. You can leave and return through Saved reviews; progress is saved here."}
+                {review.status === "failed"
+                  ? review.error
+                  : review.status === "cancelled"
+                    ? "The saved work is retained. Request another review when you’re ready."
+                    : "This is actual background activity, not a completed change brief. You can leave and return through Saved reviews; progress is saved here."}
               </p>
               {!running && (
                 <Button
@@ -1387,14 +1387,14 @@ function ReviewDetail({
               )}
             </section>
             {!!files?.length && (
-              <details className="rounded-md border">
-                <summary className="cursor-pointer px-5 py-4 text-sm">
+              <Disclosure className="rounded-md border">
+                <DisclosureSummary className="px-5 py-4 text-sm">
                   Inspect saved source · {files.length} files
-                </summary>
+                </DisclosureSummary>
                 <div className="border-t p-3">
                   <ReviewReader {...readerProps} sourceOnly />
                 </div>
-              </details>
+              </Disclosure>
             )}
           </div>
         )}

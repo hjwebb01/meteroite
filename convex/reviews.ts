@@ -6,6 +6,11 @@ import { mutation, query } from "./_generated/server";
 import { verifyAuth } from "./auth";
 import { isReviewModelId } from "./lib/review_models";
 import { getOwnedReview } from "./lib/owned_review";
+import {
+  cancelReview,
+  failReview,
+  isActiveReview,
+} from "./lib/review_lifecycle";
 import { publicationSnapshot } from "./lib/review_publication";
 
 export type ReviewHistoryRow = {
@@ -16,6 +21,9 @@ export type ReviewHistoryRow = {
   pullNumber: number;
   title?: string;
   status: Doc<"reviews">["status"];
+  stage?: Doc<"reviews">["stage"];
+  parts?: number;
+  partsDone?: number;
   findingCount?: number;
   readCount: number;
   sectionCount: number;
@@ -54,6 +62,9 @@ async function historyRow(
     pullNumber: review.pullNumber,
     title: review.title,
     status: review.status,
+    stage: review.stage,
+    parts: review.parts,
+    partsDone: review.partsDone,
     findingCount: review.result?.findings.length,
     readCount: (await sectionReads(ctx, review)).length,
     sectionCount:
@@ -103,6 +114,18 @@ export const history = query({
         page.page.map((review) => historyRow(ctx, review)),
       ),
     };
+  },
+});
+
+export const activity = query({
+  args: { id: v.id("reviews") },
+  handler: async (ctx, { id }) => {
+    const identity = await verifyAuth(ctx);
+    await getOwnedReview(ctx, id, identity.subject);
+    return ctx.db
+      .query("reviewActivity")
+      .withIndex("by_review", (q) => q.eq("reviewId", id))
+      .collect();
   },
 });
 
@@ -219,9 +242,7 @@ export const start = mutation({
       )
       .order("desc")
       .take(50);
-    const active = recent.find(
-      (r) => r.status === "queued" || r.status === "running",
-    );
+    const active = recent.find((r) => isActiveReview(r.status));
     if (active) return { id: active._id, created: false };
     const previous = recent.find((r) => r.status === "completed");
     const id = await ctx.db.insert("reviews", {
@@ -244,12 +265,8 @@ export const cancel = mutation({
   handler: async (ctx, { id }) => {
     const identity = await verifyAuth(ctx);
     const review = await getOwnedReview(ctx, id, identity.subject);
-    if (review.status !== "queued" && review.status !== "running") return;
-    await ctx.db.patch("reviews", id, {
-      status: "cancelled",
-      progress: "Review cancelled",
-      updatedAt: Date.now(),
-    });
+    if (!isActiveReview(review.status)) return;
+    await cancelReview(ctx, review);
   },
 });
 
@@ -259,12 +276,12 @@ export const failToQueue = mutation({
     const identity = await verifyAuth(ctx);
     const review = await getOwnedReview(ctx, id, identity.subject);
     if (review.status !== "queued") return;
-    await ctx.db.patch("reviews", id, {
-      status: "failed",
-      error: "The review could not be queued. Try again.",
-      progress: "Could not start",
-      updatedAt: Date.now(),
-    });
+    await failReview(
+      ctx,
+      review,
+      "The review could not be queued. Try again.",
+      "Could not start",
+    );
   },
 });
 

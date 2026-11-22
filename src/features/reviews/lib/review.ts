@@ -44,7 +44,6 @@ export function parsePullRequestUrl(value: string) {
 
 const MAX_FINDINGS = 20;
 
-// A missing or unrecognised label only drops the label, never the finding.
 const categorySchema = z
   .enum(FINDING_CATEGORIES)
   .nullish()
@@ -57,8 +56,16 @@ const confidenceSchema = z
   .catch(undefined)
   .transform((value) => value ?? undefined)
   .optional();
+const habitSchema = z
+  .string()
+  .max(80)
+  .regex(/^[a-z0-9]+(-[a-z0-9]+)*$/)
+  .nullish()
+  .catch(undefined)
+  .transform((value) => value ?? undefined)
+  .optional();
 
-export const findingSchema = z.object({
+const findingSchema = z.object({
   severity: z.enum(["high", "medium", "low"]),
   title: z.string().min(1).max(180),
   path: z.string().min(1).max(500),
@@ -79,11 +86,9 @@ export const findingSchema = z.object({
   previousFindingId: z.string().nullable(),
   category: categorySchema,
   confidence: confidenceSchema,
+  habit: habitSchema,
 });
 
-// The response shapes carry no length or count bounds, so one hotspot or
-// finding that breaks a bound is rejected on its own by validateHotspots or
-// validateFindings instead of failing the whole review.
 const side = z.enum(["LEFT", "RIGHT"]);
 const hotspotResponseSchema = z.object({
   kind: hotspotDraftSchema.shape.kind,
@@ -105,6 +110,7 @@ const findingResponseSchema = z.object({
   previousFindingId: z.string().nullable(),
   category: z.string().nullable(),
   confidence: z.number().nullable(),
+  habit: z.string().nullable(),
 });
 
 export const reviewOutputSchema = z.object({
@@ -124,7 +130,6 @@ export type ChangedFile = {
   previous_filename?: string;
   status: string;
   patch?: string;
-  /** Which review part's model context carries this patch. */
   part?: number;
   anchors?: { LEFT: number[]; RIGHT: number[] };
   hunks?: ChangeHunk[];

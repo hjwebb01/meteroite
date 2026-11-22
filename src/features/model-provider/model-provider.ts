@@ -9,21 +9,11 @@ import {
 } from "@/features/chatgpt/lib/local-account";
 import type { ChatGPTSelection } from "@/features/chatgpt/lib/types";
 
-/**
- * Which Model provider a run uses. Only identifiers, so it can travel in
- * Inngest events; credentials stay on this machine. OpenRouter model ids are
- * persisted with the conversation or Review, so they are not repeated here.
- */
 export type ModelProvider =
   { kind: "chatgpt"; selection: ChatGPTSelection } | { kind: "openrouter" };
 
 const OPENROUTER: ModelProvider = { kind: "openrouter" };
 
-/**
- * Resolves the Model provider for a request, or the 400 to return. A Review
- * passes its chosen model id; a conversation turn follows the owner's
- * ChatGPT preference.
- */
 export async function resolveModelProvider(
   userId: string,
   request: Request,
@@ -53,7 +43,6 @@ export async function resolveModelProvider(
   }
 }
 
-/** Confirms the event's Model provider still matches the persisted Review. */
 export function modelProviderForReview(
   review: { model: string },
   ownerId: string,

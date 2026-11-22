@@ -1,5 +1,8 @@
 "use client";
 
+import { Disclosure, DisclosureSummary } from "@/components/ui/disclosure";
+import { evidenceTrail } from "../lib/review-coverage";
+import type { ActivityEntry } from "../lib/review-activity";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CodeViewDiffItem,
@@ -32,6 +35,7 @@ import {
 } from "../lib/review-diff";
 import { fileAtCommitUrl } from "../lib/review";
 import type { FindingVerdict } from "./finding-verdict-badge";
+import { SeverityBadge } from "./severity-badge";
 import { FindingCard } from "./finding-card";
 import { ReviewFindingPanel } from "./review-finding-panel";
 import { IconButton, InlineCode } from "./review-diff-parts";
@@ -66,9 +70,10 @@ function hasLine(
   });
 }
 
-export interface ReviewDiffPanelProps {
+interface ReviewDiffPanelProps {
   review: Doc<"reviews">;
   files: Doc<"reviewFiles">[];
+  activity: ActivityEntry[];
   findings: ReviewFinding[];
   allFindings: ReviewFinding[];
   verdicts: Record<string, FindingVerdict>;
@@ -80,9 +85,55 @@ export interface ReviewDiffPanelProps {
   onReviewLatest: () => void;
 }
 
+function EvidenceTrail({
+  finding,
+  files,
+  activity,
+  headSha,
+  onNavigate,
+}: {
+  finding: ReviewFinding;
+  files: Doc<"reviewFiles">[];
+  activity: ActivityEntry[];
+  headSha?: string;
+  onNavigate: (target: ReviewNavigationTarget) => void;
+}) {
+  if (!activity.length || !headSha || finding.side === "LEFT") return null;
+  const { reads, inDiff } = evidenceTrail(finding, files, activity);
+  return (
+    <p className="text-xs leading-5 text-review-muted">
+      {reads.length
+        ? `Read by the reviewer in ${reads.length === 1 ? "step" : "steps"} ${reads.map((read) => read.ordinal).join(", ")}. `
+        : "No file read covered this line. "}
+      {reads.length > 0 && (
+        <button
+          type="button"
+          className="text-review-link underline-offset-4 hover:underline"
+          onClick={() =>
+            onNavigate({
+              kind: "reference",
+              reference: {
+                path: finding.path,
+                sourcePath: finding.path,
+                line: finding.line,
+                side: "RIGHT",
+                commitSha: headSha,
+              },
+            })
+          }
+        >
+          Open line {finding.line}
+        </button>
+      )}
+      {inDiff ? " Line was also in the diff the reviewer was given." : ""}
+    </p>
+  );
+}
+
 export default function ReviewDiffPanel({
   review,
   files,
+  activity,
   findings,
   allFindings,
   verdicts,
@@ -289,11 +340,24 @@ export default function ReviewDiffPanel({
           context
           onDiscuss={() => onSelectFinding(finding.id)}
         />
+        <ReviewFindingPanel
+          key={finding.id}
+          review={review}
+          finding={finding}
+          onReviewLatest={onReviewLatest}
+        />
+        <EvidenceTrail
+          finding={finding}
+          files={files}
+          activity={activity}
+          headSha={review.headSha}
+          onNavigate={onNavigate}
+        />
         {finding.evidence.length > 0 && (
-          <details className="rounded-md border border-review-border p-3 text-xs">
-            <summary className="cursor-pointer py-1">
+          <Disclosure boxed className="border-review-border text-xs">
+            <DisclosureSummary className="py-1">
               Visit supporting source in this workspace
-            </summary>
+            </DisclosureSummary>
             <p className="mt-2 text-review-muted">
               Supporting evidence may be elsewhere, not on the finding’s anchor
               line.
@@ -326,7 +390,7 @@ export default function ReviewDiffPanel({
                         },
                       })
                     }
-                    className="block min-h-9 rounded-md text-left text-review-link underline focus-visible:outline-2 focus-visible:outline-review-link"
+                    className="block min-h-9 rounded-md text-left text-review-link underline"
                   >
                     {evidence.path}:{evidence.line} ({left ? "LEFT" : "RIGHT"})
                     ·{" "}
@@ -337,14 +401,8 @@ export default function ReviewDiffPanel({
                 );
               })}
             </div>
-          </details>
+          </Disclosure>
         )}
-        <ReviewFindingPanel
-          key={finding.id}
-          review={review}
-          finding={finding}
-          onReviewLatest={onReviewLatest}
-        />
       </div>
     );
   }
@@ -361,7 +419,7 @@ export default function ReviewDiffPanel({
           data-review-annotation={key}
           tabIndex={-1}
           aria-label={`Finding: ${finding.title}`}
-          className="min-w-0 border-y border-review-border bg-review-code font-sans text-review-text focus-visible:outline-2 focus-visible:outline-review-link"
+          className="min-w-0 border-y border-review-border bg-review-code font-sans text-review-text"
         >
           {expanded ? (
             inspection(finding)
@@ -370,11 +428,13 @@ export default function ReviewDiffPanel({
               type="button"
               aria-expanded={false}
               onClick={() => onSelectFinding(finding.id)}
-              className="flex min-h-10 w-full flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2 text-left text-xs hover:bg-review-reading focus-visible:outline-2 focus-visible:outline-review-link"
+              className="flex min-h-10 w-full flex-wrap items-baseline gap-x-3 gap-y-1 px-3 py-2 text-left text-xs hover:bg-review-reading"
             >
-              <span className="font-semibold">
-                {finding.severity} severity · {finding.side ?? "RIGHT"}{" "}
-                {finding.line}
+              <span className="flex items-baseline gap-2 font-semibold">
+                <SeverityBadge severity={finding.severity} />
+                <span>
+                  {finding.side ?? "RIGHT"} {finding.line}
+                </span>
               </span>
               <span className="min-w-0 break-words text-review-link">
                 <InlineCode text={finding.title} />
@@ -400,12 +460,17 @@ export default function ReviewDiffPanel({
           type="button"
           aria-expanded={expanded}
           onClick={() => onNavigate(metadata)}
-          className="min-h-9 text-left text-review-link underline"
+          className="flex min-h-9 w-full flex-wrap items-baseline gap-x-3 gap-y-1 text-left hover:bg-review-reading"
         >
-          {metadata.hotspot.kind === "human_judgment"
-            ? "Human judgment"
-            : "Possible issue"}
-          : {metadata.hotspot.title}
+          <span className="font-semibold text-review-muted">
+            {metadata.hotspot.kind === "human_judgment"
+              ? "Human judgment"
+              : "Possible issue"}
+          </span>
+          <span className="min-w-0 break-words">{metadata.hotspot.title}</span>
+          <span className="text-review-muted">
+            {expanded ? "Hide reason" : "Show reason"}
+          </span>
         </button>
         {expanded && (
           <p className="mt-2 whitespace-pre-wrap leading-6 text-review-body">
@@ -447,8 +512,19 @@ export default function ReviewDiffPanel({
       className="review-source-plane flex min-w-0 flex-col text-review-text"
     >
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-review-border bg-review-chrome px-3 py-2">
-        <span className="text-xs text-review-muted">
-          Saved source · {review.headSha?.slice(0, 7) ?? "revision unavailable"}
+        <span className="min-w-0 break-all text-xs text-review-muted">
+          {location ? (
+            <>
+              {location.path}
+              {location.line !== undefined &&
+                ` (${location.side ?? "RIGHT"} line ${location.line})`}
+              {focus?.kind === "group" || focus?.kind === "hunk"
+                ? ` · block ${focus.hunk.ordinal + 1}`
+                : ""}
+            </>
+          ) : (
+            `Saved source · ${review.headSha?.slice(0, 7) ?? "revision unavailable"}`
+          )}
         </span>
         <div className="flex items-center gap-2">
           {wide && (
@@ -462,7 +538,7 @@ export default function ReviewDiffPanel({
             </Button>
           )}
           <span className="text-xs text-review-muted">
-            {findings.length} findings
+            {findings.length} {findings.length === 1 ? "finding" : "findings"}
           </span>
           <IconButton label="Previous finding" onClick={() => step(-1)}>
             <ChevronUp aria-hidden width={18} height={18} />
@@ -472,16 +548,6 @@ export default function ReviewDiffPanel({
           </IconButton>
         </div>
       </div>
-      {location && (
-        <p className="border-b border-review-border bg-review-code px-3 py-2 text-xs leading-5 text-review-muted">
-          <span className="break-all">{location.path}</span>
-          {location.line !== undefined &&
-            ` (${location.side ?? "RIGHT"} line ${location.line})`}
-          {focus?.kind === "group" || focus?.kind === "hunk"
-            ? ` · saved hunk ${focus.hunk.ordinal + 1}`
-            : ""}
-        </p>
-      )}
       {activeFinding && focus?.kind !== "finding" && (
         <div className="border-b border-review-border px-3 py-2">
           <Button
@@ -497,7 +563,7 @@ export default function ReviewDiffPanel({
         <section
           data-unavailable-source
           tabIndex={-1}
-          className="border-b border-review-border p-4 focus-visible:outline-2 focus-visible:outline-review-link"
+          className="border-b border-review-border p-4"
         >
           <h3 className="text-sm font-semibold">
             Exact saved source unavailable
@@ -564,7 +630,7 @@ export default function ReviewDiffPanel({
                 <h3
                   data-review-file={item.fileDiff.name}
                   tabIndex={-1}
-                  className="min-w-0 flex-1 break-all focus-visible:outline-2 focus-visible:outline-review-link"
+                  className="min-w-0 flex-1 break-all"
                 >
                   <code>{item.fileDiff.name}</code>
                 </h3>
@@ -590,7 +656,7 @@ export default function ReviewDiffPanel({
               </div>
             )
           }
-          className="h-[72dvh] min-h-96 min-w-0 overflow-auto"
+          className="h-[calc(100dvh-13rem)] min-h-96 min-w-0 overflow-auto"
         />
       ) : (
         <p className="p-5 text-sm leading-6 text-review-muted">

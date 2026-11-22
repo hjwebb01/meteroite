@@ -1,4 +1,4 @@
-export type ApplicationBlockReason =
+type ApplicationBlockReason =
   | "stale"
   | "permission"
   | "scope"

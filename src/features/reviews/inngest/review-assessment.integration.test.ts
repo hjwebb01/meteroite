@@ -326,6 +326,7 @@ describe("authenticated persisted review assessment", () => {
             previousFindingId: null,
             category: null,
             confidence: null,
+            habit: null,
           },
         ],
         limitations: [],
@@ -467,6 +468,7 @@ describe("authenticated persisted review assessment", () => {
       previousFindingId: null,
       category: null,
       confidence: null,
+      habit: null,
     };
     output = {
       summary: "Original snapshot",

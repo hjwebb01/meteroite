@@ -13,8 +13,6 @@ export async function githubApplicationClient(ownerId: string) {
       "GitHub is disconnected. Reconnect your GitHub account before applying.",
     );
   const octokit = new Octokit({ auth: grant.token });
-  // Each request gets its own 20-second limit; one shared signal would end
-  // a long application partway through.
   octokit.hook.wrap("request", (request, options) =>
     request({
       ...options,
@@ -23,7 +21,7 @@ export async function githubApplicationClient(ownerId: string) {
   );
   return { octokit, scopes: grant.scopes ?? [] };
 }
-export function applicationMarker(applicationId: string, digest: string) {
+function applicationMarker(applicationId: string, digest: string) {
   return `Meteroite-Application: ${applicationId}\nMeteroite-Proposal: ${digest}`;
 }
 
@@ -52,8 +50,6 @@ function accessFailure(error: unknown, target: string): never {
   throw error;
 }
 
-// Only explicit rejection responses can resolve a write as unsuccessful.
-// Transport failures, internal errors, and partial commit responses stay uncertain.
 export class ApplicationWriteRejectedError extends ApplicationBlockedError {}
 function writeRejection(error: unknown) {
   const response = error as {
@@ -284,8 +280,6 @@ async function verifyAppliedCommit(
     }
   }
 }
-// Read-only checks, run before the application is marked as writing so a
-// failure here is never reported as an uncertain remote write.
 export async function validateApplication(
   octokit: Octokit,
   application: Doc<"reviewApplications">,

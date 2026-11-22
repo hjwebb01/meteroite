@@ -15,6 +15,13 @@ import {
   changeHunkSchema,
 } from "./lib/review_navigation";
 import { getOwnedReview } from "./lib/owned_review";
+import { reviewActionInput, reviewStage } from "./lib/review_stage";
+import {
+  completeReview,
+  expireStalledReviews,
+  failReview,
+  loadActiveReview,
+} from "./lib/review_lifecycle";
 
 export const get = internalQuery({
   args: { id: v.id("reviews"), ownerId: v.string() },
@@ -56,15 +63,26 @@ export const status = internalQuery({
 export const progress = internalMutation({
   args: {
     id: v.id("reviews"),
-    progress: v.string(),
+    progress: v.optional(v.string()),
     title: v.optional(v.string()),
+    stage: v.optional(reviewStage),
+    parts: v.optional(v.number()),
+    action: v.optional(reviewActionInput),
+    partDone: v.optional(v.boolean()),
   },
-  handler: async (ctx, { id, ...fields }) => {
-    const review = await ctx.db.get("reviews", id);
-    if (!review || (review.status !== "queued" && review.status !== "running"))
-      return false;
+  handler: async (ctx, { id, action, partDone, ...fields }) => {
+    const review = await loadActiveReview(ctx, id);
+    if (!review) return false;
+    if (action)
+      await ctx.db.insert("reviewActivity", {
+        reviewId: id,
+        stage: fields.stage ?? review.stage ?? "load",
+        at: Date.now(),
+        ...action,
+      });
     await ctx.db.patch("reviews", id, {
       ...fields,
+      ...(partDone ? { partsDone: (review.partsDone ?? 0) + 1 } : {}),
       status: "running",
       updatedAt: Date.now(),
     });
@@ -84,9 +102,8 @@ export const pinSnapshot = internalMutation({
     sourceRepo: v.string(),
   },
   handler: async (ctx, { id, ...snapshot }) => {
-    const review = await ctx.db.get("reviews", id);
-    if (!review || (review.status !== "queued" && review.status !== "running"))
-      return false;
+    const review = await loadActiveReview(ctx, id);
+    if (!review) return false;
     if (review.headSha || review.baseSha)
       return (
         review.headSha === snapshot.headSha &&
@@ -100,7 +117,6 @@ export const pinSnapshot = internalMutation({
   },
 });
 
-/** Upserts by filename so a retried load step does not duplicate files. */
 export const saveFiles = internalMutation({
   args: {
     id: v.id("reviews"),
@@ -109,9 +125,8 @@ export const saveFiles = internalMutation({
     files: v.array(reviewFileDiff),
   },
   handler: async (ctx, { id, headSha, baseSha, files }) => {
-    const review = await ctx.db.get("reviews", id);
-    if (!review || (review.status !== "queued" && review.status !== "running"))
-      return;
+    const review = await loadActiveReview(ctx, id);
+    if (!review) return;
     if (review.headSha !== headSha || review.baseSha !== baseSha)
       throw new Error("Saved diffs must match the pinned review snapshot");
     for (const file of files) {
@@ -141,9 +156,8 @@ export const saveFiles = internalMutation({
 export const finish = internalMutation({
   args: { id: v.id("reviews"), result: v.object(reviewResult) },
   handler: async (ctx, { id, result }) => {
-    const review = await ctx.db.get("reviews", id);
-    if (!review || (review.status !== "queued" && review.status !== "running"))
-      return;
+    const review = await loadActiveReview(ctx, id);
+    if (!review) return;
     if (result.reassessment) {
       reassessmentSchema.parse(result.reassessment);
       if (
@@ -240,28 +254,22 @@ export const finish = internalMutation({
         }
       }
     }
-    await ctx.db.patch("reviews", id, {
-      result,
-      status: "completed",
-      progress: "Review complete",
-      updatedAt: Date.now(),
-    });
+    await completeReview(ctx, review, result);
   },
 });
 
 export const fail = internalMutation({
   args: { id: v.id("reviews"), error: v.string() },
   handler: async (ctx, { id, error }) => {
-    const review = await ctx.db.get("reviews", id);
-    if (!review || (review.status !== "queued" && review.status !== "running"))
-      return;
-    await ctx.db.patch("reviews", id, {
-      status: "failed",
-      error,
-      progress: "Review failed",
-      updatedAt: Date.now(),
-    });
+    const review = await loadActiveReview(ctx, id);
+    if (!review) return;
+    await failReview(ctx, review, error);
   },
+});
+
+export const expireStalled = internalMutation({
+  args: {},
+  handler: expireStalledReviews,
 });
 
 export const recordFreshness = internalMutation({
@@ -277,7 +285,6 @@ export const recordFreshness = internalMutation({
       review.freshness.observedAt > observation.observedAt
     )
       return;
-    // A failed lookup says nothing about a previously observed newer branch.
     if (
       observation.state === "unavailable" &&
       review.freshness?.state === "outdated"

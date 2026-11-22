@@ -1,11 +1,6 @@
 import { v, type GenericValidator, type Validator } from "convex/values";
 import { z } from "zod";
 
-/**
- * Derives the Convex validator for a Zod schema so a stored shape has one
- * definition. Bounds and refinements cannot be stored; mutations still parse
- * with the Zod schema before writing.
- */
 export function zodValidator<T extends z.ZodType>(
   schema: T,
 ): Validator<z.output<T>, "required", string> {

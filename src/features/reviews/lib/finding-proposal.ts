@@ -19,13 +19,12 @@ export const proposedChangeSchema = z.object({
       "Planned offline validation commands to execute against the proposed files after generation; these need not have run during investigation.",
     ),
 });
-export type ProposalFile = {
+type ProposalFile = {
   path: string;
   expectedBlobSha: string | null;
   original: string | null;
   replacement: string | null;
 };
-// Code-unit order, so the digest does not depend on the runtime's locale.
 const byPath = (a: { path: string }, b: { path: string }) =>
   a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
 export function proposalDigest(sourceSha: string, files: ProposalFile[]) {

@@ -27,12 +27,6 @@ export type ReviewProvider =
 
 const FINAL_INSTRUCTION = `Return the final review. ${REVIEW_GUIDANCE}`;
 
-/**
- * Investigates with read-only tools for up to `maxTurns` turns, then returns
- * the structured review. Each turn is metered from provider-reported usage;
- * when another turn could crowd out the final call, investigation stops and
- * the review proceeds with partial coverage instead of failing.
- */
 export async function runReviewAgent({
   provider,
   system,
@@ -49,9 +43,7 @@ export async function runReviewAgent({
   system: string;
   context: string;
   budget: ReviewBudget;
-  /** Empty for a tool-free call. */
   tools: ReviewTool[];
-  /** Caps repository tokens the coming turn's tools may deliver. */
   limitTurn?: (tokens: number) => void;
   maxTurns: number;
   signal: AbortSignal;
@@ -90,7 +82,6 @@ export async function runReviewAgent({
   }
 }
 
-/** Adapts canonical review tools to AI SDK tools; the SDK validates input before execution. */
 function toAiSdkTools(tools: ReviewTool[], signal: AbortSignal): ToolSet {
   return Object.fromEntries(
     tools.map((definition) => [
@@ -147,7 +138,6 @@ async function runOpenRouterReview({
         onStepEnd: (step) => {
           contextBudget.record(step.usage, step.content, step.toolResults);
           allowance = contextBudget.allowance();
-          // A step without tool calls ends the investigation on its own.
           budgetStopped = allowance <= 0 && step.toolCalls.length > 0;
         },
         tools: toAiSdkTools(tools, signal),

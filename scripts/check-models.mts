@@ -1,5 +1,3 @@
-// Checks every hard-coded OpenRouter model ID against the live catalog, along
-// with the capabilities its callers rely on. Run after changing any model list.
 import { REVIEW_MODELS } from "../convex/lib/review_models.ts";
 import { CODING_MODELS } from "../convex/lib/coding_models.ts";
 

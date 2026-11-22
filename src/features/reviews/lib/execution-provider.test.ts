@@ -218,7 +218,6 @@ test("real Node repository runs tests at the pinned SHA without host secrets or 
       const isolated = JSON.parse(namespace.output);
       expect(isolated.controller).toBe(false);
       expect(isolated.input).toBe(false);
-      // Namespace inode numbers may be reused after a command exits.
       const hostNamespace = await readlink("/proc/self/ns/pid");
       expect(isolated.pidNamespace).not.toBe(hostNamespace);
       expect(laterNamespace.output.trim()).not.toBe(hostNamespace);

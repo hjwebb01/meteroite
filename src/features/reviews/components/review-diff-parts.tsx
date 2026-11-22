@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 
-/** Findings may include code spans without requiring a Markdown renderer. */
 export function InlineCode({ text }: { text: string }) {
   return text.split(/(`[^`]+`)/).map((part, index) =>
     part.length > 2 && part.startsWith("`") && part.endsWith("`") ? (

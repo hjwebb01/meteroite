@@ -16,6 +16,10 @@ _Avoid_: execution provider (that is the Check sandbox)
 An assessment of one pull request, pinned to the head and base commits it was run against.
 _Avoid_: review job, review run
 
+**Stalled Review**:
+A Review that is still queued or running but has recorded no progress within the stall limit. It is treated as a dead worker and ends as failed.
+_Avoid_: hung review, timed-out review
+
 **Finding**:
 One issue a Review reports in the pull request.
 _Avoid_: comment, issue
@@ -36,6 +40,10 @@ Which dispatch of a Finding work is allowed to start its next Attempt.
 
 **Check**:
 A command run against the pinned source during Finding work, with its recorded outcome.
+
+**Execution provider**:
+The sandbox a Check runs in: an isolated checkout of the pinned source. When none can be opened, the Attempt records why and proceeds by static inspection.
+_Avoid_: runtime, runner
 
 **Proposal**:
 A fix for a Finding, saved as a diff against the pinned source.

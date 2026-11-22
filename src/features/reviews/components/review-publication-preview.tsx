@@ -50,7 +50,29 @@ function OutgoingReview({
   );
 }
 
-export type ReviewPublicationPreviewProps = {
+function Hash({ sha }: { sha: string }) {
+  const [copied, setCopied] = useState<"" | "Copied" | "Copy failed">("");
+  return (
+    <span className="inline-flex items-center gap-2">
+      <code title={sha}>{sha.slice(0, 7)}</code>
+      <button
+        type="button"
+        className="text-review-link underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-review-link"
+        aria-label={`Copy full hash ${sha}`}
+        onClick={() =>
+          void navigator.clipboard
+            .writeText(sha)
+            .then(() => setCopied("Copied"))
+            .catch(() => setCopied("Copy failed"))
+        }
+      >
+        {copied || "Copy"}
+      </button>
+    </span>
+  );
+}
+
+type ReviewPublicationPreviewProps = {
   review: Doc<"reviews">;
   onClose: () => void;
   onReviewLatest: () => void;
@@ -156,8 +178,6 @@ function PublicationPlane({
       }
       setPublished(data.githubReview);
     } catch (cause) {
-      // A lost response can follow a successful write. Require status recovery,
-      // not a second blind confirmation using the same preview.
       setPreview((current) =>
         current ? { ...current, confirmation: null } : current,
       );
@@ -325,6 +345,25 @@ function PublicationPlane({
       </div>
       {preview && !published && (
         <div className="mt-8 min-w-0 space-y-8">
+          <div className="sticky top-16 z-10 flex flex-wrap items-center justify-between gap-3 rounded-md border border-review-border bg-review-bg p-4">
+            <p className="min-w-0 text-xs leading-6 text-review-body">
+              {preview.normal.comments.length} inline{" "}
+              {preview.normal.comments.length === 1 ? "comment" : "comments"} ·{" "}
+              {preview.excludedFindings.length} excluded · at{" "}
+              {preview.target.headSha.slice(0, 7)}. Confirming authorizes both
+              exact versions below; freshness is checked again before sending.
+            </p>
+            <Button
+              type="button"
+              className="h-auto min-h-11 max-w-full whitespace-normal bg-review-link px-4 py-3 text-review-bg hover:bg-review-link/90 motion-reduce:transform-none motion-reduce:transition-none"
+              disabled={!preview.confirmation || loading || posting}
+              onClick={() => void publish()}
+            >
+              {posting
+                ? "Publishing confirmed review…"
+                : `Confirm and publish to ${preview.target.repoOwner}/${preview.target.repoName} #${preview.target.pullNumber}`}
+            </Button>
+          </div>
           <dl className="grid min-w-0 gap-3 text-xs sm:grid-cols-[auto_1fr]">
             <dt className="text-review-muted">Exact target</dt>
             <dd className="break-words text-review-text [overflow-wrap:anywhere]">
@@ -332,13 +371,20 @@ function PublicationPlane({
               {preview.target.pullNumber}, {preview.target.event} review
             </dd>
             <dt className="text-review-muted">Saved commit</dt>
-            <dd className="break-all text-review-text">
-              {preview.target.headSha}
+            <dd className="text-review-text">
+              {preview.target.headSha ? (
+                <Hash sha={preview.target.headSha} />
+              ) : (
+                "Unavailable, so publication is blocked"
+              )}
             </dd>
             <dt className="text-review-muted">Saved base tip</dt>
-            <dd className="break-all text-review-text">
-              {preview.target.baseTipSha ||
-                "Unavailable, so publication is blocked"}
+            <dd className="text-review-text">
+              {preview.target.baseTipSha ? (
+                <Hash sha={preview.target.baseTipSha} />
+              ) : (
+                "Unavailable, so publication is blocked"
+              )}
             </dd>
             <dt className="text-review-muted">Live revision status</dt>
             <dd className="text-review-text">
@@ -351,8 +397,9 @@ function PublicationPlane({
             {preview.freshness.state !== "unavailable" && (
               <>
                 <dt className="text-review-muted">Observed PR head / base</dt>
-                <dd className="break-all text-review-body">
-                  {preview.freshness.headSha} / {preview.freshness.baseTipSha}
+                <dd className="text-review-body">
+                  <Hash sha={preview.freshness.headSha} /> /{" "}
+                  <Hash sha={preview.freshness.baseTipSha} />
                 </dd>
               </>
             )}
@@ -397,24 +444,6 @@ function PublicationPlane({
               payload={preview.fallback}
             />
           </section>
-          <div className="border-t border-review-border pt-6">
-            <p className="mb-3 text-xs leading-6 text-review-muted">
-              Confirmation authorizes the exact normal output and the exact
-              possible fallback above, at saved commit{" "}
-              {preview.target.headSha.slice(0, 7)}. GitHub freshness and
-              eligible content are checked again before sending.
-            </p>
-            <Button
-              type="button"
-              className="h-auto min-h-11 max-w-full whitespace-normal bg-review-link px-4 py-3 text-review-bg hover:bg-review-link/90 motion-reduce:transform-none motion-reduce:transition-none"
-              disabled={!preview.confirmation || loading || posting}
-              onClick={() => void publish()}
-            >
-              {posting
-                ? "Publishing confirmed review…"
-                : `Confirm and publish to ${preview.target.repoOwner}/${preview.target.repoName} #${preview.target.pullNumber}`}
-            </Button>
-          </div>
         </div>
       )}
     </section>

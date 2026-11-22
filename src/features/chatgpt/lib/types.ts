@@ -22,7 +22,6 @@ export const UNAVAILABLE_CHATGPT_STATUS: ChatGPTStatus = {
   models: [],
 };
 
-/** Only identifiers travel through Inngest; credentials stay on this machine. */
 export interface ChatGPTSelection {
   userId: string;
   connectionId: string;

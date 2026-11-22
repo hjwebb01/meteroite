@@ -7,7 +7,6 @@ import type { ReviewTool } from "./review-tools";
 export const FINAL_INSTRUCTION =
   "Return one complete review object with all six fields: assessment, hotspots, changeGroups, summary, findings, and limitations. Assessment alone is invalid. Empty arrays are allowed; use limitations to report scope gaps. Include only findings supported by the inspected code, and list anything that needs execution to verify.";
 
-/** Stands in for a final review whose structure is unusable; coverage is kept by the caller. */
 export function malformedReview(): ReviewOutput {
   const reason = "The model's final review was malformed and was discarded.";
   return {
@@ -20,10 +19,6 @@ export function malformedReview(): ReviewOutput {
   };
 }
 
-/**
- * Investigation ends early, rather than failing, when another turn could
- * leave no room for the final review call.
- */
 export async function runChatGPTReview({
   selection,
   system,
@@ -42,7 +37,6 @@ export async function runChatGPTReview({
   tools: ReviewTool[];
   budget: ReviewBudget;
   maxTurns?: number;
-  /** Caps repository tokens the coming turn's tools may deliver. */
   limitTurn?: (tokens: number) => void;
   signal: AbortSignal;
   checkActive: () => Promise<void>;

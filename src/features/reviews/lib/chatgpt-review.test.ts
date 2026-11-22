@@ -279,7 +279,6 @@ test("stops investigating before tool results crowd out the final review", async
     tools: [readFileTool(run)],
   });
   expect(result).toEqual({ output: review, budgetStopped: true });
-  // One investigation turn, then the final call instead of a second turn.
   expect(mocks.complete).toHaveBeenCalledTimes(2);
   expect(mocks.complete.mock.calls[1][1].tool_choice).toBe("required");
   expect(limitTurn).toHaveBeenCalledOnce();

@@ -7,16 +7,16 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint --max-warnings 0",
+    "lint:ratchet": "eslint --prune-suppressions",
     "format": "prettier --write .",
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "check:convex": "node scripts/check-convex-modules.mjs",
     "check:env": "node scripts/check-env.mjs",
     "check:models": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/check-models.mts",
-    "prepare": "git config core.hooksPath .githooks"
+    "verify": "node scripts/verify.mjs"
   },
   "dependencies": {
-    "@base-ui/react": "^1.8.0",
     "@boxicons/react": "^1.0.3",
     "@clerk/nextjs": "^7.9.10",
     "@inngest/middleware-sentry": "^1.0.0",
@@ -29,7 +29,6 @@
     "convex": "^1.46.0",
     "gpt-tokenizer": "^4.0.0",
     "inngest": "^4.21.1",
-    "input-otp": "^1.5.0",
     "jose": "^6.2.12",
     "next": "^16.3.8",
     "next-themes": "^0.4.6",
@@ -38,13 +37,9 @@
     "proper-lockfile": "^4.1.2",
     "radix-ui": "^1.6.7",
     "react": "19.3.0",
-    "react-day-picker": "^10.0.2",
     "react-dom": "19.3.0",
-    "react-hook-form": "^7.89.0",
-    "recharts": "^3.10.1",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.7.0",
-    "vaul": "^1.1.2",
     "zod": "^4.6.5"
   },
   "devDependencies": {

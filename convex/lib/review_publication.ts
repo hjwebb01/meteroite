@@ -2,7 +2,7 @@ import type { Doc } from "../_generated/dataModel";
 import type { QueryCtx } from "../_generated/server";
 import { latestVerdicts } from "./review_verdicts";
 
-export const PUBLICATION_RECONCILE_AFTER_MS = 15 * 60_000;
+const PUBLICATION_RECONCILE_AFTER_MS = 15 * 60_000;
 
 export function canResetPublication(review: Doc<"reviews">) {
   const attempt = review.githubPublication;
@@ -18,9 +18,6 @@ export type PublicationSnapshot = {
   source: string;
 };
 
-// Read the same latest conclusions used by reviewInteractions.verdicts in one
-// transaction with the saved review. The source binds all eligible content,
-// including content omitted by GitHub's body limit, and explicit exclusions.
 export async function publicationSnapshot(
   ctx: QueryCtx,
   review: Doc<"reviews">,

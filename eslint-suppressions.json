@@ -1,0 +1,7 @@
+{
+  "src/features/auth/components/unauthenticated-view.tsx": {
+    "no-restricted-syntax": {
+      "count": 6
+    }
+  }
+}

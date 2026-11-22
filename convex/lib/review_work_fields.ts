@@ -7,7 +7,7 @@ export const workStatus = v.union(
   v.literal("failed"),
   v.literal("cancelled"),
 );
-export const workEvidence = v.object({
+const workEvidence = v.object({
   revision: v.union(v.literal("head"), v.literal("diffLeft")),
   commit: v.string(),
   blobSha: v.string(),

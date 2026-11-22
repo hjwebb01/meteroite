@@ -136,6 +136,27 @@ describe("private PR reviews", () => {
     );
   });
 
+  test("expires only reviews silent past the stall limit", async () => {
+    const t = convexTest(schema, modules);
+    const alice = t.withIdentity({ subject: "alice" });
+    const { id: stale } = await alice.mutation(api.reviews.start, request);
+    const { id: fresh } = await alice.mutation(api.reviews.start, {
+      ...request,
+      pullNumber: 13,
+    });
+    await t.run((ctx) =>
+      ctx.db.patch("reviews", stale, { updatedAt: Date.now() - 16 * 60_000 }),
+    );
+    await t.mutation(internal.reviewJobs.expireStalled, {});
+    const after = await t.run(async (ctx) => ({
+      stale: await ctx.db.get("reviews", stale),
+      fresh: await ctx.db.get("reviews", fresh),
+    }));
+    expect(after.stale?.status).toBe("failed");
+    expect(after.stale?.error).toContain("stopped reporting progress");
+    expect(after.fresh?.status).toBe("queued");
+  });
+
   test("a cancelled review cannot be revived by late worker updates", async () => {
     const t = convexTest(schema, modules);
     const alice = t.withIdentity({ subject: "alice" });
@@ -152,6 +173,83 @@ describe("private PR reviews", () => {
     const review = await alice.query(api.reviews.get, { id });
     expect(review.status).toBe("cancelled");
     expect(review.result).toBeUndefined();
+  });
+
+  test("progress records the stage and each action as activity", async () => {
+    const t = convexTest(schema, modules);
+    const alice = t.withIdentity({ subject: "alice" });
+    const { id } = await alice.mutation(api.reviews.start, request);
+    await t.mutation(internal.reviewJobs.progress, {
+      id,
+      progress: "Investigating changes and related code",
+      stage: "investigate",
+    });
+    await t.mutation(internal.reviewJobs.progress, {
+      id,
+      action: { tool: "readFile", text: "Reading src/cart.js" },
+    });
+    expect(await alice.query(api.reviews.get, { id })).toMatchObject({
+      stage: "investigate",
+      progress: "Investigating changes and related code",
+    });
+    expect(await alice.query(api.reviews.activity, { id })).toMatchObject([
+      { stage: "investigate", tool: "readFile", text: "Reading src/cart.js" },
+    ]);
+    await t.mutation(internal.reviewJobs.progress, {
+      id,
+      progress: "Checking evidence and preparing findings",
+      stage: "finish",
+    });
+    expect((await alice.query(api.reviews.get, { id })).stage).toBe("finish");
+    expect(await alice.query(api.reviews.activity, { id })).toHaveLength(1);
+  });
+
+  test("activity keeps every call across stage changes", async () => {
+    const t = convexTest(schema, modules);
+    const alice = t.withIdentity({ subject: "alice" });
+    const { id } = await alice.mutation(api.reviews.start, request);
+    await t.mutation(internal.reviewJobs.progress, {
+      id,
+      progress: "Investigating changes and related code",
+      stage: "investigate",
+    });
+    for (let i = 0; i < 30; i++)
+      await t.mutation(internal.reviewJobs.progress, {
+        id,
+        action: { tool: "searchText", text: `Searching for call ${i}` },
+      });
+    await t.mutation(internal.reviewJobs.progress, {
+      id,
+      progress: "Checking evidence and preparing findings",
+      stage: "finish",
+    });
+    const activity = await alice.query(api.reviews.activity, { id });
+    expect(activity).toHaveLength(30);
+    expect(activity[0]?.text).toBe("Searching for call 0");
+    expect(activity.at(-1)).toMatchObject({
+      stage: "investigate",
+      text: "Searching for call 29",
+    });
+  });
+
+  test("finished parts are counted against the part total", async () => {
+    const t = convexTest(schema, modules);
+    const alice = t.withIdentity({ subject: "alice" });
+    const { id } = await alice.mutation(api.reviews.start, request);
+    await t.mutation(internal.reviewJobs.progress, {
+      id,
+      progress: "Investigating a large change in 2 parts",
+      stage: "investigate",
+      parts: 2,
+    });
+    await t.mutation(internal.reviewJobs.progress, { id, partDone: true });
+    await t.mutation(internal.reviewJobs.progress, { id, partDone: true });
+    const review = await alice.query(api.reviews.get, { id });
+    expect(review).toMatchObject({ parts: 2, partsDone: 2 });
+    await t.mutation(internal.reviewJobs.finish, { id, result });
+    expect(
+      await t.mutation(internal.reviewJobs.progress, { id, partDone: true }),
+    ).toBe(false);
   });
 
   test("repeat reviews keep the previous completed run and cannot overwrite it", async () => {
@@ -176,17 +274,17 @@ describe("private PR reviews", () => {
 
   test("rejects invalid PR identifiers, unsupported models, and oversized preferences", async () => {
     const t = convexTest(schema, modules).withIdentity({ subject: "alice" });
-    for (const invalid of [
-      { pullNumber: 0 },
-      { pullNumber: 1.5 },
-      { repoOwner: "alice/other" },
-      { repoName: "../app" },
-      { model: "arbitrary-model" },
-      { instructions: "x".repeat(4001) },
-    ]) {
+    for (const [invalid, message] of [
+      [{ pullNumber: 0 }, /Invalid review request/],
+      [{ pullNumber: 1.5 }, /Invalid review request/],
+      [{ repoOwner: "alice/other" }, /Invalid review request/],
+      [{ repoName: "../app" }, /Invalid review request/],
+      [{ model: "arbitrary-model" }, /Unsupported review model/],
+      [{ instructions: "x".repeat(4001) }, /Invalid review request/],
+    ] as const) {
       await expect(
         t.mutation(api.reviews.start, { ...request, ...invalid }),
-      ).rejects.toThrow();
+      ).rejects.toThrow(message);
     }
   });
 });

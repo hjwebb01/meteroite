@@ -24,4 +24,4 @@ Applies to Convex job tables and the Inngest functions that drive them.
 
 ## Comments
 
-- Comments carry constraints and reasons the code cannot show.
+- No code comments. Decisions go in `docs/adr`, hacks go in issues. See `docs/adr/0001-no-code-comments.md`.

@@ -1,11 +1,7 @@
-// Second-opinion pass over validated findings using OpenAI's Decisions API.
-// The review model stays the source of findings; triage only withholds
-// confident false positives and duplicates, and corrects severity when sure.
 const DECISIONS_URL = "https://api.openai.com/v1/decisions";
 const DECISIONS_MODEL = "gpt-6-luna";
 
-// Findings in between are kept: uncertainty favors the review model.
-export const TRIAGE_THRESHOLDS = {
+const TRIAGE_THRESHOLDS = {
   withholdDefectBelow: 0.2,
   withholdDuplicateAbove: 0.8,
   severityConfidence: 0.7,

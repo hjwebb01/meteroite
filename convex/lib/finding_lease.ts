@@ -3,18 +3,14 @@ import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { workStatus, workStopReason } from "./review_work_fields";
 
-// A Lease lets one worker record progress and results for one Attempt of
-// Finding work. Attempt numbers fence workers of earlier Attempts, and the
-// Dispatch generation fences duplicate or stale dispatches before they claim.
-
 type FindingWork = Doc<"reviewFindingWork">;
 type WorkStatus = Infer<typeof workStatus>;
 
-export const ACTIVE_WORK_STATUSES = ["queued", "running"] as const;
+const ACTIVE_WORK_STATUSES = ["queued", "running"] as const;
 export const isActiveWork = (status: WorkStatus) =>
   (ACTIVE_WORK_STATUSES as readonly WorkStatus[]).includes(status);
 
-export type LeaseLostReason = "cancelled" | "time-limit";
+type LeaseLostReason = "cancelled" | "time-limit";
 const LEASE_LOST_MESSAGES: Record<LeaseLostReason, string> = {
   cancelled: "Finding work cancelled or superseded",
   "time-limit": "Finding work exceeded its deadline",
@@ -22,8 +18,6 @@ const LEASE_LOST_MESSAGES: Record<LeaseLostReason, string> = {
 const leaseLost = (reason: LeaseLostReason) =>
   new ConvexError({ reason, message: LEASE_LOST_MESSAGES[reason] });
 
-// Starts the next Attempt when this dispatch is the current one. Returns the
-// Attempt number, or null when another dispatch already claimed the work.
 export async function grantFindingLease(
   ctx: MutationCtx,
   work: FindingWork,
@@ -43,9 +37,6 @@ export async function grantFindingLease(
   return attempt;
 }
 
-// Loads the work for a write under the Attempt's Lease. Throws a ConvexError
-// with reason "cancelled" or "time-limit" when the Lease has ended, including
-// after the deadline: no write is accepted once time is up.
 export async function requireFindingLease(
   ctx: QueryCtx,
   workId: Id<"reviewFindingWork">,
@@ -60,9 +51,6 @@ export async function requireFindingLease(
   return work;
 }
 
-// Ends active work and its current Attempt. When `attempt` is given, only that
-// Attempt is ended, so a stopped worker cannot fail a newer Attempt. Returns
-// whether the work was active.
 export async function revokeFindingLease(
   ctx: MutationCtx,
   work: FindingWork,
@@ -90,9 +78,6 @@ export async function revokeFindingLease(
   return true;
 }
 
-// Queues ended work for another Attempt under a new Dispatch generation,
-// archiving the evidence of the Attempt it replaces. Work that is still queued
-// keeps its generation so the pending dispatch remains valid.
 export async function requeueFindingWork(ctx: MutationCtx, work: FindingWork) {
   if (work.status === "running" || work.status === "completed")
     throw new ConvexError("Work cannot be retried");
@@ -144,7 +129,6 @@ async function archiveAttempt(ctx: MutationCtx, work: FindingWork) {
   });
 }
 
-// A Finding has at most one active Finding work at a time.
 export async function assertNoActiveFindingWork(
   ctx: QueryCtx,
   reviewId: Id<"reviews">,

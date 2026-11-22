@@ -9,10 +9,6 @@ import { triageFindings } from "../lib/finding-triage";
 import { validateFindings } from "../lib/review";
 import type { PartReport, ReviewRun } from "./review-run";
 
-/**
- * Validates the final report against its evidence and builds the saved
- * result. Runs once per review, after investigation and any synthesis.
- */
 export async function finalizeReview(
   octokit: Octokit,
   run: ReviewRun,
