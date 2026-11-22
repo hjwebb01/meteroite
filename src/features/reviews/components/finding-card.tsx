@@ -114,7 +114,7 @@ export function FindingCard({
         )}
       </div>
       <div className="p-4">
-        <h3 className="font-serif text-[19px] leading-tight tracking-[-0.01em]">
+        <h3 className="font-serif text-[1.125rem] leading-tight tracking-[-0.01em]">
           {f.title}
         </h3>
         <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-review-body">

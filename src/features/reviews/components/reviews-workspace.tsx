@@ -790,12 +790,12 @@ function UserReviewWorkspace({
               >
                 <h2
                   id={`${formId}-continue`}
-                  className="text-[26px] leading-[1.15] font-medium tracking-[-0.02em]"
+                  className="text-[1.75rem] leading-[1.15] font-medium tracking-[-0.02em]"
                 >
                   Continue review
                 </h2>
                 <div className="flex flex-col gap-1">
-                  <p className="text-[22px] leading-[1.25] font-medium tracking-[-0.01em] break-words">
+                  <p className="text-[1.125rem] leading-[1.35] font-medium tracking-[-0.01em] break-words">
                     {history[0].title ||
                       `${history[0].repoName} #${history[0].pullNumber}`}
                   </p>
@@ -976,7 +976,7 @@ function RunMeta({ run }: { run: History }) {
   return (
     <span
       className={cn(
-        "shrink-0 text-right text-[11px] leading-5 text-review-muted",
+        "shrink-0 text-right text-xs leading-5 text-review-muted",
         run.status === "failed" && "text-diff-del",
       )}
     >

@@ -4,7 +4,7 @@ export function Wordmark({ className }: { className?: string }) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-2 text-[19px] font-medium leading-none tracking-[-0.03em] text-review-text",
+        "inline-flex items-center gap-2 text-[1.125rem] font-medium leading-none tracking-[-0.03em] text-review-text",
         className,
       )}
     >

@@ -36,6 +36,11 @@
     display: block;
   }
 
+  .reading:has(> .brief) > .source {
+    position: sticky;
+    top: 4.5rem;
+  }
+
   .mobileContext {
     display: none;
   }
