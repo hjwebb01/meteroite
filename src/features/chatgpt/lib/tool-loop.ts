@@ -10,7 +10,6 @@ import {
   responseText,
 } from "./responses";
 import type { ChatGPTSelection } from "./types";
-import { mark } from "@/features/reviews/lib/timing-temp"; // TIMING-TEMP
 
 export class ToolInputError extends Error {}
 
@@ -24,7 +23,7 @@ export type LoopTool = {
   ) => Promise<unknown>;
 };
 
-export type ToolCallRecord = {
+type ToolCallRecord = {
   name: string;
   input: Record<string, unknown>;
   output: string;
@@ -96,23 +95,9 @@ export async function runToolLoop<Value = unknown>({
     name: string,
     parameters: Parameters<typeof completeChatGPTResponse>[1],
   ) =>
-    runStep(name, async () => {
-      const started = Date.now(); // TIMING-TEMP
-      const response = await complete(
-        selection,
-        { instructions, ...parameters },
-        { signal },
-      );
-      mark("chatgpt-infer", {
-        name,
-        ms: Date.now() - started,
-        out: response.output.map((i) =>
-          i.type === "function_call" ? `call:${i.name}` : i.type,
-        ),
-        usage: response.usage,
-      }); // TIMING-TEMP
-      return response;
-    });
+    runStep(name, () =>
+      complete(selection, { instructions, ...parameters }, { signal }),
+    );
   const turns: ToolCallRecord[][] = [];
   let budgetStopped = false;
   let fingerprint = "";

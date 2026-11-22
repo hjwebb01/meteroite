@@ -20,18 +20,12 @@ import {
   type ReviewBudget,
 } from "../lib/context-budget";
 import { reviewOutputSchema, type ReviewOutput } from "../lib/review";
-import { mark } from "../lib/timing-temp"; // TIMING-TEMP
 import type { ReviewTool } from "../lib/review-tools";
 
 export type ReviewProvider =
   { chatGPT: ChatGPTSelection } | { model: LanguageModel };
 
 const FINAL_INSTRUCTION = `Return the final review. ${REVIEW_GUIDANCE}`;
-
-// TIMING-TEMP experiment: lower reasoning effort to cut output-token latency.
-const REVIEW_REASONING = {
-  openrouter: { reasoning: { effort: "low" as const } },
-};
 
 export async function runReviewAgent({
   provider,
@@ -133,7 +127,6 @@ async function runOpenRouterReview({
   let allowance = contextBudget.allowance();
   const investigate = maxTurns > 0 && allowance > 0;
   let budgetStopped = maxTurns > 0 && !investigate;
-  let lastStepAt = Date.now(); // TIMING-TEMP
   const investigation = investigate
     ? await generateText({
         model,
@@ -141,15 +134,8 @@ async function runOpenRouterReview({
         prompt: context,
         maxOutputTokens: 6000,
         abortSignal: signal,
-        providerOptions: REVIEW_REASONING,
         stopWhen: [isStepCount(maxTurns), () => budgetStopped],
         onStepEnd: (step) => {
-          mark("openrouter-step", {
-            ms: Date.now() - lastStepAt,
-            calls: step.toolCalls.map((c) => c.toolName),
-            usage: step.usage,
-          }); // TIMING-TEMP
-          lastStepAt = Date.now(); // TIMING-TEMP
           contextBudget.record(step.usage, step.content, step.toolResults);
           allowance = contextBudget.allowance();
           budgetStopped = allowance <= 0 && step.toolCalls.length > 0;
@@ -160,13 +146,11 @@ async function runOpenRouterReview({
   await prepareFindings();
   contextBudget.prepareFinal();
   try {
-    const finalStarted = Date.now(); // TIMING-TEMP
-    const { output, usage } = await generateText({
+    const { output } = await generateText({
       model,
       system,
       maxOutputTokens: budget.outputTokens,
       abortSignal: signal,
-      providerOptions: REVIEW_REASONING,
       output: Output.object({ schema: reviewOutputSchema }),
       messages: [
         { role: "user", content: context },
@@ -174,7 +158,6 @@ async function runOpenRouterReview({
         { role: "user", content: FINAL_INSTRUCTION },
       ],
     });
-    mark("openrouter-final", { ms: Date.now() - finalStarted, usage }); // TIMING-TEMP
     return { output, budgetStopped };
   } catch (error) {
     if (!NoObjectGeneratedError.isInstance(error)) throw error;

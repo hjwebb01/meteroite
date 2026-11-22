@@ -9,7 +9,6 @@ import {
 } from "../lib/review-tools";
 import { runReviewAgent } from "./review-agent";
 import type { PartReport, PartSummary, ReviewRun } from "./review-run";
-import { mark } from "../lib/timing-temp"; // TIMING-TEMP
 
 const SYSTEM = `You are a private code reviewer. Investigate the supplied pull request and its repository before producing a review.
 Find concrete bugs introduced by the change: correctness, security, data loss, broken contracts, and meaningful regressions. Do not report stylistic preferences or speculative issues. No finding is better than an unsupported finding.
@@ -37,7 +36,6 @@ export async function investigate(
         file.part === part.index ? file : { ...file, patch: undefined },
       )
     : run.snapshot.files;
-  mark("investigate-start", { part: part?.index ?? null }); // TIMING-TEMP
   const reader = createRepositoryReader(
     octokit,
     { ...run.snapshot, files },

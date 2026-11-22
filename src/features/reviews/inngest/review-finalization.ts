@@ -7,7 +7,6 @@ import {
 import { createAssessment } from "../../../../convex/lib/review_assessment";
 import { triageFindings } from "../lib/finding-triage";
 import { validateFindings } from "../lib/review";
-import { mark } from "../lib/timing-temp"; // TIMING-TEMP
 import type { PartReport, ReviewRun } from "./review-run";
 
 export async function finalizeReview(
@@ -26,12 +25,7 @@ export async function finalizeReview(
       reviewId,
     );
   const rejected = rejectedNow + rejectedEarlier;
-  const triageStarted = Date.now(); // TIMING-TEMP
   const triage = await triageFindings(validatedFindings);
-  mark("triage", {
-    ms: Date.now() - triageStarted,
-    findings: validatedFindings.length,
-  }); // TIMING-TEMP
   const findings = triage.findings.map((finding) => ({
     ...finding,
     evidence: finding.evidence.map((entry) => ({
