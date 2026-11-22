@@ -1,12 +1,7 @@
 import type { Octokit } from "octokit";
 import { createRepositoryReader } from "../lib/github-context";
 import { validateFindings, type ChangedFile } from "../lib/review";
-import {
-  createRepositoryTools,
-  describeReviewAction,
-  describeReviewTarget,
-  type ReviewToolCall,
-} from "../lib/review-tools";
+import { createRepositoryTools } from "../lib/review-tools";
 import { runReviewAgent } from "./review-agent";
 import type { PartReport, PartSummary, ReviewRun } from "./review-run";
 
@@ -65,18 +60,11 @@ export async function investigate(
     system: SYSTEM,
     context,
     budget: run.budget,
-    tools: createRepositoryTools(run.snapshot, reader, run.checkActive).map(
-      (tool) => ({
-        ...tool,
-        execute: async (args: unknown, call: ReviewToolCall) => {
-          await run.reportAction(
-            tool.name,
-            describeReviewAction(tool.name, args),
-            describeReviewTarget(tool.name, args),
-          );
-          return tool.execute(args, call);
-        },
-      }),
+    tools: createRepositoryTools(
+      run.snapshot,
+      reader,
+      run.checkActive,
+      (tool, { text, ...target }) => run.reportAction(tool, text, target),
     ),
     limitTurn: reader.limitTurn,
     maxTurns: 8,

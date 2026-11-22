@@ -4,6 +4,7 @@ import { Disclosure, DisclosureSummary } from "@/components/ui/disclosure";
 import {
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -26,6 +27,7 @@ import { Dialog, DropdownMenu } from "radix-ui";
 import { api } from "../../../../convex/_generated/api";
 import { Doc, Id } from "../../../../convex/_generated/dataModel";
 import type { ReviewHistoryRow } from "../../../../convex/reviews";
+import { isActiveReview } from "../../../../convex/lib/review_lifecycle";
 import { DEFAULT_CODING_MODEL_ID } from "../../../../convex/lib/coding_models";
 import {
   REVIEW_MODELS,
@@ -43,7 +45,7 @@ import {
 import { Wordmark } from "@/components/wordmark";
 import { cn, formatTimestamp } from "@/lib/utils";
 import { parsePullRequestUrl } from "../lib/review";
-import { buildActivityRows } from "../lib/review-activity";
+import { buildActivityRows, type ActivityEntry } from "../lib/review-activity";
 import { reviewStageLabel } from "../lib/review-stage";
 import { ReviewActivityFeed } from "./review-activity-feed";
 import { ReviewHeadline } from "./review-headline";
@@ -69,7 +71,7 @@ const statusLabel = {
   cancelled: "Cancelled",
 };
 
-const STALLED_AFTER_MS = 15 * 60_000;
+const noActivity: ActivityEntry[] = [];
 
 function useNow(intervalMs: number) {
   const [now, setNow] = useState(() => Date.now());
@@ -1023,11 +1025,15 @@ function ReviewDetail({
   const verdicts = useQuery(api.reviewInteractions.verdicts, {
     reviewId: review._id,
   });
-  const running = review.status === "queued" || review.status === "running";
+  const activity =
+    useQuery(api.reviews.activity, { id: review._id }) ?? noActivity;
+  const running = isActiveReview(review.status);
   const now = useNow(running ? 1_000 : 30_000);
-  const stalled = running && now - review.updatedAt > STALLED_AFTER_MS;
   const stageLabel = reviewStageLabel(review);
-  const activityRows = buildActivityRows(review);
+  const activityRows = useMemo(
+    () => buildActivityRows(review, activity),
+    [review, activity],
+  );
   const changed =
     review.freshness?.state === "outdated" ||
     (review.result?.outdated === true && review.freshness?.state !== "current");
@@ -1097,6 +1103,8 @@ function ReviewDetail({
     verdicts,
     previous: previous ?? null,
     initialFindingId,
+    activity,
+    activityRows,
     onRerun,
     onSelectReview,
   };
@@ -1324,9 +1332,7 @@ function ReviewDetail({
                 : "Checking the saved PR revision…"}
             </p>
           ) : (
-            <>
-              <ReviewReader {...readerProps} />
-            </>
+            <ReviewReader {...readerProps} />
           )
         ) : (
           <div className="mx-auto max-w-4xl space-y-6">
@@ -1338,43 +1344,37 @@ function ReviewDetail({
                 Analysis activity · {statusLabel[review.status]}
               </p>
               <h2 className="mt-5 text-xl leading-snug">
-                {stalled
-                  ? "This review has stopped reporting"
-                  : review.status === "failed"
-                    ? "Analysis couldn’t finish"
-                    : review.status === "cancelled"
-                      ? "Analysis cancelled"
-                      : (stageLabel ?? review.progress)}
+                {review.status === "failed"
+                  ? "Analysis couldn’t finish"
+                  : review.status === "cancelled"
+                    ? "Analysis cancelled"
+                    : (stageLabel ?? review.progress)}
               </h2>
               <p className="sr-only" aria-live="polite">
-                {running && !stalled ? stageLabel : ""}
+                {running ? stageLabel : ""}
               </p>
-              {running && !stalled && (
+              {running && (
                 <ReviewHeadline
                   stage={stageLabel ?? review.progress}
                   elapsedMs={now - review._creationTime}
                   files={files}
-                  activity={review.activity ?? []}
+                  activity={activity}
                 />
               )}
               <ReviewActivityFeed
-                rows={activityRows}
-                live={running && !stalled}
+                sections={activityRows}
+                live={running}
                 startedAt={review._creationTime}
               />
               <p
-                role={
-                  stalled || review.status === "failed" ? "alert" : "status"
-                }
+                role={review.status === "failed" ? "alert" : "status"}
                 className="mt-4 break-words text-sm leading-7 text-review-muted"
               >
-                {stalled
-                  ? `No progress since ${formatTimestamp(review.updatedAt)}. Last reported step: ${review.progress}. Cancel this run before requesting a new review.`
-                  : review.status === "failed"
-                    ? review.error
-                    : review.status === "cancelled"
-                      ? "The saved work is retained. Request another review when you’re ready."
-                      : "This is actual background activity, not a completed change brief. You can leave and return through Saved reviews; progress is saved here."}
+                {review.status === "failed"
+                  ? review.error
+                  : review.status === "cancelled"
+                    ? "The saved work is retained. Request another review when you’re ready."
+                    : "This is actual background activity, not a completed change brief. You can leave and return through Saved reviews; progress is saved here."}
               </p>
               {!running && (
                 <Button

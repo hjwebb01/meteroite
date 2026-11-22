@@ -6,8 +6,6 @@ export const reviewStage = v.union(
   v.literal("finish"),
 );
 
-export const MAX_REVIEW_ACTIVITY = 200;
-
 export const reviewActivity = v.object({
   stage: reviewStage,
   tool: v.string(),

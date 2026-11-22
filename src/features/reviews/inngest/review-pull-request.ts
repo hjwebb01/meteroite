@@ -11,6 +11,7 @@ import {
   type ModelProvider,
 } from "@/features/model-provider/model-provider";
 import { loadReviewBudget } from "../lib/context-budget";
+import { isActiveReview } from "../../../../convex/lib/review_lifecycle";
 import { SCRUTINY_RUBRIC } from "../../../../convex/lib/review_assessment";
 import { investigate, summarizePart } from "./review-investigation";
 import { synthesizeParts } from "./review-synthesis";
@@ -76,7 +77,7 @@ export const reviewPullRequest = inngest.createFunction(
           ownerId,
         }),
     );
-    if (review.status !== "queued" && review.status !== "running") return;
+    if (!isActiveReview(review.status)) return;
     const modelProvider = modelProviderForReview(review, ownerId, provider);
     const budget = await step.run("load-model-budget", () =>
       loadReviewBudget(review.model),
@@ -239,8 +240,8 @@ export const reviewPullRequest = inngest.createFunction(
               part,
             );
             await getConvexAdminClient().mutation(
-              internal.reviewJobs.partFinished,
-              { id: reviewId },
+              internal.reviewJobs.progress,
+              { id: reviewId, partDone: true },
             );
             return summary;
           }),

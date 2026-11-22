@@ -15,11 +15,12 @@ import {
   changeHunkSchema,
 } from "./lib/review_navigation";
 import { getOwnedReview } from "./lib/owned_review";
+import { reviewActionInput, reviewStage } from "./lib/review_stage";
 import {
-  MAX_REVIEW_ACTIVITY,
-  reviewActionInput,
-  reviewStage,
-} from "./lib/review_stage";
+  completeReview,
+  failReview,
+  loadActiveReview,
+} from "./lib/review_lifecycle";
 
 export const get = internalQuery({
   args: { id: v.id("reviews"), ownerId: v.string() },
@@ -66,40 +67,22 @@ export const progress = internalMutation({
     stage: v.optional(reviewStage),
     parts: v.optional(v.number()),
     action: v.optional(reviewActionInput),
+    partDone: v.optional(v.boolean()),
   },
-  handler: async (ctx, { id, action, ...fields }) => {
-    const review = await ctx.db.get("reviews", id);
-    if (!review || (review.status !== "queued" && review.status !== "running"))
-      return false;
-    const activity = action
-      ? [
-          ...(review.activity ?? []),
-          {
-            stage: fields.stage ?? review.stage ?? "load",
-            at: Date.now(),
-            ...action,
-          },
-        ].slice(-MAX_REVIEW_ACTIVITY)
-      : review.activity;
+  handler: async (ctx, { id, action, partDone, ...fields }) => {
+    const review = await loadActiveReview(ctx, id);
+    if (!review) return false;
+    if (action)
+      await ctx.db.insert("reviewActivity", {
+        reviewId: id,
+        stage: fields.stage ?? review.stage ?? "load",
+        at: Date.now(),
+        ...action,
+      });
     await ctx.db.patch("reviews", id, {
       ...fields,
-      latestAction: action?.text,
-      activity,
+      ...(partDone ? { partsDone: (review.partsDone ?? 0) + 1 } : {}),
       status: "running",
-      updatedAt: Date.now(),
-    });
-    return true;
-  },
-});
-
-export const partFinished = internalMutation({
-  args: { id: v.id("reviews") },
-  handler: async (ctx, { id }) => {
-    const review = await ctx.db.get("reviews", id);
-    if (!review || (review.status !== "queued" && review.status !== "running"))
-      return false;
-    await ctx.db.patch("reviews", id, {
-      partsDone: (review.partsDone ?? 0) + 1,
       updatedAt: Date.now(),
     });
     return true;
@@ -118,9 +101,8 @@ export const pinSnapshot = internalMutation({
     sourceRepo: v.string(),
   },
   handler: async (ctx, { id, ...snapshot }) => {
-    const review = await ctx.db.get("reviews", id);
-    if (!review || (review.status !== "queued" && review.status !== "running"))
-      return false;
+    const review = await loadActiveReview(ctx, id);
+    if (!review) return false;
     if (review.headSha || review.baseSha)
       return (
         review.headSha === snapshot.headSha &&
@@ -142,9 +124,8 @@ export const saveFiles = internalMutation({
     files: v.array(reviewFileDiff),
   },
   handler: async (ctx, { id, headSha, baseSha, files }) => {
-    const review = await ctx.db.get("reviews", id);
-    if (!review || (review.status !== "queued" && review.status !== "running"))
-      return;
+    const review = await loadActiveReview(ctx, id);
+    if (!review) return;
     if (review.headSha !== headSha || review.baseSha !== baseSha)
       throw new Error("Saved diffs must match the pinned review snapshot");
     for (const file of files) {
@@ -174,9 +155,8 @@ export const saveFiles = internalMutation({
 export const finish = internalMutation({
   args: { id: v.id("reviews"), result: v.object(reviewResult) },
   handler: async (ctx, { id, result }) => {
-    const review = await ctx.db.get("reviews", id);
-    if (!review || (review.status !== "queued" && review.status !== "running"))
-      return;
+    const review = await loadActiveReview(ctx, id);
+    if (!review) return;
     if (result.reassessment) {
       reassessmentSchema.parse(result.reassessment);
       if (
@@ -273,27 +253,16 @@ export const finish = internalMutation({
         }
       }
     }
-    await ctx.db.patch("reviews", id, {
-      result,
-      status: "completed",
-      progress: "Review complete",
-      updatedAt: Date.now(),
-    });
+    await completeReview(ctx, review, result);
   },
 });
 
 export const fail = internalMutation({
   args: { id: v.id("reviews"), error: v.string() },
   handler: async (ctx, { id, error }) => {
-    const review = await ctx.db.get("reviews", id);
-    if (!review || (review.status !== "queued" && review.status !== "running"))
-      return;
-    await ctx.db.patch("reviews", id, {
-      status: "failed",
-      error,
-      progress: "Review failed",
-      updatedAt: Date.now(),
-    });
+    const review = await loadActiveReview(ctx, id);
+    if (!review) return;
+    await failReview(ctx, review, error);
   },
 });
 

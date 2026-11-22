@@ -66,14 +66,14 @@ export function evidenceTrail(
   files: CoverageFile[],
   activity: ActivityEntry[],
 ) {
-  const calls = activity.flatMap((e, i) =>
-    e.tool === "readFile" &&
-    e.path === cited.path &&
-    e.start !== undefined &&
-    e.end !== undefined &&
-    e.start <= cited.line &&
-    cited.line <= e.end
-      ? [i + 1]
+  const reads = activity.flatMap((entry, index) =>
+    entry.tool === "readFile" &&
+    entry.path === cited.path &&
+    entry.start !== undefined &&
+    entry.end !== undefined &&
+    entry.start <= cited.line &&
+    cited.line <= entry.end
+      ? [{ ordinal: index + 1, entry }]
       : [],
   );
   const inDiff = files.some(
@@ -83,5 +83,5 @@ export function evidenceTrail(
         (r) => r.start <= cited.line && cited.line <= r.end,
       ),
   );
-  return { calls, inDiff };
+  return { reads, inDiff };
 }

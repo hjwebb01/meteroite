@@ -418,10 +418,11 @@ test("a diff beyond one model context is reviewed in parts and merged from their
   expect(synthesis).not.toContain("+chargeCard();");
   const progress = mocks.mutation.mock.calls
     .filter(([ref]) => getFunctionName(ref) === "reviewJobs:progress")
-    .map(([, args]) => args.progress);
-  expect(progress.filter((text: string) => text.includes("preparing"))).toEqual(
-    ["Checking evidence and preparing findings"],
-  );
+    .map(([, args]) => args.progress)
+    .filter((text): text is string => text !== undefined);
+  expect(progress.filter((text) => text.includes("preparing"))).toEqual([
+    "Checking evidence and preparing findings",
+  ]);
   expect(progress.at(-1)).toBe("Checking evidence and preparing findings");
   const saved = mocks.mutation.mock.calls.find(
     ([ref]) => getFunctionName(ref) === "reviewJobs:finish",

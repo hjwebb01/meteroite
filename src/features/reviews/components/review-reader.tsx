@@ -14,25 +14,30 @@ import {
   type ChangeHunk,
 } from "../../../../convex/lib/review_navigation";
 import ChevronRight from "@boxicons/react/ChevronRight";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   navigationLocation,
-  type ReviewFinding,
   type ReviewNavigationTarget,
 } from "../lib/review-diff";
 import { SeverityBadge } from "./severity-badge";
-import { isNitpick, sortFindings } from "../lib/finding-presentation";
+import { sortFindings } from "../lib/finding-presentation";
 import type { FindingVerdict } from "./finding-verdict-badge";
 import { ReviewNavigation } from "./review-navigation";
 import { ReviewAssessment } from "./review-assessment";
 import { ReviewHotspots } from "./review-hotspots";
 import { ReviewActivityFeed } from "./review-activity-feed";
-import { buildActivityRows } from "../lib/review-activity";
+import type { ActivityEntry, ActivitySection } from "../lib/review-activity";
 import { computeCoverage } from "../lib/review-coverage";
 import { ReviewReassessment } from "./review-reassessment";
 import styles from "./review-reader.module.css";
 import { DiscussionSessions } from "./discussion-sessions";
+import { counted, lineSpan } from "./review-reader-text";
+import {
+  ReaderViewControl,
+  type ReaderView,
+} from "./review-reader-view-control";
+import { FindingsSummary, type SeverityFilter } from "./review-reader-findings";
+import { ReadingProgress } from "./review-reader-progress";
 
 const ReviewDiffPanel = dynamic(() => import("./review-diff-panel"), {
   ssr: false,
@@ -43,21 +48,14 @@ const ReviewDiffPanel = dynamic(() => import("./review-diff-panel"), {
   ),
 });
 
-function lineSpan(start: number, lines: number) {
-  if (lines <= 0) return "none";
-  return lines === 1 ? `${start}` : `${start}–${start + lines - 1}`;
-}
-
-function counted(count: number, singular: string) {
-  return `${count} ${count === 1 ? singular : `${singular}s`}`;
-}
-
-export interface ReviewReaderProps {
+interface ReviewReaderProps {
   review: Doc<"reviews">;
   files: Doc<"reviewFiles">[];
   verdicts?: Record<string, FindingVerdict>;
   previous: Doc<"reviews"> | null;
   initialFindingId: string | null;
+  activity: ActivityEntry[];
+  activityRows: ActivitySection[];
   onRerun: () => void;
   onSelectReview: (id: Id<"reviews">, findingId?: string) => void;
   sourceOnly?: boolean;
@@ -82,6 +80,8 @@ function SavedReviewReader({
   verdicts = {},
   previous,
   initialFindingId,
+  activity,
+  activityRows,
   onRerun,
   onSelectReview,
   sourceOnly = false,
@@ -104,9 +104,7 @@ function SavedReviewReader({
   );
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [inventoryOpen, setInventoryOpen] = useState(false);
-  const [filter, setFilter] = useState<"all" | "high" | "medium" | "low">(
-    "all",
-  );
+  const [filter, setFilter] = useState<SeverityFilter>("all");
   const [pendingMarks, setPendingMarks] = useState<ReadonlySet<string>>(
     new Set(),
   );
@@ -158,8 +156,8 @@ function SavedReviewReader({
   const readCount = groups.filter((group) =>
     readIds?.includes(group.id),
   ).length;
-  const activityRows = buildActivityRows(review);
-  const coverage = computeCoverage(files, review.activity ?? []);
+  const coverage =
+    result && !sourceOnly ? computeCoverage(files, activity) : null;
   const gaps = files.flatMap((file) =>
     fileCoverageGaps(file).map((gap) => ({ path: file.filename, ...gap })),
   );
@@ -421,7 +419,7 @@ function SavedReviewReader({
   }
 
   const view = inventoryOpen ? "all" : reading ? "source" : "brief";
-  function showView(next: string) {
+  function showView(next: ReaderView) {
     if (next === "all") {
       if (!inventoryOpen) toggleInventory();
     } else if (next === "brief") returnToBrief();
@@ -433,116 +431,6 @@ function SavedReviewReader({
       );
     }
   }
-  const viewControl = (
-    <div
-      role="group"
-      aria-label="View"
-      className="inline-flex max-w-full overflow-hidden rounded-md border border-review-border"
-    >
-      {(
-        [
-          ...(sourceOnly ? [] : [["brief", "Brief"]]),
-          ["source", "Source"],
-          ["all", "All changes"],
-        ] as [string, string][]
-      ).map(([id, label], index) => (
-        <button
-          key={id}
-          ref={id === "all" ? inventoryTrigger : undefined}
-          type="button"
-          aria-pressed={view === id}
-          disabled={id === "source" && !reading && !focus}
-          onClick={() => showView(id)}
-          className={cn(
-            "min-h-11 px-4 text-sm text-review-text hover:bg-review-reading disabled:text-review-muted",
-            index > 0 && "border-l border-review-border",
-            view === id && "bg-review-reading font-semibold",
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-
-  function findingEntry(finding: ReviewFinding) {
-    return (
-      <li key={finding.id}>
-        <button
-          type="button"
-          onClick={() => selectFinding(finding.id)}
-          className="flex min-h-11 w-full flex-col gap-1 rounded-md border border-review-border px-3 py-2 text-left text-sm hover:bg-review-reading"
-        >
-          <span className="flex items-baseline gap-2">
-            <SeverityBadge severity={finding.severity} />
-            <span className="text-review-text">{finding.title}</span>
-          </span>
-          <span className="break-all text-review-muted">
-            {finding.path}:{finding.line} ({finding.side ?? "RIGHT"})
-            {isNitpick(finding) && " · nitpick"}
-            {verdicts[finding.id] === "incorrect" && " · retracted"}
-          </span>
-        </button>
-      </li>
-    );
-  }
-
-  const findingsSection = result && (
-    <section aria-labelledby={`${readerId}-findings`} className="mt-4">
-      <h3 id={`${readerId}-findings`} className="text-sm font-semibold">
-        Findings · {counted(allFindings.length, "finding")}
-      </h3>
-      {!allFindings.length ? (
-        <p className="mt-2 text-sm leading-6 text-review-body">
-          No findings were reported for the files this review covered. That does
-          not mean the change is correct; read the source yourself.
-        </p>
-      ) : (
-        <>
-          <div
-            className="mt-2 flex flex-wrap gap-2"
-            role="group"
-            aria-label="Filter findings by severity"
-          >
-            {(["all", "high", "medium", "low"] as const).map((value) => (
-              <Button
-                key={value}
-                size="sm"
-                variant={filter === value ? "secondary" : "outline"}
-                aria-pressed={filter === value}
-                className="h-auto min-h-11 max-w-full whitespace-normal text-sm"
-                onClick={() => setFilter(value)}
-              >
-                {value === "all" ? "All" : value}
-              </Button>
-            ))}
-          </div>
-          {!findings.length ? (
-            <p className="mt-3 text-sm text-review-body">
-              No findings at this severity. Choose All to see the rest.
-            </p>
-          ) : (
-            <>
-              <ul className="mt-3 space-y-2">
-                {findings.slice(0, 3).map(findingEntry)}
-              </ul>
-              {findings.length > 3 && (
-                <Disclosure className="mt-2">
-                  <DisclosureSummary className="py-3 text-sm">
-                    {counted(findings.length - 3, "more finding")}
-                  </DisclosureSummary>
-                  <ul className="space-y-2">
-                    {findings.slice(3).map(findingEntry)}
-                  </ul>
-                </Disclosure>
-              )}
-            </>
-          )}
-        </>
-      )}
-    </section>
-  );
-
   return (
     <section
       aria-label={
@@ -562,11 +450,20 @@ function SavedReviewReader({
           keeps failing. ({markError})
         </p>
       )}
-      <div className="mb-3">{viewControl}</div>
+      <div className="mb-3">
+        <ReaderViewControl
+          view={view}
+          briefAvailable={!sourceOnly}
+          sourceDisabled={!reading && !focus}
+          allRef={inventoryTrigger}
+          onSelect={showView}
+        />
+      </div>
       {result && !sourceOnly && (
         <p className="mb-4 text-sm leading-6 text-review-muted">
           Generated interpretation, not verified author intent. Findings come
-          from static review, not verified by execution.
+          from static review, not verified by execution. Read marks are yours;
+          they don’t approve the PR.
         </p>
       )}
       {inventoryOpen && (
@@ -619,10 +516,7 @@ function SavedReviewReader({
               <h2
                 ref={brief}
                 tabIndex={-1}
-                className={cn(
-                  "scroll-mt-36 sm:scroll-mt-24",
-                  reading ? "text-lg font-semibold leading-7" : "sr-only",
-                )}
+                className={cn("scroll-mt-36 sm:scroll-mt-24", "sr-only")}
               >
                 {reading ? "Change context" : "Summary"}
               </h2>
@@ -631,7 +525,6 @@ function SavedReviewReader({
                   {result.summary}
                 </p>
               )}
-              {findingsSection}
               {!groups.length && (
                 <p className="mt-4 text-sm leading-6 text-review-body">
                   This review has no change groups, so there is nothing to mark
@@ -646,38 +539,19 @@ function SavedReviewReader({
                     </p>
                   ) : (
                     <>
-                      <div
-                        role="progressbar"
-                        aria-label="Groups read"
-                        aria-valuemin={0}
-                        aria-valuemax={groups.length}
-                        aria-valuenow={readCount}
-                        className="h-2 w-full overflow-hidden rounded-full bg-review-border"
-                      >
-                        <div
-                          className="h-full bg-review-link"
-                          style={{
-                            width: `${(readCount / groups.length) * 100}%`,
-                          }}
-                        />
-                      </div>
-                      {readCount < groups.length ? (
-                        <Button
-                          className="h-auto min-h-11 w-full whitespace-normal text-sm sm:w-auto"
-                          onClick={openNextUnread}
-                        >
-                          Next unread group
-                        </Button>
-                      ) : null}
+                      <ReadingProgress
+                        readCount={readCount}
+                        total={groups.length}
+                        onOpenNext={openNextUnread}
+                      />
                     </>
                   )}
-                  <p className="text-sm leading-6 text-review-muted">
-                    {hunks.length - ungrouped.length} of{" "}
-                    {counted(hunks.length, "block")} sit in groups;{" "}
-                    {ungrouped.length} ungrouped. A block is one contiguous edit
-                    inside one file. Read marks are yours; they don’t approve
-                    the PR.
-                  </p>
+                  {!reading && (
+                    <p className="text-sm leading-6 text-review-muted">
+                      {hunks.length - ungrouped.length} of{" "}
+                      {counted(hunks.length, "block")} sit in groups.
+                    </p>
+                  )}
                 </div>
               )}
               <ol
@@ -685,26 +559,35 @@ function SavedReviewReader({
                 className="mt-3 overflow-hidden rounded-md border border-review-border"
               >
                 {groups.map((group, index) => groupRow(group, index, reading))}
-              </ol>
-              {ungrouped.length > 0 && (
-                <div className="mt-5">
-                  <h3 className="py-2 text-sm font-semibold">
-                    Ungrouped · {counted(ungroupedByFile.length, "file")}
-                  </h3>
-                  <ul className="space-y-1">
-                    {ungroupedByFile.slice(0, 5).map(ungroupedRow)}
-                  </ul>
-                  {ungroupedByFile.length > 5 && (
-                    <Disclosure className="mt-2">
-                      <DisclosureSummary className="py-3 text-sm text-review-muted">
-                        Show {counted(ungroupedByFile.length - 5, "more file")}
+                {ungrouped.length > 0 && (
+                  <li
+                    className={cn(
+                      "min-w-0 border-t border-review-border px-4 py-3 first:border-t-0",
+                      reading ? "bg-review-chrome" : "review-reading-plane",
+                    )}
+                  >
+                    <Disclosure>
+                      <DisclosureSummary className="min-h-11 text-sm font-semibold leading-6">
+                        Ungrouped · {counted(ungrouped.length, "block")} in{" "}
+                        {counted(ungroupedByFile.length, "file")}
                       </DisclosureSummary>
                       <ul className="mt-1 space-y-1">
-                        {ungroupedByFile.slice(5).map(ungroupedRow)}
+                        {ungroupedByFile.map(ungroupedRow)}
                       </ul>
                     </Disclosure>
-                  )}
-                </div>
+                  </li>
+                )}
+              </ol>
+              {result && (
+                <FindingsSummary
+                  headingId={`${readerId}-findings`}
+                  allFindings={allFindings}
+                  findings={findings}
+                  filter={filter}
+                  onFilter={setFilter}
+                  verdicts={verdicts}
+                  onSelect={selectFinding}
+                />
               )}
               {(gaps.length > 0 || missingFiles > 0 || !files.length) && (
                 <p className="mt-3 text-sm leading-6 text-review-body">
@@ -784,6 +667,7 @@ function SavedReviewReader({
             onSelectFinding={selectFinding}
             onNavigate={navigate}
             onReviewLatest={onRerun}
+            activity={activity}
           />
         </div>
       </div>
@@ -824,7 +708,7 @@ function SavedReviewReader({
                 Investigation reports its own capabilities and recorded checks
                 separately.
               </p>
-              {coverage.total > 0 && (
+              {coverage && coverage.total > 0 && (
                 <p className="mt-3 text-sm leading-6 text-review-muted">
                   The reviewer opened {coverage.read} of {coverage.total}{" "}
                   changed lines.
@@ -832,9 +716,9 @@ function SavedReviewReader({
                     ` Never opened: ${coverage.unread.join(", ")}.`}
                 </p>
               )}
-              {activityRows.some((row) => row.kind === "tool") && (
+              {activityRows.some((section) => section.tools.length > 0) && (
                 <ReviewActivityFeed
-                  rows={activityRows}
+                  sections={activityRows}
                   live={false}
                   collapsed
                   startedAt={review._creationTime}

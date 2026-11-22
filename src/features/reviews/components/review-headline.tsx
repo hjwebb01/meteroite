@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { cn } from "@/lib/utils";
 import { computeCoverage, type CoverageFile } from "../lib/review-coverage";
 import type { ActivityEntry } from "../lib/review-activity";
@@ -15,7 +16,10 @@ export function ReviewHeadline({
   files?: CoverageFile[];
   activity: ActivityEntry[];
 }) {
-  const coverage = files && computeCoverage(files, activity);
+  const coverage = useMemo(
+    () => files && computeCoverage(files, activity),
+    [files, activity],
+  );
   return (
     <div className="mt-4 space-y-3">
       <p className="text-sm font-medium tabular-nums text-review-body">

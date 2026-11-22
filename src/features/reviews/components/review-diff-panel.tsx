@@ -2,6 +2,7 @@
 
 import { Disclosure, DisclosureSummary } from "@/components/ui/disclosure";
 import { evidenceTrail } from "../lib/review-coverage";
+import type { ActivityEntry } from "../lib/review-activity";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type {
   CodeViewDiffItem,
@@ -69,9 +70,10 @@ function hasLine(
   });
 }
 
-export interface ReviewDiffPanelProps {
+interface ReviewDiffPanelProps {
   review: Doc<"reviews">;
   files: Doc<"reviewFiles">[];
+  activity: ActivityEntry[];
   findings: ReviewFinding[];
   allFindings: ReviewFinding[];
   verdicts: Record<string, FindingVerdict>;
@@ -92,44 +94,38 @@ function EvidenceTrail({
 }: {
   finding: ReviewFinding;
   files: Doc<"reviewFiles">[];
-  activity: NonNullable<Doc<"reviews">["activity"]>;
+  activity: ActivityEntry[];
   headSha?: string;
   onNavigate: (target: ReviewNavigationTarget) => void;
 }) {
   if (!activity.length || !headSha || finding.side === "LEFT") return null;
-  const { calls, inDiff } = evidenceTrail(finding, files, activity);
+  const { reads, inDiff } = evidenceTrail(finding, files, activity);
   return (
     <p className="text-xs leading-5 text-review-muted">
-      {calls.length
-        ? "Read by the reviewer in "
-        : "No file read covered this line"}
-      {calls.map((call, i) => {
-        const entry = activity[call - 1];
-        return (
-          <span key={call}>
-            {i > 0 && ", "}
-            <button
-              type="button"
-              className="text-review-link underline-offset-4 hover:underline"
-              onClick={() =>
-                onNavigate({
-                  kind: "reference",
-                  reference: {
-                    path: finding.path,
-                    sourcePath: finding.path,
-                    line: finding.line,
-                    side: "RIGHT",
-                    commitSha: headSha,
-                  },
-                })
-              }
-            >
-              step {call} (lines {entry.start}–{entry.end})
-            </button>
-          </span>
-        );
-      })}
-      {inDiff ? " · line was also in the diff the reviewer was given." : "."}
+      {reads.length
+        ? `Read by the reviewer in ${reads.length === 1 ? "step" : "steps"} ${reads.map((read) => read.ordinal).join(", ")}. `
+        : "No file read covered this line. "}
+      {reads.length > 0 && (
+        <button
+          type="button"
+          className="text-review-link underline-offset-4 hover:underline"
+          onClick={() =>
+            onNavigate({
+              kind: "reference",
+              reference: {
+                path: finding.path,
+                sourcePath: finding.path,
+                line: finding.line,
+                side: "RIGHT",
+                commitSha: headSha,
+              },
+            })
+          }
+        >
+          Open line {finding.line}
+        </button>
+      )}
+      {inDiff ? " Line was also in the diff the reviewer was given." : ""}
     </p>
   );
 }
@@ -137,6 +133,7 @@ function EvidenceTrail({
 export default function ReviewDiffPanel({
   review,
   files,
+  activity,
   findings,
   allFindings,
   verdicts,
@@ -343,10 +340,16 @@ export default function ReviewDiffPanel({
           context
           onDiscuss={() => onSelectFinding(finding.id)}
         />
+        <ReviewFindingPanel
+          key={finding.id}
+          review={review}
+          finding={finding}
+          onReviewLatest={onReviewLatest}
+        />
         <EvidenceTrail
           finding={finding}
           files={files}
-          activity={review.activity ?? []}
+          activity={activity}
           headSha={review.headSha}
           onNavigate={onNavigate}
         />
@@ -400,12 +403,6 @@ export default function ReviewDiffPanel({
             </div>
           </Disclosure>
         )}
-        <ReviewFindingPanel
-          key={finding.id}
-          review={review}
-          finding={finding}
-          onReviewLatest={onReviewLatest}
-        />
       </div>
     );
   }

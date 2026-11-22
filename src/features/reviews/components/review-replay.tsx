@@ -91,7 +91,6 @@ export function ReviewReplay({ speed }: { speed: number }) {
   const run = {
     status: done ? ("completed" as const) : ("running" as const),
     stage,
-    activity,
   };
   return (
     <main className="mx-auto max-w-4xl p-6">
@@ -112,7 +111,7 @@ export function ReviewReplay({ speed }: { speed: number }) {
           activity={activity}
         />
         <ReviewActivityFeed
-          rows={buildActivityRows(run)}
+          sections={buildActivityRows(run, activity)}
           live={!done}
           startedAt={t0}
         />

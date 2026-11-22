@@ -35,8 +35,6 @@ export default defineSchema({
     ),
     progress: v.string(),
     stage: v.optional(reviewStage),
-    latestAction: v.optional(v.string()),
-    activity: v.optional(v.array(reviewActivity)),
     parts: v.optional(v.number()),
     partsDone: v.optional(v.number()),
     updatedAt: v.number(),
@@ -64,6 +62,11 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_url", ["ownerId", "url"]),
+
+  reviewActivity: defineTable({
+    reviewId: v.id("reviews"),
+    ...reviewActivity.fields,
+  }).index("by_review", ["reviewId"]),
 
   reviewSectionReads: defineTable({
     reviewId: v.id("reviews"),

@@ -52,14 +52,14 @@ describe("computeCoverage", () => {
   it("links a cited line to the reads that covered it", () => {
     expect(
       evidenceTrail({ path: "src/cart.js", line: 9 }, files, activity),
-    ).toEqual({ calls: [2], inDiff: true });
+    ).toMatchObject({ reads: [{ ordinal: 2 }], inDiff: true });
     expect(
       evidenceTrail({ path: "src/discount.js", line: 10 }, files, activity)
-        .calls,
+        .reads.map((read) => read.ordinal),
     ).toEqual([3, 4]);
     expect(
       evidenceTrail({ path: "test/cart.test.js", line: 18 }, files, activity)
-        .calls,
+        .reads,
     ).toEqual([]);
   });
 });
